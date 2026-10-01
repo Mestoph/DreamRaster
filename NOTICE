@@ -1,0 +1,61 @@
+DreamRaster
+Copyright © 2026 Mestoph
+Licensed under GNU AGPL-3.0-or-later
+Repository: https://github.com/Mestoph/DreamRaster
+
+FRANÇAIS
+========
+
+Mestoph est le titulaire du copyright du code original de DreamRaster.
+
+Les contributeurs conservent le copyright de leurs contributions originales,
+sous réserve des droits qu'ils accordent à Mestoph dans CLA.md et des droits
+accordés à tous les destinataires par GNU AGPL-3.0-or-later.
+
+Les distributions du projet doivent conserver les mentions légales appropriées
+requises par l'AGPL. Pour les distributions de DreamRaster, conserver :
+
+  Copyright © 2026 Mestoph
+  DreamRaster — GNU AGPL-3.0-or-later
+  https://github.com/Mestoph/DreamRaster
+
+Le fichier LICENSE doit accompagner le code source distribué. Le présent fichier
+NOTICE doit être conservé avec les distributions du projet afin que les mentions
+de copyright, de licence et d'attribution restent visibles.
+
+L'interface interactive officielle affiche les informations de copyright,
+d'auteur et de licence dans l'onglet « À propos ». Une distribution modifiée
+ne doit pas supprimer les mentions légales appropriées exigées par l'AGPL.
+
+Les noms, marques et logos de tiers mentionnés dans le projet restent la
+propriété de leurs détenteurs respectifs. OpenCode, Ollama, ComfyUI, FLUX et
+WebView2 ne sont pas transférés à Mestoph par le présent avis.
+
+
+ENGLISH
+=======
+
+Mestoph is the copyright owner of the original DreamRaster code.
+
+Contributors retain copyright in their original contributions, subject to the
+rights they grant to Mestoph in CLA.md and the rights granted to all recipients
+under GNU AGPL-3.0-or-later.
+
+Project distributions must preserve the appropriate legal notices required by
+the AGPL. For DreamRaster distributions, preserve:
+
+  Copyright © 2026 Mestoph
+  DreamRaster — GNU AGPL-3.0-or-later
+  https://github.com/Mestoph/DreamRaster
+
+The LICENSE file must accompany distributed source code. This NOTICE file should
+remain with project distributions so copyright, license and attribution notices
+remain visible.
+
+The official interactive user interface displays copyright, author and license
+information in the About tab. A modified distribution must not remove
+appropriate legal notices required by the AGPL.
+
+Third-party names, trademarks and logos referenced by this project remain the
+property of their respective owners. OpenCode, Ollama, ComfyUI, FLUX and WebView2
+are not transferred to Mestoph by this notice.

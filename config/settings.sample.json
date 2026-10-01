@@ -1,0 +1,22 @@
+{
+  "OpenCodeExe": "bin\\opencode\\opencode.exe",
+  "OllamaExe": "bin\\ollama\\ollama.exe",
+  "ComfyPython": "bin\\comfyui\\ComfyUI_windows_portable\\python_embeded\\python.exe",
+  "ComfyMain": "bin\\comfyui\\ComfyUI_windows_portable\\ComfyUI\\main.py",
+  "Workspace": "workspace",
+  "Images": "images",
+  "OllamaModels": "models\\ollama",
+  "VisionModel": "qwen3-vl:8b",
+  "OpenCodePort": 54095,
+  "OllamaPort": 11434,
+  "ComfyPort": 8188,
+  "DownloadConnections": 8,
+  "ParallelDownloadThresholdMiB": 32,
+  "DownloadBufferMiB": 8,
+  "Language": "fr",
+  "AutoCheckUpdates": true,
+  "GitHubOwner": "Mestoph",
+  "GitHubRepository": "DreamRaster",
+  "InstallVisionModel": false,
+  "SevenZipUrl": "https://www.7-zip.org/a/7zr.exe"
+}

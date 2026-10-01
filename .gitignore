@@ -1,0 +1,37 @@
+# FR: Sorties de compilation et données portables générées.
+# EN: Build outputs and generated portable data.
+bin/
+obj/
+.nuget/packages/
+
+config/settings.json
+downloads/
+images/
+logs/
+models/
+runtime/
+workspace/
+
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vs/
+
+# Temporary updater/download files
+*.part
+*.tmp
+*.fallback
+*.curl.part
+*.curlparts/
+
+# OS/editor files
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Local build diagnostic reports
+build-reports/
+
+# CI/release staging
+artifacts/

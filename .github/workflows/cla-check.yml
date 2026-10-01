@@ -1,0 +1,30 @@
+name: CLA Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  cla:
+    name: CLA acknowledgement
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify CLA checkbox
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if printf '%s\n' "$PR_BODY" | grep -Fqi -- "- [x] **J'ai lu et j'accepte le [CLA.md]"; then
+            echo "CLA acknowledged / CLA accepté."
+            exit 0
+          fi
+
+          echo "::error::CLA acceptance checkbox is required / La case d'acceptation du CLA est obligatoire."
+          exit 1

@@ -1,0 +1,79 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore
+        run: dotnet restore src/DreamRaster/DreamRaster.csproj -r win-x64
+
+      - name: Publish portable
+        run: >
+          dotnet publish src/DreamRaster/DreamRaster.csproj
+          -c Release
+          -r win-x64
+          --no-restore
+          /p:PublishProfile=Portable
+          --nologo
+
+      - name: Verify executable
+        shell: pwsh
+        run: |
+          $exe = "src\DreamRaster\bin\Publish\Portable\DreamRaster.exe"
+          if (-not (Test-Path $exe)) {
+            throw "DreamRaster.exe was not produced."
+          }
+
+          $files = @(Get-ChildItem "src\DreamRaster\bin\Publish\Portable" -File)
+          if ($files.Count -ne 1 -or $files[0].Name -ne "DreamRaster.exe") {
+            throw "Portable publish root must contain only DreamRaster.exe."
+          }
+
+      - name: Create release archive
+        shell: pwsh
+        run: |
+          $archive = "DreamRaster-win-x64.zip"
+          $stage = "artifacts\release-package"
+
+          if (Test-Path $archive) { Remove-Item $archive -Force }
+          if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+
+          Copy-Item "src\DreamRaster\bin\Publish\Portable\DreamRaster.exe" "$stage\DreamRaster.exe"
+          Copy-Item "LICENSE" "$stage\LICENSE"
+          Copy-Item "NOTICE" "$stage\NOTICE"
+          Copy-Item "CLA.md" "$stage\CLA.md"
+          Copy-Item "DOWNLOAD_SOURCES.md" "$stage\DOWNLOAD_SOURCES.md"
+          Copy-Item "README.md" "$stage\README.md"
+          Copy-Item "README.en.md" "$stage\README.en.md"
+
+          Compress-Archive -Path "$stage\*" -DestinationPath $archive -CompressionLevel Optimal
+
+      - name: Create GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            "DreamRaster-win-x64.zip" `
+            --repo "${{ github.repository }}" `
+            --generate-notes `
+            --title "${{ github.ref_name }}"

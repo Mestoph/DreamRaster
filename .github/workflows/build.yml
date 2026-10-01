@@ -1,0 +1,63 @@
+name: Build
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  windows-build:
+    name: Windows build
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore
+        run: dotnet restore src/DreamRaster/DreamRaster.csproj -r win-x64
+
+      - name: Build
+        run: >
+          dotnet build src/DreamRaster/DreamRaster.csproj
+          -c Release
+          -r win-x64
+          --no-restore
+          --nologo
+
+  linux-cross-build:
+    name: Linux cross-build to Windows
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore Windows target from Linux
+        run: >
+          dotnet restore src/DreamRaster/DreamRaster.csproj
+          -r win-x64
+          -p:EnableWindowsTargeting=true
+
+      - name: Build Windows target from Linux
+        run: >
+          dotnet build src/DreamRaster/DreamRaster.csproj
+          -c Release
+          -r win-x64
+          --no-restore
+          --nologo
+          -p:EnableWindowsTargeting=true

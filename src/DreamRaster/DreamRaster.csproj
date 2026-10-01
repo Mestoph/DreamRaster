@@ -1,0 +1,141 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <AssemblyName>DreamRaster</AssemblyName>
+    <RootNamespace>OpenCodeLocalAI</RootNamespace>
+    <Product>DreamRaster</Product>
+    <Authors>Mestoph</Authors>
+    <Copyright>Copyright © 2026 Mestoph</Copyright>
+    <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/Mestoph/DreamRaster</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <Description>DreamRaster — portable Windows studio for local AI image generation with FLUX.2, ComfyUI, Ollama and OpenCode.</Description>
+    <ApplicationIcon>Assets/AppIcon.ico</ApplicationIcon>
+    <Version>33.0.0</Version>
+    <AssemblyVersion>33.0.0.0</AssemblyVersion>
+    <FileVersion>33.0.0.0</FileVersion>
+
+    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>false</UseWPF>
+
+    <!--
+      FR : Autorise la compilation de la cible Windows depuis Linux/macOS.
+      EN: Allows building the Windows target from Linux/macOS.
+      Cela ne rend pas l'application WinForms exécutable nativement sous Linux.
+    -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+
+    <!-- Build Visual Studio normal = léger / framework-dependent -->
+    <SelfContained>false</SelfContained>
+
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+
+    <!--
+      Ne pas copier les fichiers de documentation XML voisins des DLL référencées.
+      Cela évite notamment Microsoft.Web.WebView2.Core.xml et
+      Microsoft.Web.WebView2.WinForms.xml dans la sortie.
+    -->
+    <AllowedReferenceRelatedFileExtensions>.pdb</AllowedReferenceRelatedFileExtensions>
+
+    <!-- Cache NuGet local au projet -->
+    <RestorePackagesPath>$(MSBuildProjectDirectory)/../../.nuget/packages</RestorePackagesPath>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+
+    <!-- WebView2 : chemins calculés à partir du cache NuGet LOCAL -->
+    <WebView2Version>1.0.3537.50</WebView2Version>
+    <WebView2PackageDir>$(RestorePackagesPath)/microsoft.web.webview2/$(WebView2Version)</WebView2PackageDir>
+
+    <!-- Publication Windows x64 autonome -->
+
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+    <DebugSymbols Condition="'$(Configuration)' == 'Release'">false</DebugSymbols>
+  </PropertyGroup>
+
+    <ItemGroup>
+    <!--
+      Le package est bien restauré dans .nuget\packages,
+      mais aucun asset automatique n'est importé.
+      Nous référençons uniquement Core + WinForms.
+    -->
+    <PackageReference
+      Include="Microsoft.Web.WebView2"
+      Version="$(WebView2Version)"
+      ExcludeAssets="all"
+      PrivateAssets="all" />
+
+    <!--
+      Pour les applications .NET 5+ classiques, le package WebView2
+      utilise les assemblies Core + WinForms de lib_manual\netcoreapp3.0.
+    -->
+    <Reference Include="Microsoft.Web.WebView2.Core">
+      <HintPath>$(WebView2PackageDir)/lib_manual/netcoreapp3.0/Microsoft.Web.WebView2.Core.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+
+    <Reference Include="Microsoft.Web.WebView2.WinForms">
+      <HintPath>$(WebView2PackageDir)/lib_manual/netcoreapp3.0/Microsoft.Web.WebView2.WinForms.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+
+    <!--
+      Le loader natif WebView2 est intégré comme ressource dans DreamRaster.exe.
+      Il sera extrait à la demande dans runtime\native au premier lancement.
+      Rien n'est publié à côté de l'EXE.
+    -->
+    <EmbeddedResource Include="$(WebView2PackageDir)/runtimes/win-x64/native/WebView2Loader.dll">
+      <LogicalName>OpenCodeLocalAI.Resources.WebView2Loader.dll</LogicalName>
+    </EmbeddedResource>
+
+    <EmbeddedResource Include="Assets/Workflows/flux2_text_to_image_api.json">
+      <LogicalName>OpenCodeLocalAI.Workflows.flux2_text_to_image_api.json</LogicalName>
+    </EmbeddedResource>
+
+    <EmbeddedResource Include="Assets/Workflows/flux2_img_to_img_api.json">
+      <LogicalName>OpenCodeLocalAI.Workflows.flux2_img_to_img_api.json</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ItemGroup>
+    <RuntimeHostConfigurationOption
+      Include="System.Net.SocketsHttpHandler.Http3Support"
+      Value="true" />
+  </ItemGroup>
+
+  <!-- WinForms Designer -->
+  <ItemGroup>
+    <Compile Update="MainForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+
+    <Compile Update="MainForm.Designer.cs">
+      <DependentUpon>MainForm.cs</DependentUpon>
+    </Compile>
+
+    <EmbeddedResource Update="MainForm.resx">
+      <DependentUpon>MainForm.cs</DependentUpon>
+    </EmbeddedResource>
+  </ItemGroup>
+
+
+  <!--
+    Sécurité supplémentaire : si MSBuild/NuGet recopie malgré tout
+    les XML de documentation WebView2, on les retire de la publication.
+  -->
+  <Target Name="RemoveWebView2XmlDocsFromPublish" AfterTargets="Publish">
+    <ItemGroup>
+      <_WebView2XmlDocs Include="$(PublishDir)Microsoft.Web.WebView2.Core.xml" />
+      <_WebView2XmlDocs Include="$(PublishDir)Microsoft.Web.WebView2.WinForms.xml" />
+    </ItemGroup>
+
+    <Delete Files="@(_WebView2XmlDocs)" />
+  </Target>
+
+
+</Project>

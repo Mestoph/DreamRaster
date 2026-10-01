@@ -1,0 +1,43 @@
+name: Linux Cross Publish
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "src/**"
+      - "scripts/linux/**"
+      - ".github/workflows/linux-cross-publish.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  publish-win-x64:
+    name: Publish Windows EXE from Linux
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Cross publish
+        shell: bash
+        run: ./scripts/linux/publish-windows.sh
+
+      - name: Verify single EXE
+        shell: bash
+        run: |
+          OUT="src/DreamRaster/bin/Publish/Portable"
+          test -f "$OUT/DreamRaster.exe"
+          COUNT="$(find "$OUT" -maxdepth 1 -type f | wc -l)"
+          if [ "$COUNT" -ne 1 ]; then
+            echo "Expected exactly one file in publish root, found $COUNT."
+            find "$OUT" -maxdepth 1 -type f -print
+            exit 1
+          fi

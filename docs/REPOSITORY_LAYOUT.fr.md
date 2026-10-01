@@ -1,0 +1,31 @@
+# Structure du dépôt — Français
+
+La v33 sépare le code, les scripts et la documentation afin d'éviter une racine encombrée.
+
+```text
+src/DreamRaster/
+```
+
+contient uniquement le projet WinForms : `.cs`, `.resx`, `DreamRaster.csproj`, `Assets/` et `Properties/PublishProfiles/`.
+
+```text
+scripts/windows/
+```
+
+contient les scripts Windows de build, publication, diagnostic, création GitHub et release.
+
+```text
+scripts/linux/
+```
+
+contient les scripts de cross-build Linux vers Windows.
+
+```text
+scripts/common/
+```
+
+contient le moteur de diagnostic PowerShell commun.
+
+Le cache NuGet reste à la racine dans `.nuget/packages/`, même si le `.csproj` se trouve dans `src/DreamRaster/`.
+
+Les sorties `bin/` et `obj/` restent sous `src/DreamRaster/` et sont ignorées par Git.
