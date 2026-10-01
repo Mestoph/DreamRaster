@@ -34,7 +34,7 @@ public static class PortablePaths
             var fileName = Path.GetFileName(full);
 
             if (fileName.Equals("DreamRaster.exe", StringComparison.OrdinalIgnoreCase) ||
-                fileName.Equals("DreamRaster.exe", StringComparison.OrdinalIgnoreCase) ||
+                fileName.Equals("MestophAIStudio.exe", StringComparison.OrdinalIgnoreCase) ||
                 fileName.Equals("OpenCodeLocalAI.exe", StringComparison.OrdinalIgnoreCase))
             {
                 var dir = Path.GetDirectoryName(full);
@@ -76,47 +76,55 @@ public static class PortablePaths
     {
         Directory.CreateDirectory(WorkflowsDir);
 
-        WriteEmbeddedFileIfMissing(
+        WriteEmbeddedFileIfDifferent(
             Path.Combine(WorkflowsDir, TextToImageWorkflowFile),
             "OpenCodeLocalAI.Workflows.flux2_text_to_image_api.json");
 
-        WriteEmbeddedFileIfMissing(
+        WriteEmbeddedFileIfDifferent(
             Path.Combine(WorkflowsDir, ImgToImgWorkflowFile),
             "OpenCodeLocalAI.Workflows.flux2_img_to_img_api.json");
 
         // Compatibilité avec les versions précédentes du générateur.
-        WriteEmbeddedFileIfMissing(
+        WriteEmbeddedFileIfDifferent(
             Path.Combine(WorkflowsDir, LegacyWorkflowFile),
             "OpenCodeLocalAI.Workflows.flux2_text_to_image_api.json");
     }
 
-    private static void WriteEmbeddedFileIfMissing(
+    private static void WriteEmbeddedFileIfDifferent(
         string targetPath,
         string resourceName)
     {
-        if (File.Exists(targetPath) &&
-            new FileInfo(targetPath).Length > 0)
-            return;
+        byte[] bundled;
+
+        using (var input =
+            typeof(PortablePaths).Assembly.GetManifestResourceStream(resourceName)
+            ?? throw new InvalidOperationException(
+                "Ressource embarquée introuvable : " + resourceName))
+        using (var memory = new MemoryStream())
+        {
+            input.CopyTo(memory);
+            bundled = memory.ToArray();
+        }
+
+        if (File.Exists(targetPath))
+        {
+            try
+            {
+                var current = File.ReadAllBytes(targetPath);
+                if (current.AsSpan().SequenceEqual(bundled))
+                    return;
+            }
+            catch
+            {
+                // Réécriture d'un workflow embarqué endommagé/illisible.
+            }
+        }
 
         var temp = targetPath + ".tmp";
 
         try
         {
-            using var input =
-                typeof(PortablePaths).Assembly.GetManifestResourceStream(resourceName)
-                ?? throw new InvalidOperationException(
-                    "Ressource embarquée introuvable : " + resourceName);
-
-            using (var output = new FileStream(
-                temp,
-                FileMode.Create,
-                FileAccess.Write,
-                FileShare.None))
-            {
-                input.CopyTo(output);
-                output.Flush(flushToDisk: true);
-            }
-
+            File.WriteAllBytes(temp, bundled);
             File.Move(temp, targetPath, overwrite: true);
         }
         finally

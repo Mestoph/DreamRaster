@@ -7,7 +7,7 @@ cd /d "%ROOT%"
 REM FR: Cree le tag correspondant a la v25 et declenche GitHub Actions.
 REM EN: Creates the v25 tag and triggers GitHub Actions.
 
-set "TAG=v33.0.0"
+set "TAG=v34.0.0"
 
 git status --short
 echo.

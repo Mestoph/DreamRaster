@@ -59,3 +59,10 @@ appropriate legal notices required by the AGPL.
 Third-party names, trademarks and logos referenced by this project remain the
 property of their respective owners. OpenCode, Ollama, ComfyUI, FLUX and WebView2
 are not transferred to Mestoph by this notice.
+
+
+THIRD-PARTY WORKFLOWS / WORKFLOWS TIERS
+=======================================
+
+The official Comfy Org FLUX.2 Klein workflow templates are redistributed under the MIT license. See THIRD_PARTY_NOTICES.md.
+Les workflows officiels FLUX.2 Klein de Comfy Org sont redistribués sous licence MIT. Voir THIRD_PARTY_NOTICES.md.

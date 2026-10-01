@@ -60,6 +60,7 @@ jobs:
           Copy-Item "src\DreamRaster\bin\Publish\Portable\DreamRaster.exe" "$stage\DreamRaster.exe"
           Copy-Item "LICENSE" "$stage\LICENSE"
           Copy-Item "NOTICE" "$stage\NOTICE"
+          Copy-Item "THIRD_PARTY_NOTICES.md" "$stage\THIRD_PARTY_NOTICES.md"
           Copy-Item "CLA.md" "$stage\CLA.md"
           Copy-Item "DOWNLOAD_SOURCES.md" "$stage\DOWNLOAD_SOURCES.md"
           Copy-Item "README.md" "$stage\README.md"

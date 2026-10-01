@@ -81,8 +81,8 @@ public sealed class Flux2Generator
         {
             try
             {
-                width = Math.Clamp((int)Math.Round(width / 8d) * 8, 256, 1536);
-                height = Math.Clamp((int)Math.Round(height / 8d) * 8, 256, 1536);
+                width = Math.Clamp((int)Math.Round(width / 16d) * 16, 256, 1536);
+                height = Math.Clamp((int)Math.Round(height / 16d) * 16, 256, 1536);
 
                 var isImgToImg = !string.IsNullOrWhiteSpace(inputImagePath);
 
@@ -129,30 +129,25 @@ public sealed class Flux2Generator
                     JsonNode.Parse(await File.ReadAllTextAsync(workflowPath, ct))!
                         .AsObject();
 
-                workflow["1"]!["inputs"]!["unet_name"] = _s.FluxModel;
-                workflow["2"]!["inputs"]!["clip_name"] = _s.TextEncoderModel;
-                workflow["3"]!["inputs"]!["vae_name"] = _s.VaeModel;
-                workflow["4"]!["inputs"]!["text"] = prompt;
+                ConfigureOfficialKleinWorkflow(
+                    workflow,
+                    prompt,
+                    width,
+                    height,
+                    isImgToImg);
 
-                if (workflow["6"]?["inputs"] is JsonObject w) w["value"] = width;
-                if (workflow["7"]?["inputs"] is JsonObject h) h["value"] = height;
-                if (workflow["11"]?["inputs"] is JsonObject st)
-                {
-                    st["steps"] = _s.DefaultSteps;
+                var seedValue =
+                    Random.Shared.NextInt64(1, long.MaxValue);
 
-                    if (isImgToImg)
-                    {
-                        st["denoise"] =
-                            Math.Clamp(imgToImgStrength, 0.05, 1.0);
-                    }
-                }
-
-                if (workflow["9"]?["inputs"] is JsonObject seed)
-                    seed["noise_seed"] = Random.Shared.NextInt64(1, long.MaxValue);
+                SetRequiredInput(
+                    workflow,
+                    "RandomNoise",
+                    "noise_seed",
+                    JsonValue.Create(seedValue));
 
                 if (isImgToImg)
                 {
-                    Progress(24, "Préparation de l'image source…");
+                    Progress(24, "Préparation de l'image de référence…");
 
                     var comfyInputDir =
                         Path.Combine(
@@ -168,7 +163,7 @@ public sealed class Flux2Generator
                         sourceExt = ".png";
 
                     var inputFileName =
-                        "OpenCode_FLUX2_input_" +
+                        "DreamRaster_FLUX2_reference_" +
                         DateTime.UtcNow.ToString("yyyy-MM-ddTHH-mm-ss-fffZ") +
                         sourceExt;
 
@@ -177,17 +172,30 @@ public sealed class Flux2Generator
 
                     File.Copy(inputImagePath!, stagedInputPath, true);
 
-                    workflow["14"]!["inputs"]!["image"] = inputFileName;
+                    SetRequiredInput(
+                        workflow,
+                        "LoadImage",
+                        "image",
+                        JsonValue.Create(inputFileName));
+
+                    _log(
+                        "FLUX",
+                        "Image Edit officiel : ReferenceLatent actif. " +
+                        $"Le paramètre legacy strength={Math.Clamp(imgToImgStrength, 0.05, 1.0):0.00} " +
+                        "n'est pas appliqué par le workflow ComfyUI officiel.");
                 }
 
                 var prefix =
                     (isImgToImg
-                        ? "OpenCode_FLUX2_img2img_"
-                        : "OpenCode_FLUX2_") +
+                        ? "DreamRaster_FLUX2_img2img_"
+                        : "DreamRaster_FLUX2_") +
                     DateTime.UtcNow.ToString("yyyy-MM-ddTHH-mm-ss-fffZ");
 
-                if (workflow["15"]?["inputs"] is JsonObject save)
-                    save["filename_prefix"] = prefix;
+                SetRequiredInput(
+                    workflow,
+                    "SaveImage",
+                    "filename_prefix",
+                    JsonValue.Create(prefix));
 
                 Progress(30, "Envoi du prompt…");
                 var body = JsonSerializer.Serialize(new
@@ -222,9 +230,12 @@ public sealed class Flux2Generator
 
                     if (hdoc.RootElement.TryGetProperty(id, out var j))
                     {
+                        if (TryGetComfyFailure(j, out var comfyError))
+                            throw new InvalidOperationException(comfyError);
+
                         if (j.TryGetProperty("status", out var status) &&
                             status.TryGetProperty("completed", out var completed) &&
-                            completed.GetBoolean())
+                            completed.ValueKind == JsonValueKind.True)
                         {
                             job = j.Clone();
                             break;
@@ -297,6 +308,296 @@ public sealed class Flux2Generator
 
             _gate.Release();
         }
+    }
+
+    private void ConfigureOfficialKleinWorkflow(
+        JsonObject workflow,
+        string prompt,
+        int width,
+        int height,
+        bool isImgToImg)
+    {
+        SetRequiredInput(
+            workflow,
+            "UNETLoader",
+            "unet_name",
+            JsonValue.Create(_s.FluxModel));
+
+        SetRequiredInput(
+            workflow,
+            "UNETLoader",
+            "weight_dtype",
+            JsonValue.Create("default"));
+
+        SetRequiredInput(
+            workflow,
+            "CLIPLoader",
+            "clip_name",
+            JsonValue.Create(_s.TextEncoderModel));
+
+        // FLUX.2 Klein uses the Qwen3 FLUX.2 conditioning path.
+        SetRequiredInput(
+            workflow,
+            "CLIPLoader",
+            "type",
+            JsonValue.Create("flux2"));
+
+        SetRequiredInput(
+            workflow,
+            "CLIPLoader",
+            "device",
+            JsonValue.Create("default"));
+
+        SetRequiredInput(
+            workflow,
+            "VAELoader",
+            "vae_name",
+            JsonValue.Create(_s.VaeModel));
+
+        SetRequiredInput(
+            workflow,
+            "CLIPTextEncode",
+            "text",
+            JsonValue.Create(prompt));
+
+        SetRequiredInput(
+            workflow,
+            "CFGGuider",
+            "cfg",
+            JsonValue.Create(1.0));
+
+        SetRequiredInput(
+            workflow,
+            "KSamplerSelect",
+            "sampler_name",
+            JsonValue.Create("euler"));
+
+        SetRequiredInput(
+            workflow,
+            "Flux2Scheduler",
+            "steps",
+            JsonValue.Create(Math.Max(1, _s.DefaultSteps)));
+
+        if (!isImgToImg)
+        {
+            SetRequiredInput(
+                workflow,
+                "Flux2Scheduler",
+                "width",
+                JsonValue.Create(width));
+
+            SetRequiredInput(
+                workflow,
+                "Flux2Scheduler",
+                "height",
+                JsonValue.Create(height));
+
+            SetRequiredInput(
+                workflow,
+                "EmptyFlux2LatentImage",
+                "width",
+                JsonValue.Create(width));
+
+            SetRequiredInput(
+                workflow,
+                "EmptyFlux2LatentImage",
+                "height",
+                JsonValue.Create(height));
+
+            SetRequiredInput(
+                workflow,
+                "EmptyFlux2LatentImage",
+                "batch_size",
+                JsonValue.Create(1));
+
+            RequireNodeInputs(workflow, "ConditioningZeroOut");
+            RequireNodeInputs(workflow, "SamplerCustomAdvanced");
+            return;
+        }
+
+        var megapixels =
+            Math.Clamp(
+                width * (double)height / 1_000_000d,
+                0.01,
+                16.0);
+
+        SetRequiredInput(
+            workflow,
+            "ImageScaleToTotalPixels",
+            "upscale_method",
+            JsonValue.Create("nearest-exact"));
+
+        SetRequiredInput(
+            workflow,
+            "ImageScaleToTotalPixels",
+            "megapixels",
+            JsonValue.Create(megapixels));
+
+        SetRequiredInput(
+            workflow,
+            "ImageScaleToTotalPixels",
+            "resolution_steps",
+            JsonValue.Create(1));
+
+        RequireNodeInputs(workflow, "LoadImage");
+        RequireNodeInputs(workflow, "GetImageSize");
+        RequireNodeInputs(workflow, "VAEEncode");
+        RequireNodeInputs(workflow, "ReferenceLatent");
+        RequireNodeInputs(workflow, "ConditioningZeroOut");
+        RequireNodeInputs(workflow, "SamplerCustomAdvanced");
+    }
+
+    private static List<JsonObject> FindNodeInputs(
+        JsonObject workflow,
+        string classType)
+    {
+        var result = new List<JsonObject>();
+
+        foreach (var entry in workflow)
+        {
+            if (entry.Value is not JsonObject node)
+                continue;
+
+            var type =
+                node["class_type"]?.GetValue<string>();
+
+            if (!string.Equals(
+                    type,
+                    classType,
+                    StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (node["inputs"] is JsonObject inputs)
+                result.Add(inputs);
+        }
+
+        return result;
+    }
+
+    private static JsonObject RequireNodeInputs(
+        JsonObject workflow,
+        string classType)
+    {
+        var nodes =
+            FindNodeInputs(workflow, classType);
+
+        if (nodes.Count == 0)
+        {
+            throw new InvalidDataException(
+                $"Workflow FLUX.2 Klein incompatible : nœud {classType} absent.");
+        }
+
+        return nodes[0];
+    }
+
+    private static void SetRequiredInput(
+        JsonObject workflow,
+        string classType,
+        string inputName,
+        JsonNode? value)
+    {
+        var nodes =
+            FindNodeInputs(workflow, classType);
+
+        if (nodes.Count == 0)
+        {
+            throw new InvalidDataException(
+                $"Workflow FLUX.2 Klein incompatible : nœud {classType} absent.");
+        }
+
+        foreach (var inputs in nodes)
+            inputs[inputName] = value?.DeepClone();
+    }
+
+    private static bool TryGetComfyFailure(
+        JsonElement job,
+        out string error)
+    {
+        error = string.Empty;
+
+        if (!job.TryGetProperty("status", out var status))
+            return false;
+
+        var statusIsError =
+            status.TryGetProperty("status_str", out var statusText) &&
+            string.Equals(
+                statusText.GetString(),
+                "error",
+                StringComparison.OrdinalIgnoreCase);
+
+        if (status.TryGetProperty("messages", out var messages) &&
+            messages.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var message in messages.EnumerateArray())
+            {
+                if (message.ValueKind != JsonValueKind.Array)
+                    continue;
+
+                var parts =
+                    message.EnumerateArray().ToArray();
+
+                if (parts.Length < 2 ||
+                    parts[0].ValueKind != JsonValueKind.String ||
+                    !string.Equals(
+                        parts[0].GetString(),
+                        "execution_error",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var details = parts[1];
+
+                if (details.ValueKind == JsonValueKind.Object)
+                {
+                    var exception =
+                        details.TryGetProperty("exception_message", out var ex)
+                            ? ex.GetString()
+                            : null;
+
+                    var nodeType =
+                        details.TryGetProperty("node_type", out var nt)
+                            ? nt.GetString()
+                            : null;
+
+                    var nodeId =
+                        details.TryGetProperty("node_id", out var ni)
+                            ? ni.ToString()
+                            : null;
+
+                    var where =
+                        !string.IsNullOrWhiteSpace(nodeType)
+                            ? $" [{nodeType}" +
+                              (!string.IsNullOrWhiteSpace(nodeId)
+                                  ? $" #{nodeId}]"
+                                  : "]")
+                            : string.Empty;
+
+                    error =
+                        "ComfyUI" +
+                        where +
+                        " : " +
+                        (string.IsNullOrWhiteSpace(exception)
+                            ? "erreur d'exécution."
+                            : exception);
+
+                    return true;
+                }
+
+                error = "ComfyUI : erreur d'exécution.";
+                return true;
+            }
+        }
+
+        if (statusIsError)
+        {
+            error = "ComfyUI a signalé une erreur d'exécution.";
+            return true;
+        }
+
+        return false;
     }
 
     private string? FindOutput(JsonElement job)

@@ -447,7 +447,10 @@ public partial class MainForm : Form
         btnBrowseInputImage.Enabled = isImgToImg;
         btnClearInputImage.Enabled = isImgToImg;
         lblInputImage.Enabled = isImgToImg;
-        numImg2ImgStrength.Enabled = isImgToImg;
+        // Le workflow officiel FLUX.2 Klein Image Edit n'expose pas de
+        // paramètre denoise/strength. Le champ reste visible pour compatibilité
+        // avec les anciennes configurations, mais il n'est plus modifiable.
+        numImg2ImgStrength.Enabled = false;
         lblImg2ImgStrength.Enabled = isImgToImg;
     }
 

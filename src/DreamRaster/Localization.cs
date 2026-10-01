@@ -44,7 +44,9 @@ internal static class L10n
             ["generation.mode.txt2img"] = ("Texte → image", "Text → image"),
             ["generation.mode.img2img"] = ("Image → image", "Image → image"),
             ["label.input_image"] = ("Image source", "Source image"),
-            ["label.img2img_strength"] = ("Force img2img", "Img2img strength"),
+            ["label.img2img_strength"] = (
+                "Force (non utilisée par le workflow officiel)",
+                "Strength (not used by the official workflow)"),
             ["install.title"] = ("Installation portable", "Portable installation"),
             ["install.info"] = (
                 "Les composants sont installés uniquement dans le dossier portable. Les versions Ollama, OpenCode ou ComfyUI présentes ailleurs dans Windows ne sont jamais utilisées.",

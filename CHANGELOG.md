@@ -1,5 +1,20 @@
 # Changelog — DreamRaster
 
+## 34.0.0 — Official FLUX.2 Klein workflows
+
+- Replaced the hand-built FLUX.2 graphs with API graphs equivalent to the official Comfy Org FLUX.2 Klein 4B Distilled workflows.
+- `CLIPLoader` now uses `type=flux2`, matching the official Qwen 3 4B / FLUX.2 conditioning path.
+- Text-to-image now uses `EmptyFlux2LatentImage`, `Flux2Scheduler`, `CFGGuider`, `ConditioningZeroOut`, `KSamplerSelect`, and `SamplerCustomAdvanced`.
+- Image editing now uses the official `ReferenceLatent` + `VAEEncode` conditioning path with `ImageScaleToTotalPixels` and `GetImageSize`.
+- `Flux2Generator` now locates and mutates workflow nodes by `class_type` instead of brittle numeric IDs.
+- ComfyUI execution errors are detected immediately from `/history` instead of holding the generation semaphore until timeout.
+- Bundled workflows are refreshed when the embedded graph changes, so existing portable installations no longer keep an obsolete workflow forever.
+- Added exact upstream Comfy Org workflow templates under `Assets/Workflows/Official/` and MIT attribution in `THIRD_PARTY_NOTICES.md`.
+- Validated the official distilled text-to-image API graph on ComfyUI 0.38.0 with the installed RTX 4060 Ti: 512×512, 4 steps, PNG generated successfully.
+- Validated the official single-reference Image Edit graph on the same ComfyUI installation: 512×512 reference, 4 steps, PNG generated successfully.
+- The legacy img2img strength control is retained only for configuration/API compatibility and disabled in the UI because the official FLUX.2 Klein Image Edit workflow has no denoise/strength input.
+- The previous v33 failure `mat1 and mat2 shapes cannot be multiplied (512x2560 and 7680x3072)` was caused by the old `CLIPLoader type=stable_diffusion` path.
+
 Ce changelog retrace l’évolution complète du projet depuis les premiers prototypes **OpenCode Local AI** jusqu’à **DreamRaster**.
 
 > Historique reconstruit à partir des archives source, des notes de développement conservées et des changements effectivement intégrés au projet. Certaines versions intermédiaires n’ont pas été publiées publiquement ; elles restent documentées ici car elles correspondent à des jalons techniques réels.

@@ -87,3 +87,13 @@ d64f3a68e1cc4f9f4e29b6e0da38a0204fe9a49f2d4053f0ec1fa1ca02f9c4b5
 Les URL configurées dans `config/settings.json` peuvent être modifiées par l'utilisateur. Le présent document décrit les valeurs par défaut livrées avec DreamRaster.
 
 URLs stored in `config/settings.json` can be changed by the user. This document describes DreamRaster's shipped defaults.
+
+
+## Workflows officiels ComfyUI / Official ComfyUI workflows
+
+DreamRaster's bundled API graphs are derived from the official Comfy Org FLUX.2 Klein templates:
+
+- Text to Image: https://github.com/Comfy-Org/workflow_templates/blob/main/templates/image_flux2_klein_text_to_image.json
+- Image Edit 4B Distilled: https://github.com/Comfy-Org/workflow_templates/blob/main/templates/image_flux2_klein_image_edit_4b_distilled.json
+
+The exact upstream UI workflow files are preserved under `src/DreamRaster/Assets/Workflows/Official/`.
