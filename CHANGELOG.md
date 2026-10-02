@@ -1,4 +1,17 @@
 # Changelog — DreamRaster
+## 35.0.0 — Portable WebView2 Fixed Runtime
+
+- Added automatic installation of Microsoft WebView2 Fixed Version Runtime x64 when the portable runtime is missing.
+- Pinned WebView2 Fixed Version Runtime `154.0.4258.53` and documented the official Microsoft CAB download URL.
+- Added SHA-256 verification for the WebView2 CAB: `ec12b2db6423d127fb8e1935d34e2e68abc70fe8ecb1f6162ba1c1ccc2825f6d`.
+- CAB extraction uses the native Windows `expand.exe`; the extracted runtime remains entirely under `bin/webview2-fixed/`.
+- Fixed portable runtime discovery so DreamRaster finds `msedgewebview2.exe` recursively inside versioned Fixed Runtime directories.
+- Added WebView2 Fixed Runtime to portable preflight checks, so a missing runtime is treated like any other missing portable component.
+- DreamRaster continues to refuse silent fallback to a globally installed Evergreen WebView2 Runtime.
+- Updated bilingual installation and download-source documentation.
+- Added automatic migration for legacy settings where `WebView2FixedArchiveUrl` was empty; the pinned version, URL and SHA-256 are repaired and persisted at startup.
+- Validated the missing-runtime repair path on the portable installation: cached CAB verified, 257 files extracted, and DreamRaster WebView2 child processes confirmed to launch from `bin/webview2-fixed/`.
+
 
 ## 34.0.0 — Official FLUX.2 Klein workflows
 

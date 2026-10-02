@@ -857,6 +857,8 @@ public partial class MainForm : Form
             return;
         }
 
+        Log("WebView2", "Fixed Runtime OpenCode : " + fixedRuntime);
+
         if (_web.CoreWebView2 is null)
         {
             var profile = Path.Combine(PortablePaths.RuntimeDir, "webview2-opencode");
@@ -918,6 +920,8 @@ public partial class MainForm : Form
                 MessageBoxIcon.Warning);
             return;
         }
+
+        Log("WebView2", "Fixed Runtime ComfyUI : " + fixedRuntime);
 
         if (_comfyWeb.CoreWebView2 is null)
         {

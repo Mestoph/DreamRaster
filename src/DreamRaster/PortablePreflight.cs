@@ -30,6 +30,15 @@ public static class PortablePreflight
         CheckFile(result, "comfy-python", "Python ComfyUI", s.ComfyPython);
         CheckFile(result, "comfy-main", "ComfyUI", s.ComfyMain);
 
+        var webViewRuntime = PortablePaths.GetFixedWebView2RuntimePath();
+        if (webViewRuntime is null)
+        {
+            result.Add(new(
+                "webview2-fixed",
+                "WebView2 Fixed Version Runtime x64",
+                Path.Combine(PortablePaths.Root, "bin", "webview2-fixed")));
+        }
+
         var comfyRoot = GetComfyRoot(s);
         CheckAbsoluteFile(result, "flux", "FLUX.2",
             Path.Combine(comfyRoot, "models", "diffusion_models", s.FluxModel));

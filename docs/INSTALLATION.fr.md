@@ -32,3 +32,9 @@ Voir [BUILD_LINUX.fr.md](BUILD_LINUX.fr.md). Linux peut cross-compiler/publier l
 ## Composants
 
 L’installeur portable gère OpenCode, Ollama, ComfyUI et les modèles FLUX.2. Qwen3-VL est optionnel.
+
+## WebView2 Fixed Version portable
+
+Le runtime Microsoft WebView2 Fixed Version x64 est un composant obligatoire de DreamRaster. L'installateur le télécharge automatiquement, vérifie son SHA-256 puis l'extrait sous `bin\webview2-fixed\`.
+
+DreamRaster ne bascule pas silencieusement vers un runtime WebView2 Evergreen installé dans Windows.

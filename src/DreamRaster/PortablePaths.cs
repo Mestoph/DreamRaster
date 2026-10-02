@@ -172,13 +172,27 @@ public static class PortablePaths
     public static string? GetFixedWebView2RuntimePath()
     {
         var root = Path.Combine(Root, "bin", "webview2-fixed");
-        if (!Directory.Exists(root)) return null;
+        if (!Directory.Exists(root))
+            return null;
 
-        if (File.Exists(Path.Combine(root, "msedgewebview2.exe"))) return root;
+        try
+        {
+            var exe = Directory.EnumerateFiles(
+                    root,
+                    "msedgewebview2.exe",
+                    SearchOption.AllDirectories)
+                .FirstOrDefault();
 
-        var candidate = Directory.GetDirectories(root, "EBWebView", SearchOption.AllDirectories)
-            .FirstOrDefault(d => File.Exists(Path.Combine(d, "msedgewebview2.exe")));
-        return candidate;
+            if (string.IsNullOrWhiteSpace(exe))
+                return null;
+
+            var runtime = Path.GetDirectoryName(exe);
+            return IsInsidePack(runtime) ? runtime : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }
 
@@ -197,11 +211,17 @@ public static class SettingsStore
                 Save(created);
                 return created;
             }
-
-            return JsonSerializer.Deserialize<AppSettings>(
+            var loaded = JsonSerializer.Deserialize<AppSettings>(
                 File.ReadAllText(FilePath),
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                 ?? new AppSettings();
+
+            // FR : Migration silencieuse des anciennes configurations v34 et antérieures.
+            // EN: Silently migrate legacy v34-and-earlier configuration files.
+            if (loaded.EnsureWebView2FixedDefaults())
+                Save(loaded);
+
+            return loaded;
         }
         catch (Exception ex)
         {

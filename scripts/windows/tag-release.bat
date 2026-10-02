@@ -4,10 +4,10 @@ set "SCRIPT_DIR=%~dp0"
 for %%I in ("%SCRIPT_DIR%\..\..") do set "ROOT=%%~fI"
 cd /d "%ROOT%"
 
-REM FR: Cree le tag correspondant a la v25 et declenche GitHub Actions.
-REM EN: Creates the v25 tag and triggers GitHub Actions.
+REM FR: Cree le tag de la version courante et declenche GitHub Actions.
+REM EN: Creates the current release tag and triggers GitHub Actions.
 
-set "TAG=v34.0.0"
+set "TAG=v35.0.0"
 
 git status --short
 echo.

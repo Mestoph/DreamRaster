@@ -142,6 +142,11 @@ public sealed class PortableInstaller
         else
             _log("Install", "Modèles FLUX.2 déjà présents : conservés.");
 
+        if (PortablePaths.GetFixedWebView2RuntimePath() is null)
+            await InstallWebView2FixedAsync(ct);
+        else
+            _log("Install", "WebView2 Fixed Version portable déjà présent : conservé.");
+
         Progress(100, "Installation portable terminée.");
     }
 
@@ -303,6 +308,196 @@ public sealed class PortableInstaller
         _log("Install", "ComfyUI portable installé.");
     }
 
+    public async Task InstallWebView2FixedAsync(CancellationToken ct)
+    {
+        if (_s.EnsureWebView2FixedDefaults())
+        {
+            SettingsStore.Save(_s);
+            _log("Install", "Configuration WebView2 Fixed Version migrée vers les valeurs portables par défaut.");
+        }
+        var existing = PortablePaths.GetFixedWebView2RuntimePath();
+        if (existing is not null)
+        {
+            _log("Install", "WebView2 Fixed Version portable déjà présent : " + existing);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_s.WebView2FixedArchiveUrl))
+            throw new InvalidOperationException(
+                "URL WebView2 Fixed Version non configurée.");
+
+        if (string.IsNullOrWhiteSpace(_s.WebView2FixedVersion))
+            throw new InvalidOperationException(
+                "Version WebView2 Fixed Version non configurée.");
+
+        var archiveName =
+            $"Microsoft.WebView2.FixedVersionRuntime.{_s.WebView2FixedVersion}.x64.cab";
+        var archive = Path.Combine(PortablePaths.DownloadsDir, archiveName);
+
+        if (File.Exists(archive))
+        {
+            var cachedHash = await Sha256Async(archive, ct);
+            if (!cachedHash.Equals(
+                    _s.WebView2FixedSha256,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                _log("Install !", "Archive WebView2 en cache invalide : suppression.");
+                File.Delete(archive);
+            }
+            else
+            {
+                _log("Install", "Archive WebView2 Fixed Version déjà téléchargée : SHA256 OK.");
+            }
+        }
+
+        if (!File.Exists(archive))
+        {
+            Progress(99, "Téléchargement WebView2 Fixed Version x64…");
+            await DownloadAsync(
+                _s.WebView2FixedArchiveUrl,
+                archive,
+                99,
+                100,
+                ct);
+        }
+
+        Progress(100, "Vérification SHA256 WebView2 Fixed Version…");
+        var actualHash = await Sha256Async(archive, ct);
+        if (!actualHash.Equals(
+                _s.WebView2FixedSha256,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            try { File.Delete(archive); } catch { }
+
+            throw new InvalidOperationException(
+                $"SHA256 invalide pour {archiveName}.\n" +
+                $"Attendu : {_s.WebView2FixedSha256}\n" +
+                $"Obtenu : {actualHash}");
+        }
+
+        _log("Install", "SHA256 OK : " + archiveName);
+
+        var expandExe = Path.Combine(Environment.SystemDirectory, "expand.exe");
+        if (!File.Exists(expandExe))
+            throw new InvalidOperationException(
+                "L'utilitaire Windows natif expand.exe est introuvable.");
+
+        var temp = Path.Combine(
+            PortablePaths.RuntimeDir,
+            "webview2-fixed-extract");
+
+        var destRoot = Path.Combine(
+            PortablePaths.Root,
+            "bin",
+            "webview2-fixed");
+
+        await ResetDirectoryAsync(temp, ct);
+
+        try
+        {
+            Progress(100, "Extraction WebView2 Fixed Version…");
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = expandExe,
+                Arguments = $"\"{archive}\" -F:* \"{temp}\"",
+                WorkingDirectory = temp,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
+            };
+
+            using var extract = Process.Start(psi)
+                ?? throw new InvalidOperationException(
+                    "Impossible de démarrer expand.exe.");
+
+            using var cancelExtraction = ct.Register(() =>
+            {
+                try
+                {
+                    if (!extract.HasExited)
+                        extract.Kill(entireProcessTree: true);
+                }
+                catch { }
+            });
+
+            var stdoutTask = extract.StandardOutput.ReadToEndAsync();
+            var stderrTask = extract.StandardError.ReadToEndAsync();
+
+            await extract.WaitForExitAsync(ct);
+
+            var stdout = await stdoutTask;
+            var stderr = await stderrTask;
+
+            if (extract.ExitCode != 0)
+            {
+                throw new InvalidOperationException(
+                    $"Extraction WebView2 échouée (expand.exe code {extract.ExitCode}).\n" +
+                    stderr);
+            }
+
+            var runtimeExe = Directory.GetFiles(
+                    temp,
+                    "msedgewebview2.exe",
+                    SearchOption.AllDirectories)
+                .FirstOrDefault();
+
+            if (runtimeExe is null)
+                throw new InvalidOperationException(
+                    "msedgewebview2.exe absent après extraction du runtime Fixed Version.");
+
+            var sourceRuntime =
+                Path.GetDirectoryName(runtimeExe)
+                ?? throw new InvalidOperationException(
+                    "Répertoire du runtime WebView2 invalide.");
+
+            if (!PortablePaths.IsInsidePack(sourceRuntime))
+                throw new InvalidOperationException(
+                    "Runtime WebView2 extrait hors du pack portable : refusé.");
+
+            await ResetDirectoryAsync(destRoot, ct);
+
+            var destination = Path.Combine(
+                destRoot,
+                $"Microsoft.Web.WebView2.FixedVersionRuntime.{_s.WebView2FixedVersion}.x64");
+
+            Directory.Move(sourceRuntime, destination);
+
+            var installed = PortablePaths.GetFixedWebView2RuntimePath();
+            if (installed is null)
+                throw new InvalidOperationException(
+                    "WebView2 Fixed Version extrait mais non détecté.");
+
+            var installedExe = Path.Combine(installed, "msedgewebview2.exe");
+            var version = FileVersionInfo.GetVersionInfo(installedExe).FileVersion;
+
+            _log(
+                "Install",
+                $"WebView2 Fixed Version portable installé : {version ?? _s.WebView2FixedVersion} · {installed}");
+
+            if (!string.IsNullOrWhiteSpace(stdout))
+            {
+                var tail = string.Join(
+                    " | ",
+                    stdout.Split(
+                            new[] { '\r', '\n' },
+                            StringSplitOptions.RemoveEmptyEntries)
+                        .Select(x => x.Trim())
+                        .Where(x => x.Length > 0)
+                        .TakeLast(2));
+
+                if (!string.IsNullOrWhiteSpace(tail))
+                    _log("WebView2", "Extraction terminée · " + tail);
+            }
+        }
+        finally
+        {
+            await TryDeleteDirectoryAsync(temp);
+        }
+    }
     public async Task InstallQwenAsync(CancellationToken ct)
     {
         Progress(54, $"Installation {_s.VisionModel} dans Ollama portable…");

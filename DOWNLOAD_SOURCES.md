@@ -53,14 +53,33 @@ https://github.com/Mestoph/DreamRaster
 
 ## WebView2 Fixed Version Runtime
 
-Le runtime WebView2 Fixed Version n'est actuellement **pas téléchargé automatiquement** lorsque `WebView2FixedArchiveUrl` est vide. Il doit être fourni avec le pack ou configuré explicitement.
+DreamRaster télécharge automatiquement le **Microsoft WebView2 Fixed Version Runtime x64** dans le pack portable lorsqu'il est absent.
 
-The WebView2 Fixed Version Runtime is currently **not automatically downloaded** when `WebView2FixedArchiveUrl` is empty. It must be supplied with the pack or explicitly configured.
+DreamRaster automatically downloads the **Microsoft WebView2 Fixed Version Runtime x64** into the portable pack when it is missing.
 
-Documentation Microsoft officielle / Official Microsoft documentation:
+Version épinglée / Pinned version:
+
+`154.0.4258.53`
+
+Archive officielle Microsoft / Official Microsoft archive:
+
+https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/0b89c3a3-0043-4746-b39e-65830da7744d/Microsoft.WebView2.FixedVersionRuntime.154.0.4258.53.x64.cab
+
+SHA-256 vérifié / Verified SHA-256:
+
+`ec12b2db6423d127fb8e1935d34e2e68abc70fe8ecb1f6162ba1c1ccc2825f6d`
+
+Page officielle de téléchargement / Official download page:
+
+https://developer.microsoft.com/microsoft-edge/webview2/
+
+Documentation Microsoft / Microsoft documentation:
 
 https://learn.microsoft.com/microsoft-edge/webview2/concepts/distribution
 
+L'archive CAB est extraite avec `expand.exe`, utilitaire natif de Windows. Le runtime final est conservé uniquement sous `bin/webview2-fixed/`. DreamRaster n'utilise pas automatiquement le runtime WebView2 Evergreen installé globalement.
+
+The CAB is extracted with Windows' native `expand.exe`. The final runtime is kept only under `bin/webview2-fixed/`. DreamRaster does not automatically fall back to a globally installed Evergreen WebView2 Runtime.
 ## Windows curl.exe
 
 DreamRaster utilise le `curl.exe` fourni par Windows pour les gros téléchargements. Il n'est pas téléchargé par DreamRaster.

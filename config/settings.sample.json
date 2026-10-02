@@ -18,5 +18,8 @@
   "GitHubOwner": "Mestoph",
   "GitHubRepository": "DreamRaster",
   "InstallVisionModel": false,
-  "SevenZipUrl": "https://www.7-zip.org/a/7zr.exe"
+  "SevenZipUrl": "https://www.7-zip.org/a/7zr.exe",
+  "WebView2FixedVersion": "154.0.4258.53",
+  "WebView2FixedArchiveUrl": "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/0b89c3a3-0043-4746-b39e-65830da7744d/Microsoft.WebView2.FixedVersionRuntime.154.0.4258.53.x64.cab",
+  "WebView2FixedSha256": "ec12b2db6423d127fb8e1935d34e2e68abc70fe8ecb1f6162ba1c1ccc2825f6d"
 }

@@ -82,7 +82,32 @@ public sealed class AppSettings
         "6c671498573ac2f7a5501502ccce8d2b08ea6ca2f661c458e708f36b36edfc5a";
     public string VaeSha256 { get; set; } =
         "d64f3a68e1cc4f9f4e29b6e0da38a0204fe9a49f2d4053f0ec1fa1ca02f9c4b5";
+    // FR : Runtime WebView2 Fixed Version x64 épinglé pour une portabilité réelle.
+    // EN: Pinned x64 WebView2 Fixed Version Runtime for true portability.
+    public const string DefaultWebView2FixedVersion = "154.0.4258.53";
+    public const string DefaultWebView2FixedArchiveUrl =
+        "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/0b89c3a3-0043-4746-b39e-65830da7744d/Microsoft.WebView2.FixedVersionRuntime.154.0.4258.53.x64.cab";
+    public const string DefaultWebView2FixedSha256 =
+        "ec12b2db6423d127fb8e1935d34e2e68abc70fe8ecb1f6162ba1c1ccc2825f6d";
 
-    // Laisser vide si le runtime Fixed WebView2 est fourni manuellement dans bin\webview2-fixed.
-    public string WebView2FixedArchiveUrl { get; set; } = "";
+    public string WebView2FixedVersion { get; set; } = DefaultWebView2FixedVersion;
+    public string WebView2FixedArchiveUrl { get; set; } = DefaultWebView2FixedArchiveUrl;
+    public string WebView2FixedSha256 { get; set; } = DefaultWebView2FixedSha256;
+
+    // FR : Répare les anciennes configurations qui avaient WebView2FixedArchiveUrl vide.
+    // EN: Repairs legacy configurations that stored an empty WebView2FixedArchiveUrl.
+    public bool EnsureWebView2FixedDefaults()
+    {
+        if (!string.IsNullOrWhiteSpace(WebView2FixedArchiveUrl) &&
+            !string.IsNullOrWhiteSpace(WebView2FixedVersion) &&
+            !string.IsNullOrWhiteSpace(WebView2FixedSha256))
+        {
+            return false;
+        }
+
+        WebView2FixedVersion = DefaultWebView2FixedVersion;
+        WebView2FixedArchiveUrl = DefaultWebView2FixedArchiveUrl;
+        WebView2FixedSha256 = DefaultWebView2FixedSha256;
+        return true;
+    }
 }
