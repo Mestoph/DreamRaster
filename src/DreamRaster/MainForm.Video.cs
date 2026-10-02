@@ -1,4 +1,4 @@
-/*
+﻿/*
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
@@ -37,6 +37,8 @@ public partial class MainForm
         _videoGenerator = new VideoGenerator(
             _s,
             StartComfyAsync,
+            () => _comfy.StopAsync(
+                TimeSpan.FromSeconds(1)),
             Log);
 
         _videoGenerator.ProgressChanged += (value, text) =>
@@ -383,6 +385,19 @@ public partial class MainForm
 
         try
         {
+            _videoStatus.Text =
+                L10n.Pick(
+                    _s.Language,
+                    "Libération d'Ollama avant Wan…",
+                    "Releasing Ollama before Wan…");
+
+            await StopVisionModelAsync();
+
+            await WaitForCommitRecoveryAsync(
+                Math.Max(4096, _s.SafeFreeRamMiB),
+                TimeSpan.FromSeconds(30),
+                _videoCts.Token);
+
             var result =
                 await _videoGenerator.GenerateAsync(
                     prompt,

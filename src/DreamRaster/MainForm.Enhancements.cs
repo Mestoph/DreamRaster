@@ -13,6 +13,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using Microsoft.Win32;
 
 namespace OpenCodeLocalAI;
 
@@ -38,6 +39,7 @@ public partial class MainForm
     private Button _benchmarkButton = null!;
     private CancellationTokenSource? _benchmarkCts;
     private int _tabActivationBusy;
+    private bool _virtualMemoryWarningLogged;
 
     private void InitializeEnhancedUi()
     {
@@ -686,13 +688,143 @@ public partial class MainForm
 
     private static long GetConfiguredPageFileMiB()
     {
+        try
+        {
+            using var key =
+                Registry.LocalMachine.OpenSubKey(
+                    @"SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management");
+
+            var raw = key?.GetValue("PagingFiles");
+            var entries = raw switch
+            {
+                string one => new[] { one },
+                string[] many => many,
+                _ => Array.Empty<string>()
+            };
+
+            long totalMaximumMiB = 0;
+            var foundExplicitMaximum = false;
+
+            foreach (var entry in entries)
+            {
+                var parts = entry.Split(
+                    ' ',
+                    StringSplitOptions.RemoveEmptyEntries |
+                    StringSplitOptions.TrimEntries);
+
+                if (parts.Length < 3 ||
+                    !long.TryParse(parts[^1], out var maximumMiB))
+                {
+                    continue;
+                }
+
+                foundExplicitMaximum = true;
+
+                // "0 0" means Windows/system-managed sizing.
+                if (maximumMiB == 0)
+                    return 0;
+
+                totalMaximumMiB += maximumMiB;
+            }
+
+            if (foundExplicitMaximum)
+                return totalMaximumMiB;
+        }
+        catch
+        {
+            // Fall back to the currently allocated commit extension.
+        }
+
         var status = new MemoryStatusEx();
         if (!GlobalMemoryStatusEx(status))
             return 0;
 
-        var totalCommit = (long)(status.TotalPageFile / (1024UL * 1024UL));
-        var physical = (long)(status.TotalPhys / (1024UL * 1024UL));
+        var totalCommit =
+            (long)(status.TotalPageFile / (1024UL * 1024UL));
+        var physical =
+            (long)(status.TotalPhys / (1024UL * 1024UL));
+
         return Math.Max(0, totalCommit - physical);
+    }
+
+    private string BuildVirtualMemoryGuidance(
+        string component,
+        long availableCommitMiB)
+    {
+        var pageFileMiB = GetConfiguredPageFileMiB();
+
+        var pageFileText =
+            pageFileMiB > 0
+                ? $"{pageFileMiB / 1024.0:0.0} Go maximum"
+                : L10n.Pick(
+                    _s.Language,
+                    "géré par Windows / taille dynamique",
+                    "Windows-managed / dynamic size");
+
+        return L10n.Pick(
+            _s.Language,
+            $"{component} ne peut pas être démarré avec une marge de mémoire engagée suffisante. " +
+            $"Commit disponible : {availableCommitMiB / 1024.0:0.0} Go. " +
+            $"Fichier de pagination : {pageFileText}. " +
+            "DreamRaster évite maintenant de charger Ollama et ComfyUI en même temps. " +
+            "Pour les charges FLUX/Wan/Qwen, utilisez de préférence un fichier de pagination géré par Windows " +
+            "ou un maximum d'au moins 16 Go.",
+            $"{component} cannot start with enough committed-memory headroom. " +
+            $"Available commit: {availableCommitMiB / 1024.0:0.0} GB. " +
+            $"Page file: {pageFileText}. " +
+            "DreamRaster now avoids loading Ollama and ComfyUI at the same time. " +
+            "For FLUX/Wan/Qwen workloads, prefer a Windows-managed page file " +
+            "or a maximum of at least 16 GB.");
+    }
+
+    private async Task WaitForCommitRecoveryAsync(
+        long minimumMiB,
+        TimeSpan timeout,
+        CancellationToken ct)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        var lastAvailable = GetAvailableCommitMiB();
+
+        while (DateTime.UtcNow < deadline)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            lastAvailable = GetAvailableCommitMiB();
+            if (lastAvailable >= minimumMiB)
+                return;
+
+            await Task.Delay(500, ct);
+        }
+
+        throw new InvalidOperationException(
+            BuildVirtualMemoryGuidance(
+                "DreamRaster",
+                lastAvailable));
+    }
+
+    private void LogVirtualMemoryWarningIfNeeded()
+    {
+        if (_virtualMemoryWarningLogged)
+            return;
+
+        _virtualMemoryWarningLogged = true;
+
+        var pageFileMiB = GetConfiguredPageFileMiB();
+        if (pageFileMiB <= 0 || pageFileMiB >= 8192)
+            return;
+
+        Log(
+            "Système !",
+            L10n.Pick(
+                _s.Language,
+                $"Fichier de pagination Windows limité à {pageFileMiB / 1024.0:0.0} Go max. " +
+                "FLUX.2, Wan et Qwen peuvent atteindre la limite de mémoire engagée. " +
+                "DreamRaster empêchera les chevauchements Ollama/ComfyUI ; " +
+                "un fichier de pagination géré par Windows ou >= 16 Go est recommandé.",
+                $"Windows page file is limited to {pageFileMiB / 1024.0:0.0} GB max. " +
+                "FLUX.2, Wan and Qwen can hit the commit limit. " +
+                "DreamRaster will prevent Ollama/ComfyUI overlap; " +
+                "a Windows-managed page file or >= 16 GB is recommended."));
     }
 
     private async Task CleanupBenchmarkComfyAsync(
@@ -1083,8 +1215,26 @@ public partial class MainForm
             }
             else if (_tabs.SelectedTab == tabOllama && !_closing)
             {
-                await SafeUiAsync("Ollama", StartOllamaAsync);
-                await RefreshModelChoicesAsync();
+                if (_comfy.Running &&
+                    (_generator.IsBusy || _videoCts is not null))
+                {
+                    var message =
+                        L10n.Pick(
+                            _s.Language,
+                            "Ollama n'est pas démarré pendant une génération FLUX/Wan active afin d'éviter une saturation de la mémoire virtuelle.",
+                            "Ollama is not started during an active FLUX/Wan generation to avoid exhausting virtual memory.");
+
+                    Log("Ollama", message);
+                    AnsiLogRenderer.Append(
+                        _ollamaLog,
+                        "Ollama",
+                        message);
+                }
+                else
+                {
+                    await SafeUiAsync("Ollama", StartOllamaAsync);
+                    await RefreshModelChoicesAsync();
+                }
             }
             else if (_tabs.SelectedTab == tabConfiguration && !_closing)
             {

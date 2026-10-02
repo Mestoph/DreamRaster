@@ -13,6 +13,7 @@ EN: Structural comments are bilingual. API, class and protocol names remain in t
 */
 
 using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Drawing;
 using System.Text;
@@ -109,6 +110,8 @@ public partial class MainForm : Form
         await SafeUiAsync(
             L10n.Pick(_s.Language, "Vérification portable", "Portable check"),
             StartupPreflightAsync);
+
+        LogVirtualMemoryWarningIfNeeded();
 
         await RefreshModelChoicesAsync();
 
@@ -514,10 +517,31 @@ public partial class MainForm : Form
             {
                 using var icon = Icon.ExtractAssociatedIcon(exe);
                 if (icon is not null)
-                {
                     Icon = (Icon)icon.Clone();
-                    picAboutIcon.Image = icon.ToBitmap();
-                }
+            }
+
+            using var stream =
+                typeof(MainForm)
+                    .Assembly
+                    .GetManifestResourceStream(
+                        "OpenCodeLocalAI.Resources.AppIcon.png");
+
+            if (stream is not null)
+            {
+                using var source = Image.FromStream(stream);
+                var old = picAboutIcon.Image;
+                picAboutIcon.Image = new Bitmap(source);
+                old?.Dispose();
+
+                Log(
+                    "UI",
+                    $"Image À propos HD chargée : {source.Width}x{source.Height}.");
+            }
+            else
+            {
+                Log(
+                    "UI !",
+                    "Ressource HD AppIcon.png introuvable pour l'onglet À propos.");
             }
         }
         catch (Exception ex)
@@ -526,7 +550,8 @@ public partial class MainForm : Form
         }
 
         _aboutUpdateProgress.Value = 0;
-        _aboutUpdateStatus.Text = L10n.T(_s.Language, "about.update_ready");
+        _aboutUpdateStatus.Text =
+            L10n.T(_s.Language, "about.update_ready");
     }
 
     /*
@@ -845,9 +870,94 @@ public partial class MainForm : Form
             $"{label} : le port {port} n'a pas été libéré après l'arrêt de l'ancien service portable.");
     }
 
+    private async Task<bool> IsPortableServiceListeningAsync(
+        int port,
+        string expectedRelativeExe)
+    {
+        var existing =
+            await PortablePreflight.InspectPortAsync(port);
+
+        if (!existing.Open ||
+            existing.Pid is not int ||
+            string.IsNullOrWhiteSpace(existing.Path))
+        {
+            return false;
+        }
+
+        try
+        {
+            var expected =
+                Path.GetFullPath(
+                    PortablePaths.Resolve(
+                        expectedRelativeExe));
+
+            var actual =
+                Path.GetFullPath(
+                    existing.Path);
+
+            return PortablePaths.IsInsidePack(actual) &&
+                   string.Equals(
+                       actual,
+                       expected,
+                       StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private async Task StartOllamaAsync()
     {
-        if (_ollama.Running) return;
+        if (_ollama.Running)
+            return;
+
+        var portableComfyActive =
+            _comfy.Running ||
+            await IsPortableServiceListeningAsync(
+                _s.ComfyPort,
+                _s.ComfyPython);
+
+        if (portableComfyActive)
+        {
+            if (_generator.IsBusy || _videoCts is not null)
+            {
+                throw new InvalidOperationException(
+                    L10n.Pick(
+                        _s.Language,
+                        "Ollama ne sera pas démarré pendant une génération FLUX/Wan active. " +
+                        "Attendez la fin du calcul avant d'ouvrir la console Ollama.",
+                        "Ollama will not be started while an active FLUX/Wan generation is using ComfyUI. " +
+                        "Wait for the generation to finish before opening the Ollama console."));
+            }
+
+            Log(
+                "Système",
+                "ComfyUI portable arrêté avant Ollama pour éviter le chevauchement RAM/VRAM.");
+
+            await _comfy.StopAsync(TimeSpan.FromSeconds(1));
+
+            // Also catches a portable ComfyUI left alive by a previous
+            // DreamRaster process and releases its console/memory cleanly.
+            await EnsurePortableServicePortFreeAsync(
+                _s.ComfyPort,
+                "ComfyUI",
+                _s.ComfyPython);
+
+            await WaitForCommitRecoveryAsync(
+                4096,
+                TimeSpan.FromSeconds(20),
+                CancellationToken.None);
+        }
+
+        var availableCommit = GetAvailableCommitMiB();
+        if (availableCommit < 3072)
+        {
+            throw new InvalidOperationException(
+                BuildVirtualMemoryGuidance(
+                    "Ollama",
+                    availableCommit));
+        }
 
         await EnsurePortableServicePortFreeAsync(
             _s.OllamaPort,
@@ -860,13 +970,31 @@ public partial class MainForm : Form
         env["OLLAMA_NO_CLOUD"] = "true";
         env["OLLAMA_NOHISTORY"] = "true";
 
+        // One local model/request at a time is intentional on the
+        // 16-GB GPU target: it avoids a second runner consuming commit
+        // while ComfyUI is about to claim the GPU.
+        env["OLLAMA_MAX_LOADED_MODELS"] = "1";
+        env["OLLAMA_NUM_PARALLEL"] = "1";
+
         var exe = PortablePaths.Resolve(_s.OllamaExe);
 
-        await _ollama.StartAsync(
-            _s.OllamaExe,
-            "serve",
-            Path.GetDirectoryName(exe)!,
-            env);
+        try
+        {
+            await _ollama.StartAsync(
+                _s.OllamaExe,
+                "serve",
+                Path.GetDirectoryName(exe)!,
+                env);
+        }
+        catch (Win32Exception ex)
+            when (ex.NativeErrorCode == 1455)
+        {
+            throw new InvalidOperationException(
+                BuildVirtualMemoryGuidance(
+                    "Ollama",
+                    GetAvailableCommitMiB()),
+                ex);
+        }
 
         await WaitForPortAsync(
             _s.OllamaPort,
@@ -1000,10 +1128,12 @@ public partial class MainForm : Form
             return;
         }
 
-        Log("WebView2", "Fixed Runtime OpenCode : " + fixedRuntime);
-
         if (_web.CoreWebView2 is null)
         {
+            Log(
+                "WebView2",
+                "Fixed Runtime OpenCode : " + fixedRuntime);
+
             var profile = Path.Combine(PortablePaths.RuntimeDir, "webview2-opencode");
             var webEnv = await CoreWebView2Environment.CreateAsync(fixedRuntime, profile);
             await _web.EnsureCoreWebView2Async(webEnv);
@@ -1064,10 +1194,12 @@ public partial class MainForm : Form
             return;
         }
 
-        Log("WebView2", "Fixed Runtime ComfyUI : " + fixedRuntime);
-
         if (_comfyWeb.CoreWebView2 is null)
         {
+            Log(
+                "WebView2",
+                "Fixed Runtime ComfyUI : " + fixedRuntime);
+
             var profile = Path.Combine(
                 PortablePaths.RuntimeDir,
                 "webview2-comfy");
@@ -1363,6 +1495,15 @@ public partial class MainForm : Form
                 Log(
                     "Ollama",
                     $"Runner portable libéré avant FLUX · PID {pid}.");
+            }
+            catch (Win32Exception ex)
+                when (ex.NativeErrorCode == 299)
+            {
+                // ERROR_PARTIAL_COPY: the runner is already disappearing.
+            }
+            catch (InvalidOperationException)
+            {
+                // The process exited between enumeration and inspection.
             }
             catch (Exception ex)
             {

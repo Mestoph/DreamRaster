@@ -13,9 +13,9 @@
     <RepositoryType>git</RepositoryType>
     <Description>DreamRaster â€” portable Windows studio for local AI image generation with FLUX.2, ComfyUI, Ollama and OpenCode.</Description>
     <ApplicationIcon>Assets/AppIcon.ico</ApplicationIcon>
-    <Version>35.0.2</Version>
-    <AssemblyVersion>35.0.2.0</AssemblyVersion>
-    <FileVersion>35.0.2.0</FileVersion>
+    <Version>35.0.3</Version>
+    <AssemblyVersion>35.0.3.0</AssemblyVersion>
+    <FileVersion>35.0.3.0</FileVersion>
 
     <UseWindowsForms>true</UseWindowsForms>
     <UseWPF>false</UseWPF>
@@ -91,6 +91,10 @@
     -->
     <EmbeddedResource Include="$(WebView2PackageDir)/runtimes/win-x64/native/WebView2Loader.dll">
       <LogicalName>OpenCodeLocalAI.Resources.WebView2Loader.dll</LogicalName>
+    </EmbeddedResource>
+
+    <EmbeddedResource Include="Assets/AppIcon.png">
+      <LogicalName>OpenCodeLocalAI.Resources.AppIcon.png</LogicalName>
     </EmbeddedResource>
 
     <EmbeddedResource Include="Assets/Workflows/flux2_text_to_image_api.json">

@@ -34,6 +34,9 @@ public sealed class Flux2Generator
 
     public event Action<int,string>? ProgressChanged;
 
+    public bool IsBusy => _gate.CurrentCount == 0;
+
+
     public Flux2Generator(
         AppSettings settings,
         Func<Task> ensureComfy,
@@ -1102,18 +1105,48 @@ public sealed class Flux2Generator
             }
             catch { }
 
-            var ram = FreeRamMiB();
-            if (vram is <= 1800 && ram is >= 4096) return;
+            var memory = GetMemorySnapshot();
+            var minimumVramMiB =
+                Math.Max(256, _s.SafeVramMiB);
+            var minimumRamMiB =
+                Math.Max(1024, _s.SafeFreeRamMiB);
+            var minimumCommitMiB =
+                Math.Max(4096, minimumRamMiB);
+
+            if (vram is not null &&
+                vram.Value <= minimumVramMiB &&
+                memory.FreeRamMiB >= minimumRamMiB &&
+                memory.AvailableCommitMiB >= minimumCommitMiB)
+            {
+                return;
+            }
+
             await Task.Delay(1000, ct);
         }
 
-        throw new TimeoutException("La mémoire n'est pas revenue au seuil sûr.");
+        var finalMemory = GetMemorySnapshot();
+        throw new TimeoutException(
+            "La mémoire n'est pas revenue au seuil sûr. " +
+            $"RAM libre : {finalMemory.FreeRamMiB:N0} MiB · " +
+            $"commit disponible : {finalMemory.AvailableCommitMiB:N0} MiB. " +
+            "Fermez les applications lourdes ou augmentez le fichier de pagination Windows.");
     }
 
-    private static long? FreeRamMiB()
+    private static (long FreeRamMiB, long AvailableCommitMiB)
+        GetMemorySnapshot()
     {
-        var m = new MemoryStatusEx { Length = (uint)Marshal.SizeOf<MemoryStatusEx>() };
-        return GlobalMemoryStatusEx(ref m) ? (long)(m.AvailPhys / 1048576UL) : null;
+        var m = new MemoryStatusEx
+        {
+            Length =
+                (uint)Marshal.SizeOf<MemoryStatusEx>()
+        };
+
+        if (!GlobalMemoryStatusEx(ref m))
+            return (long.MaxValue, long.MaxValue);
+
+        return (
+            (long)(m.AvailPhys / 1048576UL),
+            (long)(m.AvailPageFile / 1048576UL));
     }
 
     [StructLayout(LayoutKind.Sequential)]

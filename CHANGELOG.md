@@ -1,4 +1,19 @@
 ﻿# Changelog — DreamRaster
+## 35.0.3 - Memory safety, HD About artwork and log cleanup
+
+- Fixed the blurry About-tab artwork by embedding and displaying the full 1254x1254 AppIcon PNG instead of stretching the executable icon.
+- Detects a low fixed Windows page file and logs a clear warning; the tested machine is limited to a 2 GiB maximum page file.
+- Prevents Ollama and portable ComfyUI from competing for committed memory, including stale portable services left by a previous DreamRaster process.
+- Converts Windows ERROR_COMMITMENT_LIMIT / page-file start failures into actionable DreamRaster memory guidance.
+- Limits portable Ollama to one loaded model and one parallel request on the 16 GiB GPU target.
+- Added committed-memory headroom checks before the FLUX VAE decode phase.
+- Hardened ManagedProcess cleanup after failed Process.Start calls.
+- Fixed repeated WebView2 Fixed Runtime log lines by logging only on first WebView initialization.
+- Suppressed expected local-proxy browser/socket disconnect noise while preserving real proxy failures.
+- Wan 2.1 now uses a two-phase latent/decode workflow: Wan+UMT5 generate and save the latent, ComfyUI is restarted, then a fresh VAE process decodes and encodes the MP4.
+- Wan generation now unloads Ollama before starting ComfyUI.
+- Validated FLUX 512x512 split decode and Wan 512x320 / 9-frame / 8 FPS / 4-step generation with the 2 GiB page-file constraint.
+
 ## 35.0.2 — Final validation and installer hardening
 
 - Validated a complete Wan 2.1 T2V generation on the RTX 4060 Ti using the portable ComfyUI stack: 512×320, 9 frames, 8 FPS, 4 steps, H.264 MP4 output.

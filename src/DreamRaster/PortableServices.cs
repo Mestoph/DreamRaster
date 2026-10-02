@@ -14,6 +14,7 @@ EN: Structural comments are bilingual. API, class and protocol names remain in t
 
 using System.Net;
 using System.Net.WebSockets;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 
@@ -72,8 +73,18 @@ public sealed class LocalProxyServer : IAsyncDisposable
         while (!ct.IsCancellationRequested && _listener?.IsListening == true)
         {
             HttpListenerContext ctx;
-            try { ctx = await _listener.GetContextAsync(); }
-            catch when (ct.IsCancellationRequested) { break; }
+            try
+            {
+                ctx = await _listener.GetContextAsync();
+            }
+            catch (Exception ex) when (
+                IsExpectedDisconnect(ex, ct))
+            {
+                if (ct.IsCancellationRequested)
+                    break;
+
+                continue;
+            }
             catch (Exception ex)
             {
                 _log("Proxy !", ex.Message);
@@ -132,11 +143,53 @@ public sealed class LocalProxyServer : IAsyncDisposable
 
             await ProxyHttpAsync(ctx, ct);
         }
+        catch (Exception ex) when (
+            IsExpectedDisconnect(ex, ct))
+        {
+            try { ctx.Response.Close(); } catch { }
+        }
         catch (Exception ex)
         {
             _log("Proxy !", ex.Message);
-            try { ctx.Response.StatusCode = 502; ctx.Response.Close(); } catch { }
+            try
+            {
+                ctx.Response.StatusCode = 502;
+                ctx.Response.Close();
+            }
+            catch { }
         }
+    }
+
+    private static bool IsExpectedDisconnect(
+        Exception ex,
+        CancellationToken ct)
+    {
+        if (ct.IsCancellationRequested ||
+            ex is OperationCanceledException ||
+            ex is ObjectDisposedException)
+        {
+            return true;
+        }
+
+        if (ex is SocketException socket)
+        {
+            return socket.SocketErrorCode is
+                SocketError.OperationAborted or
+                SocketError.ConnectionAborted or
+                SocketError.ConnectionReset or
+                SocketError.NetworkReset or
+                SocketError.Shutdown or
+                SocketError.NotSocket;
+        }
+
+        if (ex is HttpListenerException listener)
+        {
+            // 995 = operation aborted, 64 = network name unavailable.
+            return listener.ErrorCode is 995 or 64;
+        }
+
+        return ex.InnerException is not null &&
+               IsExpectedDisconnect(ex.InnerException, ct);
     }
 
     private async Task ProxyHttpAsync(HttpListenerContext ctx, CancellationToken ct)

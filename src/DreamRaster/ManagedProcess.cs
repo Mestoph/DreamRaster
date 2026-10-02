@@ -73,12 +73,22 @@ public sealed class ManagedProcess : IDisposable
         _process.ErrorDataReceived += (_, e) => { if (e.Data is not null) _log(Name + " !", e.Data); };
         _process.Exited += (_, _) => _log(Name, $"Processus terminé (code {_process?.ExitCode}).");
 
-        if (!_process.Start())
-            throw new InvalidOperationException($"Impossible de démarrer {Name}.");
+        try
+        {
+            if (!_process.Start())
+                throw new InvalidOperationException(
+                    $"Impossible de démarrer {Name}.");
 
-        _process.BeginOutputReadLine();
-        _process.BeginErrorReadLine();
-        _log(Name, $"PID {_process.Id} · {exe}");
+            _process.BeginOutputReadLine();
+            _process.BeginErrorReadLine();
+            _log(Name, $"PID {_process.Id} · {exe}");
+        }
+        catch
+        {
+            _process.Dispose();
+            _process = null;
+            throw;
+        }
 
         await Task.Delay(100, ct);
     }
