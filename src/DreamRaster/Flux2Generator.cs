@@ -202,73 +202,12 @@ public sealed class Flux2Generator
                         : "DreamRaster_FLUX2_") +
                     DateTime.UtcNow.ToString("yyyy-MM-ddTHH-mm-ss-fffZ");
 
-                SetRequiredInput(
+                Progress(30, "Sampling FLUX.2…");
+                var source = await RunSplitDecodeWorkflowAsync(
                     workflow,
-                    "SaveImage",
-                    "filename_prefix",
-                    JsonValue.Create(prefix));
-
-                Progress(30, "Envoi du prompt…");
-                var body = JsonSerializer.Serialize(new
-                {
-                    prompt = workflow,
-                    client_id = Guid.NewGuid().ToString()
-                });
-
-                using var response = await _http.PostAsync(
-                    $"http://127.0.0.1:{_s.ComfyPort}/prompt",
-                    new StringContent(body, Encoding.UTF8, "application/json"), ct);
-
-                var raw = await response.Content.ReadAsStringAsync(ct);
-
-                if (!response.IsSuccessStatusCode)
-                    throw new InvalidOperationException($"ComfyUI HTTP {response.StatusCode}: {raw}");
-
-                using var doc = JsonDocument.Parse(raw);
-                var id = doc.RootElement.GetProperty("prompt_id").GetString()
-                         ?? throw new InvalidOperationException("prompt_id absent.");
-
-                var until = DateTime.UtcNow.AddMinutes(5);
-                JsonElement job = default;
-                var pct = 35;
-
-                while (DateTime.UtcNow < until)
-                {
-                    ct.ThrowIfCancellationRequested();
-                    using var hdoc = JsonDocument.Parse(
-                        await _http.GetStringAsync(
-                            $"http://127.0.0.1:{_s.ComfyPort}/history/{id}", ct));
-
-                    if (hdoc.RootElement.TryGetProperty(id, out var j))
-                    {
-                        if (TryGetComfyFailure(j, out var comfyError))
-                            throw new InvalidOperationException(comfyError);
-
-                        if (j.TryGetProperty("status", out var status) &&
-                            status.TryGetProperty("completed", out var completed) &&
-                            completed.ValueKind == JsonValueKind.True)
-                        {
-                            job = j.Clone();
-                            break;
-                        }
-                    }
-
-                    pct = Math.Min(88, pct + 1);
-                    Progress(
-                        pct,
-                        isImgToImg
-                            ? "FLUX.2 transforme l'image…"
-                            : "FLUX.2 calcule l'image…");
-
-                    await Task.Delay(900, ct);
-                }
-
-                if (job.ValueKind == JsonValueKind.Undefined)
-                    throw new TimeoutException("Timeout ComfyUI.");
-
-                var source = FindOutput(job);
-                if (source is null)
-                    throw new FileNotFoundException("PNG final introuvable.");
+                    prefix,
+                    isImgToImg,
+                    ct);
 
                 var images = PortablePaths.Resolve(_s.Images);
                 Directory.CreateDirectory(images);
@@ -319,6 +258,481 @@ public sealed class Flux2Generator
 
             _gate.Release();
         }
+    }
+
+    private async Task<string> RunSplitDecodeWorkflowAsync(
+        JsonObject configuredWorkflow,
+        string imagePrefix,
+        bool isImgToImg,
+        CancellationToken ct)
+    {
+        var comfyRoot = PortablePreflight.GetComfyRoot(_s);
+        var outputRoot = Path.Combine(comfyRoot, "output");
+        var inputRoot = Path.Combine(comfyRoot, "input");
+        Directory.CreateDirectory(outputRoot);
+        Directory.CreateDirectory(inputRoot);
+
+        string? latentOutputPath = null;
+        string? latentInputPath = null;
+
+        try
+        {
+            var phase1 = configuredWorkflow.DeepClone().AsObject();
+
+            RemoveNodesByClassType(
+                phase1,
+                "VAEDecode",
+                "SaveImage");
+
+            if (!isImgToImg)
+                RemoveNodesByClassType(phase1, "VAELoader");
+
+            var samplerId =
+                RequireNodeId(
+                    phase1,
+                    "SamplerCustomAdvanced");
+
+            var saveLatentId =
+                NextNumericNodeId(phase1);
+
+            phase1[saveLatentId] =
+                new JsonObject
+                {
+                    ["class_type"] = "SaveLatent",
+                    ["inputs"] =
+                        new JsonObject
+                        {
+                            ["samples"] =
+                                new JsonArray(
+                                    JsonValue.Create(samplerId),
+                                    JsonValue.Create(0)),
+                            ["filename_prefix"] =
+                                JsonValue.Create(
+                                    "latents/DreamRaster_FLUX2_intermediate_" +
+                                    Guid.NewGuid().ToString("N"))
+                        }
+                };
+
+            var phase1Job =
+                await QueueWorkflowAndWaitAsync(
+                    phase1,
+                    TimeSpan.FromMinutes(5),
+                    32,
+                    68,
+                    isImgToImg
+                        ? "FLUX.2 transforme l'image…"
+                        : "FLUX.2 calcule le latent…",
+                    ct);
+
+            latentOutputPath =
+                FindComfyOutput(
+                    phase1Job,
+                    "latents",
+                    ".latent");
+
+            if (latentOutputPath is null)
+                throw new FileNotFoundException(
+                    "Latent intermédiaire FLUX.2 introuvable.");
+
+            var latentInputName =
+                "DreamRaster_FLUX2_intermediate_" +
+                Guid.NewGuid().ToString("N") +
+                ".latent";
+
+            latentInputPath =
+                Path.Combine(
+                    inputRoot,
+                    latentInputName);
+
+            File.Copy(
+                latentOutputPath,
+                latentInputPath,
+                overwrite: true);
+
+            Progress(
+                72,
+                "Libération de Qwen et FLUX avant le VAE…");
+
+            await FreeComfyModelsAsync(ct);
+            await WaitForSafeMemoryAsync(ct);
+
+            var phase2 =
+                new JsonObject
+                {
+                    ["1"] =
+                        new JsonObject
+                        {
+                            ["class_type"] = "LoadLatent",
+                            ["inputs"] =
+                                new JsonObject
+                                {
+                                    ["latent"] =
+                                        JsonValue.Create(
+                                            latentInputName)
+                                }
+                        },
+                    ["2"] =
+                        new JsonObject
+                        {
+                            ["class_type"] = "VAELoader",
+                            ["inputs"] =
+                                new JsonObject
+                                {
+                                    ["vae_name"] =
+                                        JsonValue.Create(
+                                            _s.VaeModel)
+                                }
+                        },
+                    ["3"] =
+                        new JsonObject
+                        {
+                            ["class_type"] = "VAEDecode",
+                            ["inputs"] =
+                                new JsonObject
+                                {
+                                    ["samples"] =
+                                        new JsonArray(
+                                            JsonValue.Create("1"),
+                                            JsonValue.Create(0)),
+                                    ["vae"] =
+                                        new JsonArray(
+                                            JsonValue.Create("2"),
+                                            JsonValue.Create(0))
+                                }
+                        },
+                    ["4"] =
+                        new JsonObject
+                        {
+                            ["class_type"] = "SaveImage",
+                            ["inputs"] =
+                                new JsonObject
+                                {
+                                    ["filename_prefix"] =
+                                        JsonValue.Create(
+                                            imagePrefix),
+                                    ["images"] =
+                                        new JsonArray(
+                                            JsonValue.Create("3"),
+                                            JsonValue.Create(0))
+                                }
+                        }
+                };
+
+            Progress(
+                78,
+                "Décodage VAE…");
+
+            var phase2Job =
+                await QueueWorkflowAndWaitAsync(
+                    phase2,
+                    TimeSpan.FromMinutes(3),
+                    80,
+                    90,
+                    "Décodage de l'image…",
+                    ct);
+
+            return
+                FindComfyOutput(
+                    phase2Job,
+                    "images",
+                    ".png")
+                ?? throw new FileNotFoundException(
+                    "PNG final introuvable.");
+        }
+        finally
+        {
+            foreach (var path in new[]
+                     {
+                         latentInputPath,
+                         latentOutputPath
+                     })
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                    continue;
+
+                try
+                {
+                    if (File.Exists(path))
+                        File.Delete(path);
+                }
+                catch
+                {
+                }
+            }
+        }
+    }
+
+    private async Task<JsonElement> QueueWorkflowAndWaitAsync(
+        JsonObject workflow,
+        TimeSpan timeout,
+        int progressStart,
+        int progressEnd,
+        string progressText,
+        CancellationToken ct)
+    {
+        var body =
+            JsonSerializer.Serialize(
+                new
+                {
+                    prompt = workflow,
+                    client_id = Guid.NewGuid().ToString()
+                });
+
+        using var response =
+            await _http.PostAsync(
+                $"http://127.0.0.1:{_s.ComfyPort}/prompt",
+                new StringContent(
+                    body,
+                    Encoding.UTF8,
+                    "application/json"),
+                ct);
+
+        var raw =
+            await response.Content.ReadAsStringAsync(ct);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                $"ComfyUI HTTP {response.StatusCode}: {raw}");
+        }
+
+        using var doc = JsonDocument.Parse(raw);
+        var id =
+            doc.RootElement
+                .GetProperty("prompt_id")
+                .GetString()
+            ?? throw new InvalidOperationException(
+                "prompt_id absent.");
+
+        var until =
+            DateTime.UtcNow + timeout;
+
+        var progress =
+            progressStart;
+
+        while (DateTime.UtcNow < until)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            using var hdoc =
+                JsonDocument.Parse(
+                    await _http.GetStringAsync(
+                        $"http://127.0.0.1:{_s.ComfyPort}/history/{id}",
+                        ct));
+
+            if (hdoc.RootElement.TryGetProperty(
+                    id,
+                    out var job))
+            {
+                if (TryGetComfyFailure(
+                        job,
+                        out var comfyError))
+                {
+                    throw new InvalidOperationException(
+                        comfyError);
+                }
+
+                if (job.TryGetProperty(
+                        "status",
+                        out var status) &&
+                    status.TryGetProperty(
+                        "completed",
+                        out var completed) &&
+                    completed.ValueKind ==
+                    JsonValueKind.True)
+                {
+                    return job.Clone();
+                }
+            }
+
+            progress =
+                Math.Min(
+                    progressEnd,
+                    progress + 1);
+
+            Progress(
+                progress,
+                progressText);
+
+            await Task.Delay(
+                700,
+                ct);
+        }
+
+        throw new TimeoutException(
+            "Timeout ComfyUI.");
+    }
+
+    private async Task FreeComfyModelsAsync(
+        CancellationToken ct)
+    {
+        try
+        {
+            using var response =
+                await _http.PostAsync(
+                    $"http://127.0.0.1:{_s.ComfyPort}/free",
+                    new StringContent(
+                        "{\"unload_models\":true,\"free_memory\":true}",
+                        Encoding.UTF8,
+                        "application/json"),
+                    ct);
+
+            _log(
+                "ComfyUI",
+                response.IsSuccessStatusCode
+                    ? "Modèles FLUX/Qwen libérés avant décodage VAE."
+                    : $"Libération modèles : HTTP {(int)response.StatusCode}.");
+        }
+        catch (Exception ex)
+        {
+            _log(
+                "ComfyUI !",
+                "Libération modèles avant VAE : " +
+                ex.Message);
+        }
+
+        await Task.Delay(
+            800,
+            ct);
+    }
+
+    private string? FindComfyOutput(
+        JsonElement job,
+        string collectionName,
+        string requiredExtension)
+    {
+        if (!job.TryGetProperty(
+                "outputs",
+                out var outputs))
+            return null;
+
+        foreach (var node in outputs.EnumerateObject())
+        {
+            if (!node.Value.TryGetProperty(
+                    collectionName,
+                    out var items) ||
+                items.ValueKind !=
+                JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var item in items.EnumerateArray())
+            {
+                if (!item.TryGetProperty(
+                        "filename",
+                        out var filenameNode))
+                    continue;
+
+                var filename =
+                    filenameNode.GetString();
+
+                if (string.IsNullOrWhiteSpace(filename) ||
+                    !filename.EndsWith(
+                        requiredExtension,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var subfolder =
+                    item.TryGetProperty(
+                        "subfolder",
+                        out var subfolderNode)
+                        ? subfolderNode.GetString() ?? string.Empty
+                        : string.Empty;
+
+                var type =
+                    item.TryGetProperty(
+                        "type",
+                        out var typeNode)
+                        ? typeNode.GetString()
+                        : "output";
+
+                var root =
+                    string.Equals(
+                        type,
+                        "input",
+                        StringComparison.OrdinalIgnoreCase)
+                        ? Path.Combine(
+                            PortablePreflight.GetComfyRoot(_s),
+                            "input")
+                        : Path.Combine(
+                            PortablePreflight.GetComfyRoot(_s),
+                            "output");
+
+                var path =
+                    Path.Combine(
+                        root,
+                        subfolder,
+                        filename);
+
+                if (File.Exists(path))
+                    return path;
+            }
+        }
+
+        return null;
+    }
+
+    private static string RequireNodeId(
+        JsonObject workflow,
+        string classType)
+    {
+        foreach (var entry in workflow)
+        {
+            if (entry.Value is not JsonObject node)
+                continue;
+
+            if (string.Equals(
+                    node["class_type"]?.GetValue<string>(),
+                    classType,
+                    StringComparison.Ordinal))
+            {
+                return entry.Key;
+            }
+        }
+
+        throw new InvalidDataException(
+            $"Workflow FLUX.2 Klein incompatible : nœud {classType} absent.");
+    }
+
+    private static string NextNumericNodeId(
+        JsonObject workflow)
+    {
+        var max =
+            workflow
+                .Select(entry =>
+                    int.TryParse(
+                        entry.Key,
+                        out var value)
+                        ? value
+                        : 0)
+                .DefaultIfEmpty(0)
+                .Max();
+
+        return
+            (max + 1)
+            .ToString(
+                System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static void RemoveNodesByClassType(
+        JsonObject workflow,
+        params string[] classTypes)
+    {
+        var remove =
+            workflow
+                .Where(entry =>
+                    entry.Value is JsonObject node &&
+                    classTypes.Contains(
+                        node["class_type"]?.GetValue<string>(),
+                        StringComparer.Ordinal))
+                .Select(entry => entry.Key)
+                .ToArray();
+
+        foreach (var key in remove)
+            workflow.Remove(key);
     }
 
     private void ConfigureOfficialKleinWorkflow(

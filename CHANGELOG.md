@@ -1,4 +1,15 @@
 ﻿# Changelog — DreamRaster
+## 35.0.1 — FLUX memory stability and benchmark hardening
+
+- Split FLUX.2 generation into a sampling phase and a lightweight VAE decode phase so the large Qwen/FLUX models can be released before image decoding.
+- Added a targeted ComfyUI 0.38.0 Windows AIMDO compatibility patch with a preserved original-file backup and safe fallback behavior.
+- Hardened the portable Ollama/ComfyUI GPU handoff and releases every actually loaded Ollama model before FLUX starts.
+- Improved benchmark cleanup by stopping ComfyUI between cases and waiting for safe Windows commit availability.
+- Made the optional Vision-model preflight derive the Ollama manifest path from the configured model name instead of hard-coding qwen3-vl:8b.
+- Completed config/settings.sample.json with the current image, prompt, seed, video, ports, model URLs and SHA-256 settings.
+- Validated a real 1024x1024, 4-step, fixed-seed FLUX.2 generation after the memory changes.
+- Validated the integrated 8-image qwen3:1.7b vs qwen3:4b benchmark and its JSON/CSV report output.
+
 ## 35.0.0 — Portable WebView2 Fixed Runtime
 
 - Added automatic installation of Microsoft WebView2 Fixed Version Runtime x64 when the portable runtime is missing.

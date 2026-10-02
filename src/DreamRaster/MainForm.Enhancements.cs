@@ -10,6 +10,7 @@ EN: UI enhancements: categorized logs, model selectors, negative prompt,
 
 using System.Diagnostics;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -656,6 +657,85 @@ public partial class MainForm
         double TotalSeconds,
         string ImagePath);
 
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private sealed class MemoryStatusEx
+    {
+        public uint Length = (uint)Marshal.SizeOf<MemoryStatusEx>();
+        public uint MemoryLoad;
+        public ulong TotalPhys;
+        public ulong AvailPhys;
+        public ulong TotalPageFile;
+        public ulong AvailPageFile;
+        public ulong TotalVirtual;
+        public ulong AvailVirtual;
+        public ulong AvailExtendedVirtual;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GlobalMemoryStatusEx(
+        [In, Out] MemoryStatusEx buffer);
+
+    private static long GetAvailableCommitMiB()
+    {
+        var status = new MemoryStatusEx();
+        return GlobalMemoryStatusEx(status)
+            ? (long)(status.AvailPageFile / (1024UL * 1024UL))
+            : long.MaxValue;
+    }
+
+    private static long GetConfiguredPageFileMiB()
+    {
+        var status = new MemoryStatusEx();
+        if (!GlobalMemoryStatusEx(status))
+            return 0;
+
+        var totalCommit = (long)(status.TotalPageFile / (1024UL * 1024UL));
+        var physical = (long)(status.TotalPhys / (1024UL * 1024UL));
+        return Math.Max(0, totalCommit - physical);
+    }
+
+    private async Task CleanupBenchmarkComfyAsync(
+        CancellationToken ct)
+    {
+        try
+        {
+            await _comfy.StopAsync(TimeSpan.FromSeconds(1));
+        }
+        finally
+        {
+            // A previous DreamRaster process can leave its portable ComfyUI alive.
+            // Ensure the tracked port is really released before the next case.
+            await EnsurePortableServicePortFreeAsync(
+                _s.ComfyPort,
+                "ComfyUI",
+                _s.ComfyPython);
+        }
+
+        var deadline = DateTime.UtcNow.AddSeconds(30);
+        const long desiredFreeCommitMiB = 6144;
+
+        while (DateTime.UtcNow < deadline)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var available = GetAvailableCommitMiB();
+            if (available >= desiredFreeCommitMiB)
+            {
+                Log(
+                    "Système",
+                    $"Benchmark : ComfyUI arrêté · commit disponible {available:N0} MiB.");
+                return;
+            }
+
+            await Task.Delay(500, ct);
+        }
+
+        Log(
+            "Système !",
+            $"Benchmark : commit disponible seulement {GetAvailableCommitMiB():N0} MiB après nettoyage.");
+    }
+
     private async Task RunPromptBenchmarkAsync()
     {
         var answer = MessageBox.Show(
@@ -671,6 +751,29 @@ public partial class MainForm
 
         if (answer != DialogResult.Yes)
             return;
+
+        var pageFileMiB = GetConfiguredPageFileMiB();
+        if (pageFileMiB > 0 && pageFileMiB < 8192)
+        {
+            var memoryAnswer = MessageBox.Show(
+                L10n.Pick(
+                    _s.Language,
+                    $"La mémoire virtuelle Windows semble limitée à environ {pageFileMiB / 1024.0:0.0} Go. " +
+                    "Le benchmark FLUX.2 peut atteindre la limite de mémoire engagée même si de la RAM physique reste libre. " +
+                    "DreamRaster arrêtera ComfyUI entre chaque image pour réduire ce risque.\n\nContinuer ?",
+                    $"Windows virtual memory appears limited to about {pageFileMiB / 1024.0:0.0} GB. " +
+                    "The FLUX.2 benchmark can hit the commit limit even while physical RAM is still available. " +
+                    "DreamRaster will fully stop ComfyUI between images to reduce this risk.\n\nContinue?"),
+                L10n.Pick(
+                    _s.Language,
+                    "Mémoire virtuelle limitée",
+                    "Limited virtual memory"),
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+
+            if (memoryAnswer != DialogResult.Yes)
+                return;
+        }
 
         _benchmarkCts = new CancellationTokenSource();
         var ct = _benchmarkCts.Token;
@@ -736,6 +839,8 @@ public partial class MainForm
                     ct.ThrowIfCancellationRequested();
                     job++;
 
+                    await CleanupBenchmarkComfyAsync(ct);
+
                     _genText.Text =
                         $"Benchmark {job}/{totalJobs} · {test.Category} · {model}";
                     _prompt.Text = test.Prompt;
@@ -754,16 +859,25 @@ public partial class MainForm
                     _prompt.Text = improved;
 
                     var fluxWatch = Stopwatch.StartNew();
-                    var result = await _generator.GenerateAsync(
-                        improved,
-                        _negativePrompt.Text.Trim(),
-                        _s.DefaultWidth,
-                        _s.DefaultHeight,
-                        inputImagePath: null,
-                        imgToImgStrength: 1.0,
-                        ct,
-                        test.Seed);
-                    fluxWatch.Stop();
+                    ImageGenerationResult result;
+                    try
+                    {
+                        result = await _generator.GenerateAsync(
+                            improved,
+                            _negativePrompt.Text.Trim(),
+                            _s.DefaultWidth,
+                            _s.DefaultHeight,
+                            inputImagePath: null,
+                            imgToImgStrength: 1.0,
+                            ct,
+                            test.Seed);
+                    }
+                    finally
+                    {
+                        fluxWatch.Stop();
+                        await CleanupBenchmarkComfyAsync(ct);
+                    }
+
                     totalWatch.Stop();
 
                     if (!result.Ok ||
@@ -861,6 +975,15 @@ public partial class MainForm
         }
         finally
         {
+            try
+            {
+                await CleanupBenchmarkComfyAsync(
+                    CancellationToken.None);
+            }
+            catch
+            {
+            }
+
             _prompt.Text = originalPrompt;
 
             if (!string.IsNullOrWhiteSpace(originalModel))

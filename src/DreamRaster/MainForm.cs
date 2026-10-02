@@ -970,6 +970,10 @@ public partial class MainForm : Form
         var main = PortablePaths.Resolve(_s.ComfyMain);
         var relPy = Path.GetRelativePath(PortablePaths.Root, py);
 
+        ComfyWindowsCompatibility.ApplyAimdoDirectReadPatchIfNeeded(
+            _s,
+            Log);
+
         await _comfy.StartAsync(
             relPy,
             $"\"{main}\" --listen 127.0.0.1 --port {_s.ComfyPort} --disable-auto-launch --disable-pinned-memory --disable-async-offload --disable-fast-disk",
@@ -1137,17 +1141,67 @@ public partial class MainForm : Form
     {
         try
         {
-            using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
-
-            var models = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            if (!string.IsNullOrWhiteSpace(_s.PromptModel))
-                models.Add(_s.PromptModel);
-
-            if (_s.InstallVisionModel &&
-                !string.IsNullOrWhiteSpace(_s.VisionModel))
+            using var http = new HttpClient
             {
-                models.Add(_s.VisionModel);
+                Timeout = TimeSpan.FromSeconds(10)
+            };
+
+            var models = new HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+            var runningModelsKnown = false;
+
+            // The benchmark can temporarily use a model different from
+            // PromptModel (for example qwen3:4b). Ask Ollama what is
+            // actually resident so every loaded model is released before
+            // ComfyUI/FLUX claims the GPU. Do not send keep_alive=0 to a
+            // non-resident configured model because Ollama can load it
+            // first, which defeats the purpose of freeing VRAM.
+            try
+            {
+                using var psResponse = await http.GetAsync(
+                    $"http://127.0.0.1:{_s.OllamaPort}/api/ps");
+
+                if (psResponse.IsSuccessStatusCode)
+                {
+                    runningModelsKnown = true;
+                    var raw = await psResponse.Content.ReadAsStringAsync();
+                    using var doc = JsonDocument.Parse(raw);
+
+                    if (doc.RootElement.TryGetProperty(
+                            "models",
+                            out var runningModels))
+                    {
+                        foreach (var item in runningModels.EnumerateArray())
+                        {
+                            if (!item.TryGetProperty(
+                                    "name",
+                                    out var nameNode))
+                                continue;
+
+                            var name = nameNode.GetString();
+                            if (!string.IsNullOrWhiteSpace(name))
+                                models.Add(name);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log(
+                    "Ollama !",
+                    "Lecture des modèles chargés : " + ex.Message);
+            }
+
+            if (!runningModelsKnown)
+            {
+                if (!string.IsNullOrWhiteSpace(_s.PromptModel))
+                    models.Add(_s.PromptModel);
+
+                if (_s.InstallVisionModel &&
+                    !string.IsNullOrWhiteSpace(_s.VisionModel))
+                {
+                    models.Add(_s.VisionModel);
+                }
             }
 
             foreach (var model in models)
@@ -1162,24 +1216,168 @@ public partial class MainForm : Form
 
                 try
                 {
-                    using var _ = await http.PostAsync(
+                    using var response = await http.PostAsync(
                         $"http://127.0.0.1:{_s.OllamaPort}/api/generate",
                         new StringContent(
                             body,
                             Encoding.UTF8,
                             "application/json"));
-                    Log("Ollama", $"Modèle libéré avant FLUX : {model}");
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        Log(
+                            "Ollama",
+                            $"Modèle libéré avant FLUX : {model}");
+                    }
+                    else
+                    {
+                        Log(
+                            "Ollama !",
+                            $"Libération {model} : HTTP {(int)response.StatusCode}");
+                    }
                 }
                 catch (Exception ex)
                 {
-                    Log("Ollama !", $"Libération {model} : {ex.Message}");
+                    Log(
+                        "Ollama !",
+                        $"Libération {model} : {ex.Message}");
                 }
             }
+
+            await StopPortableOllamaForFluxAsync();
         }
         catch (Exception ex)
         {
-            Log("Ollama !", "Libération modèles prompt/vision : " + ex.Message);
+            Log(
+                "Ollama !",
+                "Libération modèles prompt/vision : " + ex.Message);
         }
+    }
+
+    private async Task StopPortableOllamaForFluxAsync()
+    {
+        try
+        {
+            await _ollama.StopAsync(
+                TimeSpan.FromSeconds(1));
+        }
+        catch (Exception ex)
+        {
+            Log(
+                "Ollama !",
+                "Arrêt serveur portable avant FLUX : " +
+                ex.Message);
+        }
+
+        try
+        {
+            var port =
+                await PortablePreflight.InspectPortAsync(
+                    _s.OllamaPort);
+
+            if (port.Open &&
+                port.Pid is int pid &&
+                !string.IsNullOrWhiteSpace(port.Path))
+            {
+                var expected =
+                    Path.GetFullPath(
+                        PortablePaths.Resolve(
+                            _s.OllamaExe));
+
+                var actual =
+                    Path.GetFullPath(
+                        port.Path);
+
+                if (PortablePaths.IsInsidePack(actual) &&
+                    string.Equals(
+                        actual,
+                        expected,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    using var process =
+                        Process.GetProcessById(pid);
+
+                    process.Kill(
+                        entireProcessTree: true);
+
+                    await process.WaitForExitAsync();
+
+                    Log(
+                        "Ollama",
+                        $"Serveur portable arrêté avant FLUX · PID {pid}.");
+                }
+            }
+        }
+        catch (ArgumentException)
+        {
+            // Process already exited.
+        }
+        catch (Exception ex)
+        {
+            Log(
+                "Ollama !",
+                "Arrêt du service portable avant FLUX : " +
+                ex.Message);
+        }
+
+        var ollamaDir =
+            Path.GetFullPath(
+                Path.GetDirectoryName(
+                    PortablePaths.Resolve(
+                        _s.OllamaExe))!);
+
+        foreach (var runner in
+                 Process.GetProcessesByName(
+                     "llama-server"))
+        {
+            try
+            {
+                var path =
+                    runner.MainModule?.FileName;
+
+                if (string.IsNullOrWhiteSpace(path))
+                    continue;
+
+                var full =
+                    Path.GetFullPath(path);
+
+                if (!full.StartsWith(
+                        ollamaDir +
+                        Path.DirectorySeparatorChar,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var pid =
+                    runner.Id;
+
+                if (!runner.HasExited)
+                {
+                    runner.Kill(
+                        entireProcessTree: true);
+
+                    await runner.WaitForExitAsync();
+                }
+
+                Log(
+                    "Ollama",
+                    $"Runner portable libéré avant FLUX · PID {pid}.");
+            }
+            catch (Exception ex)
+            {
+                Log(
+                    "Ollama !",
+                    "Libération runner portable : " +
+                    ex.Message);
+            }
+            finally
+            {
+                runner.Dispose();
+            }
+        }
+
+        await Task.Delay(500);
     }
 
     private async Task GenerateFromUiAsync()

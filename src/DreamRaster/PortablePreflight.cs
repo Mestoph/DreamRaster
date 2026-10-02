@@ -47,19 +47,59 @@ public static class PortablePreflight
         CheckAbsoluteFile(result, "vae", "VAE FLUX.2",
             Path.Combine(comfyRoot, "models", "vae", s.VaeModel));
 
-        // FR : Ne considérer Qwen3-VL comme requis que si l'utilisateur active la vision.
-        // EN: Only require Qwen3-VL when the user explicitly enables vision support.
+        // FR : Le modèle Vision est optionnel et son manifeste est dérivé du nom configuré.
+        // EN: The Vision model is optional and its manifest is derived from the configured model name.
         if (s.InstallVisionModel)
         {
-            var manifest = Path.Combine(
-                PortablePaths.Resolve(s.OllamaModels),
-                "manifests", "registry.ollama.ai", "library", "qwen3-vl", "8b");
+            var manifest = GetPortableOllamaManifestPath(
+                s.OllamaModels,
+                s.VisionModel);
 
             if (!File.Exists(manifest))
                 result.Add(new("qwen", s.VisionModel, manifest));
         }
 
         return result;
+    }
+
+    internal static string GetPortableOllamaManifestPath(
+        string modelsDirectory,
+        string modelName)
+    {
+        if (string.IsNullOrWhiteSpace(modelName))
+            throw new ArgumentException(
+                "Le nom du modèle Ollama ne peut pas être vide.",
+                nameof(modelName));
+
+        var trimmed = modelName.Trim();
+        var colon = trimmed.LastIndexOf(':');
+        var repository = colon > 0
+            ? trimmed[..colon]
+            : trimmed;
+        var tag = colon > 0 && colon < trimmed.Length - 1
+            ? trimmed[(colon + 1)..]
+            : "latest";
+
+        var repositoryParts = repository.Split(
+            new[] { '/', '\\' },
+            StringSplitOptions.RemoveEmptyEntries);
+
+        if (repositoryParts.Length == 0)
+            throw new ArgumentException(
+                "Nom de modèle Ollama invalide.",
+                nameof(modelName));
+
+        return Path.Combine(
+            new[]
+            {
+                PortablePaths.Resolve(modelsDirectory),
+                "manifests",
+                "registry.ollama.ai",
+                "library"
+            }
+            .Concat(repositoryParts)
+            .Append(tag)
+            .ToArray());
     }
 
     private static void CheckFile(List<MissingComponent> list, string key, string label, string configured)
