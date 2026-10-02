@@ -100,6 +100,10 @@
     <EmbeddedResource Include="Assets/Workflows/flux2_img_to_img_api.json">
       <LogicalName>OpenCodeLocalAI.Workflows.flux2_img_to_img_api.json</LogicalName>
     </EmbeddedResource>
+
+    <EmbeddedResource Include="Assets/Workflows/wan21_text_to_video_api.json">
+      <LogicalName>OpenCodeLocalAI.Workflows.wan21_text_to_video_api.json</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>

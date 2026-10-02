@@ -56,13 +56,14 @@ public static class PortablePaths
 
     public const string TextToImageWorkflowFile = "flux2_text_to_image_api.json";
     public const string ImgToImgWorkflowFile = "flux2_img_to_img_api.json";
+    public const string WanTextToVideoWorkflowFile = "wan21_text_to_video_api.json";
     public const string LegacyWorkflowFile = "flux2_workflow_api.json";
 
     public static void EnsureLayout()
     {
         foreach (var dir in new[]
         {
-            "bin", "config", "downloads", "images", "logs", "models", "runtime",
+            "bin", "config", "downloads", "images", "videos", "logs", "models", "runtime",
             "workflows", "workspace", @"models\ollama", @"runtime\opencode",
             @"runtime\ollama", @"runtime\comfyui", @"runtime\webview2-opencode",
             @"runtime\webview2-comfy", @"runtime\native"
@@ -83,6 +84,10 @@ public static class PortablePaths
         WriteEmbeddedFileIfDifferent(
             Path.Combine(WorkflowsDir, ImgToImgWorkflowFile),
             "OpenCodeLocalAI.Workflows.flux2_img_to_img_api.json");
+
+        WriteEmbeddedFileIfDifferent(
+            Path.Combine(WorkflowsDir, WanTextToVideoWorkflowFile),
+            "OpenCodeLocalAI.Workflows.wan21_text_to_video_api.json");
 
         // Compatibilité avec les versions précédentes du générateur.
         WriteEmbeddedFileIfDifferent(

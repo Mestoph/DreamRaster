@@ -22,12 +22,29 @@ public sealed class AppSettings
     public string ComfyMain { get; set; } = @"bin\comfyui\ComfyUI_windows_portable\ComfyUI\main.py";
     public string Workspace { get; set; } = @"workspace";
     public string Images { get; set; } = @"images";
+    public string Videos { get; set; } = @"videos";
     public string OllamaModels { get; set; } = @"models\ollama";
 
     public string VisionModel { get; set; } = "qwen3-vl:8b";
     public string FluxModel { get; set; } = "flux-2-klein-4b-fp8.safetensors";
     public string TextEncoderModel { get; set; } = "qwen_3_4b.safetensors";
     public string VaeModel { get; set; } = "flux2-vae.safetensors";
+    public string NegativePrompt { get; set; } =
+        "low quality, blurry, out of focus, jpeg artifacts, watermark, text, logo, " +
+        "deformed, distorted, malformed, oversaturated, underexposed, overexposed";
+    public bool AutoImprovePrompt { get; set; } = false;
+    public string PromptModel { get; set; } = "qwen3:1.7b";
+    public long GenerationSeed { get; set; } = 1001;
+    public bool UseRandomSeed { get; set; } = true;
+
+    public string VideoModel { get; set; } = "wan2.1_t2v_1.3B_fp16.safetensors";
+    public string VideoTextEncoderModel { get; set; } = "umt5_xxl_fp8_e4m3fn_scaled.safetensors";
+    public string VideoVaeModel { get; set; } = "wan_2.1_vae.safetensors";
+    public int VideoWidth { get; set; } = 832;
+    public int VideoHeight { get; set; } = 480;
+    public int VideoFrames { get; set; } = 33;
+    public int VideoFps { get; set; } = 16;
+    public int VideoSteps { get; set; } = 30;
 
     public int OpenCodePort { get; set; } = 54095;
     public int OllamaPort { get; set; } = 11434;
@@ -76,12 +93,25 @@ public sealed class AppSettings
     public string VaeUrl { get; set; } =
         "https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/vae/flux2-vae.safetensors";
 
+    public string VideoModelUrl { get; set; } =
+        "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors?download=true";
+    public string VideoTextEncoderUrl { get; set; } =
+        "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors?download=true";
+    public string VideoVaeUrl { get; set; } =
+        "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors?download=true";
+
     public string FluxSha256 { get; set; } =
         "97ed34fe0567e436200f2faee3939b88f2b5d99f8af2a4dc16532c4245c0ccb6";
     public string TextEncoderSha256 { get; set; } =
         "6c671498573ac2f7a5501502ccce8d2b08ea6ca2f661c458e708f36b36edfc5a";
     public string VaeSha256 { get; set; } =
         "d64f3a68e1cc4f9f4e29b6e0da38a0204fe9a49f2d4053f0ec1fa1ca02f9c4b5";
+    public string VideoModelSha256 { get; set; } =
+        "be531024cd9018cb5b48c40cfbb6a6191645b1c792eb8bf4f8c1c6e10f924dc5";
+    public string VideoTextEncoderSha256 { get; set; } =
+        "c3355d30191f1f066b26d93fba017ae9809dce6c627dda5f6a66eaa651204f68";
+    public string VideoVaeSha256 { get; set; } =
+        "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b";
     // FR : Runtime WebView2 Fixed Version x64 épinglé pour une portabilité réelle.
     // EN: Pinned x64 WebView2 Fixed Version Runtime for true portability.
     public const string DefaultWebView2FixedVersion = "154.0.4258.53";

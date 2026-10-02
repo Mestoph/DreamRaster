@@ -1,4 +1,4 @@
-# Changelog — DreamRaster
+﻿# Changelog — DreamRaster
 ## 35.0.0 — Portable WebView2 Fixed Runtime
 
 - Added automatic installation of Microsoft WebView2 Fixed Version Runtime x64 when the portable runtime is missing.
@@ -11,6 +11,19 @@
 - Updated bilingual installation and download-source documentation.
 - Added automatic migration for legacy settings where `WebView2FixedArchiveUrl` was empty; the pinned version, URL and SHA-256 are repaired and persisted at startup.
 - Validated the missing-runtime repair path on the portable installation: cached CAB verified, 257 files extracted, and DreamRaster WebView2 child processes confirmed to launch from `bin/webview2-fixed/`.
+- Added categorized Logs sub-tabs for UI, OpenCode, Ollama, ComfyUI, FLUX.2, Video, Installation and System, with repaint fixes and double buffering.
+- Added editable Vision, Prompt AI, FLUX, Text Encoder and VAE model selectors with clear installed/missing/compatible states.
+- Added lightweight safetensors-header validation for FLUX.2 Klein diffusion models, Qwen3 Klein text encoders and FLUX.2 VAEs.
+- Added a predefined negative prompt and passes exclusions to the official Klein Distilled Qwen conditioning path as an Avoid instruction.
+- Width, height and steps now synchronize with bundled workflows; image-to-image uses exact ImageScale dimensions instead of a megapixel approximation.
+- Added automatic local prompt enhancement through Ollama with structured JSON output, separate Prompt AI model selection, and automatic GPU handoff between Ollama and ComfyUI.
+- Added fixed or random generation seeds and visible Prompt / FLUX / Total timing metrics.
+- Added an integrated qwen3:1.7b vs qwen3:4b benchmark: four categories × two models, fixed seeds, 8 generated images and JSON/CSV reports.
+- Added a Wan 2.1 text-to-video tab with prompt, negative prompt, width/height, frames, FPS, steps, progress, cancellation and MP4 output.
+- Added explicit Wan model installation with user confirmation, official Comfy-Org URLs and SHA-256 verification; no multi-gigabyte video download starts automatically.
+- Added safe restart of stale portable Ollama, OpenCode and ComfyUI processes after DreamRaster restarts, restoring valid console pipes while still rejecting external/system services.
+- Added Ollama API-readiness polling and stable ComfyUI launch flags for the tested Windows/RTX 4060 Ti configuration.
+- Validated end-to-end Auto Prompt -> Ollama -> VRAM release -> ComfyUI -> FLUX.2 at 1024x1024, 4 steps and fixed seed 1001.
 
 
 ## 34.0.0 — Official FLUX.2 Klein workflows

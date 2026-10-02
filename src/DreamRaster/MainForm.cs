@@ -15,6 +15,7 @@ EN: Structural comments are bilingual. API, class and protocol names remain in t
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Drawing;
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Web.WebView2.Core;
@@ -55,6 +56,7 @@ public partial class MainForm : Form
         _s = SettingsStore.Load();
         _updater = new GitHubUpdater(_s);
 
+        InitializeEnhancedUi();
         LoadSettingsToUi();
         ApplyTranslations();
         InitializeAbout();
@@ -107,6 +109,8 @@ public partial class MainForm : Form
         await SafeUiAsync(
             L10n.Pick(_s.Language, "Vérification portable", "Portable check"),
             StartupPreflightAsync);
+
+        await RefreshModelChoicesAsync();
 
         if (_s.AutoCheckUpdates && !_closing)
         {
@@ -190,6 +194,7 @@ public partial class MainForm : Form
     {
         _s.Language = cmbLanguage.SelectedIndex == 1 ? "en" : "fr";
         ApplyTranslations();
+        _ = RefreshModelChoicesAsync();
     }
 
     private void btnSettingsSave_Click(object? sender, EventArgs e)
@@ -198,6 +203,7 @@ public partial class MainForm : Form
         {
             SaveSettingsFromUi();
             SettingsStore.Save(_s);
+            SynchronizeWorkflowDefaults();
 
             Log("UI", "Configuration enregistrée : " +
                 Path.Combine(PortablePaths.ConfigDir, "settings.json"));
@@ -288,10 +294,25 @@ public partial class MainForm : Form
         _s.ImageProxyPort = Decimal.ToInt32(numProxyPort.Value);
         _s.GenerationApiPort = Decimal.ToInt32(numApiPort.Value);
 
-        _s.VisionModel = txtVisionModel.Text.Trim();
-        _s.FluxModel = txtFluxModel.Text.Trim();
-        _s.TextEncoderModel = txtTextEncoder.Text.Trim();
-        _s.VaeModel = txtVae.Text.Trim();
+        var visionModel = SelectedModel(_visionModelCombo, txtVisionModel);
+        var fluxModel = SelectedModel(_fluxModelCombo, txtFluxModel);
+        var textEncoderModel = SelectedModel(_textEncoderCombo, txtTextEncoder);
+        var vaeModel = SelectedModel(_vaeCombo, txtVae);
+
+        ValidateSelectedFlux2Models(
+            fluxModel,
+            textEncoderModel,
+            vaeModel);
+
+        _s.VisionModel = visionModel;
+        _s.FluxModel = fluxModel;
+        _s.TextEncoderModel = textEncoderModel;
+        _s.VaeModel = vaeModel;
+        _s.NegativePrompt = _negativePrompt.Text.Trim();
+        _s.AutoImprovePrompt = _autoImprovePrompt.Checked;
+        _s.PromptModel = CurrentComboModel(_promptModelCombo);
+        _s.GenerationSeed = Decimal.ToInt64(_seedInput.Value);
+        _s.UseRandomSeed = _randomSeedCheck.Checked;
 
         _s.DefaultWidth = Decimal.ToInt32(numDefaultWidth.Value);
         _s.DefaultHeight = Decimal.ToInt32(numDefaultHeight.Value);
@@ -432,7 +453,9 @@ public partial class MainForm : Form
         cmbGenerationMode.SelectedIndex =
             selectedMode is 1 ? 1 : 0;
 
-        _tabs.Invalidate();
+        ApplyEnhancedTranslations();
+        _tabs.Invalidate(true);
+        _tabs.Refresh();
     }
 
     /*
@@ -446,12 +469,14 @@ public partial class MainForm : Form
         txtInputImage.Enabled = isImgToImg;
         btnBrowseInputImage.Enabled = isImgToImg;
         btnClearInputImage.Enabled = isImgToImg;
-        lblInputImage.Enabled = isImgToImg;
+        lblInputImage.Enabled = true;
+        lblInputImage.ForeColor = Color.White;
         // Le workflow officiel FLUX.2 Klein Image Edit n'expose pas de
         // paramètre denoise/strength. Le champ reste visible pour compatibilité
         // avec les anciennes configurations, mais il n'est plus modifiable.
         numImg2ImgStrength.Enabled = false;
-        lblImg2ImgStrength.Enabled = isImgToImg;
+        lblImg2ImgStrength.Enabled = true;
+        lblImg2ImgStrength.ForeColor = Color.White;
     }
 
     /*
@@ -755,11 +780,79 @@ public partial class MainForm : Form
         _status.Text = "OpenCode + Ollama portables démarrés.";
     }
 
+    private async Task EnsurePortableServicePortFreeAsync(
+        int port,
+        string label,
+        string expectedRelativeExe)
+    {
+        var existing = await PortablePreflight.InspectPortAsync(port);
+        if (!existing.Open)
+            return;
+
+        var expected = Path.GetFullPath(
+            PortablePaths.Resolve(expectedRelativeExe));
+
+        var actual =
+            string.IsNullOrWhiteSpace(existing.Path)
+                ? null
+                : Path.GetFullPath(existing.Path);
+
+        var isOurPortableProcess =
+            existing.Pid is int &&
+            actual is not null &&
+            PortablePaths.IsInsidePack(actual) &&
+            string.Equals(
+                actual,
+                expected,
+                StringComparison.OrdinalIgnoreCase);
+
+        if (!isOurPortableProcess)
+        {
+            await PortablePreflight.RejectOccupiedExternalPortAsync(
+                port,
+                label);
+            return;
+        }
+
+        var pid = existing.Pid!.Value;
+        Log(
+            label,
+            $"Ancien service portable détecté sur le port {port} · PID {pid}. " +
+            "Redémarrage propre pour restaurer les flux console.");
+
+        try
+        {
+            using var process = Process.GetProcessById(pid);
+            process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync();
+        }
+        catch (ArgumentException)
+        {
+            // Process already exited.
+        }
+
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            var check = await PortablePreflight.InspectPortAsync(port);
+            if (!check.Open)
+                return;
+
+            await Task.Delay(200);
+        }
+
+        throw new InvalidOperationException(
+            $"{label} : le port {port} n'a pas été libéré après l'arrêt de l'ancien service portable.");
+    }
+
     private async Task StartOllamaAsync()
     {
         if (_ollama.Running) return;
 
-        await PortablePreflight.RejectOccupiedExternalPortAsync(_s.OllamaPort, "Ollama");
+        await EnsurePortableServicePortFreeAsync(
+            _s.OllamaPort,
+            "Ollama",
+            _s.OllamaExe);
 
         var env = PortablePreflight.PortableEnvironment("ollama");
         env["OLLAMA_MODELS"] = PortablePaths.Resolve(_s.OllamaModels);
@@ -774,13 +867,56 @@ public partial class MainForm : Form
             "serve",
             Path.GetDirectoryName(exe)!,
             env);
+
+        await WaitForPortAsync(
+            _s.OllamaPort,
+            TimeSpan.FromSeconds(20));
+
+        await WaitForOllamaReadyAsync(
+            TimeSpan.FromSeconds(30));
+    }
+
+    private async Task WaitForOllamaReadyAsync(TimeSpan timeout)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        Exception? lastError = null;
+
+        using var http = new HttpClient
+        {
+            Timeout = TimeSpan.FromSeconds(3)
+        };
+
+        while (DateTime.UtcNow < deadline)
+        {
+            try
+            {
+                using var response = await http.GetAsync(
+                    $"http://127.0.0.1:{_s.OllamaPort}/api/tags");
+
+                if (response.IsSuccessStatusCode)
+                    return;
+            }
+            catch (Exception ex)
+            {
+                lastError = ex;
+            }
+
+            await Task.Delay(500);
+        }
+
+        throw new TimeoutException(
+            "Ollama a ouvert son port mais son API n'est pas devenue prête à temps." +
+            (lastError is null ? string.Empty : " " + lastError.Message));
     }
 
     private async Task StartOpenCodeAsync()
     {
         if (_openCode.Running) return;
 
-        await PortablePreflight.RejectOccupiedExternalPortAsync(_s.OpenCodePort, "OpenCode");
+        await EnsurePortableServicePortFreeAsync(
+            _s.OpenCodePort,
+            "OpenCode",
+            _s.OpenCodeExe);
 
         var env = PortablePreflight.PortableEnvironment("opencode");
         env["XDG_DATA_HOME"] = Path.Combine(PortablePaths.RuntimeDir, "opencode", "data");
@@ -819,7 +955,10 @@ public partial class MainForm : Form
             return;
         }
 
-        await PortablePreflight.RejectOccupiedExternalPortAsync(_s.ComfyPort, "ComfyUI");
+        await EnsurePortableServicePortFreeAsync(
+            _s.ComfyPort,
+            "ComfyUI",
+            _s.ComfyPython);
 
         var env = PortablePreflight.PortableEnvironment("comfyui");
         env["PYTHONNOUSERSITE"] = "1";
@@ -833,7 +972,7 @@ public partial class MainForm : Form
 
         await _comfy.StartAsync(
             relPy,
-            $"\"{main}\" --listen 127.0.0.1 --port {_s.ComfyPort} --disable-auto-launch --disable-pinned-memory",
+            $"\"{main}\" --listen 127.0.0.1 --port {_s.ComfyPort} --disable-auto-launch --disable-pinned-memory --disable-async-offload --disable-fast-disk",
             Path.GetDirectoryName(main)!,
             env);
 
@@ -996,33 +1135,50 @@ public partial class MainForm : Form
 
     private async Task StopVisionModelAsync()
     {
-        // FR : Aucun appel Ollama si le modèle vision optionnel est désactivé.
-        // EN: Do not call Ollama when the optional vision model is disabled.
-        if (!_s.InstallVisionModel)
-            return;
-
         try
         {
             using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
 
-            var body = JsonSerializer.Serialize(new
-            {
-                model = _s.VisionModel,
-                prompt = "",
-                keep_alive = 0,
-                stream = false
-            });
+            var models = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-            using var _ = await http.PostAsync(
-                $"http://127.0.0.1:{_s.OllamaPort}/api/generate",
-                new StringContent(
-                    body,
-                    System.Text.Encoding.UTF8,
-                    "application/json"));
+            if (!string.IsNullOrWhiteSpace(_s.PromptModel))
+                models.Add(_s.PromptModel);
+
+            if (_s.InstallVisionModel &&
+                !string.IsNullOrWhiteSpace(_s.VisionModel))
+            {
+                models.Add(_s.VisionModel);
+            }
+
+            foreach (var model in models)
+            {
+                var body = JsonSerializer.Serialize(new
+                {
+                    model,
+                    prompt = "",
+                    keep_alive = 0,
+                    stream = false
+                });
+
+                try
+                {
+                    using var _ = await http.PostAsync(
+                        $"http://127.0.0.1:{_s.OllamaPort}/api/generate",
+                        new StringContent(
+                            body,
+                            Encoding.UTF8,
+                            "application/json"));
+                    Log("Ollama", $"Modèle libéré avant FLUX : {model}");
+                }
+                catch (Exception ex)
+                {
+                    Log("Ollama !", $"Libération {model} : {ex.Message}");
+                }
+            }
         }
         catch (Exception ex)
         {
-            Log("Ollama", "Déchargement vision : " + ex.Message);
+            Log("Ollama !", "Libération modèles prompt/vision : " + ex.Message);
         }
     }
 
@@ -1062,13 +1218,47 @@ public partial class MainForm : Form
             ShowPreviewImage(inputImagePath);
         }
 
+        var totalWatch = Stopwatch.StartNew();
+        var promptElapsed = TimeSpan.Zero;
+
+        if (_autoImprovePrompt.Checked)
+        {
+            _genText.Text = L10n.Pick(
+                _s.Language,
+                "Amélioration locale du prompt…",
+                "Improving prompt locally…");
+
+            var promptWatch = Stopwatch.StartNew();
+            text = await ImprovePromptTextAsync(text, CancellationToken.None);
+            promptWatch.Stop();
+            promptElapsed = promptWatch.Elapsed;
+            _prompt.Text = text;
+        }
+
+        var seed =
+            _randomSeedCheck.Checked
+                ? (long?)null
+                : Decimal.ToInt64(_seedInput.Value);
+
+        var fluxWatch = Stopwatch.StartNew();
         var result = await _generator.GenerateAsync(
             text,
+            _negativePrompt.Text.Trim(),
             _s.DefaultWidth,
             _s.DefaultHeight,
             isImgToImg ? inputImagePath : null,
             Decimal.ToDouble(numImg2ImgStrength.Value),
-            CancellationToken.None);
+            CancellationToken.None,
+            seed);
+        fluxWatch.Stop();
+        totalWatch.Stop();
+
+        _genText.Text =
+            L10n.Pick(_s.Language, "Terminé", "Done") +
+            $" · Prompt {promptElapsed.TotalSeconds:0.00}s" +
+            $" · FLUX {fluxWatch.Elapsed.TotalSeconds:0.00}s" +
+            $" · Total {totalWatch.Elapsed.TotalSeconds:0.00}s" +
+            $" · Seed {(seed?.ToString() ?? "auto")}";
 
         if (!result.Ok)
         {
@@ -1156,6 +1346,7 @@ public partial class MainForm : Form
             {
                 AnsiLogRenderer.Append(_liveLog, item.Source, item.Message);
                 AnsiLogRenderer.Append(_allLog, item.Source, item.Message);
+                AppendCategorizedLog(item.Source, item.Message);
 
                 if (item.Source.StartsWith("Ollama", StringComparison.OrdinalIgnoreCase))
                 {

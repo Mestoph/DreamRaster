@@ -1,8 +1,8 @@
-# DreamRaster
+﻿# DreamRaster
 
 [English documentation](README.en.md)
 
-DreamRaster est un studio Windows portable de génération d’images IA locale. L’application orchestre **OpenCode**, **Ollama**, **ComfyUI** et **FLUX.2** sans utiliser les installations système correspondantes.
+DreamRaster est un studio Windows portable de génération d’images et de vidéos IA locales. L’application orchestre **OpenCode**, **Ollama**, **ComfyUI** et **FLUX.2** sans utiliser les installations système correspondantes.
 
 ![Icône DreamRaster](src/DreamRaster/Assets/AppIcon.png)
 
@@ -12,7 +12,14 @@ DreamRaster est un studio Windows portable de génération d’images IA locale.
 - OpenCode intégré dans WebView2 ;
 - ComfyUI intégré ;
 - génération FLUX.2 text-to-image et image-to-image ;
+- dimensions exactes et seed fixe/aléatoire pour les générations ;
+- amélioration automatique des prompts avec un modèle Ollama local dédié ;
+- comparatif intégré qwen3:1.7b / qwen3:4b avec 8 images, timings et rapport JSON/CSV ;
+- validation structurelle des modèles FLUX.2 Klein, text encoder et VAE ;
+- sélecteurs Vision / Prompt IA / FLUX / Text Encoder / VAE avec état installé/compatible ;
+- génération vidéo Wan 2.1 via ComfyUI, avec installation explicite et SHA-256 des modèles ;
 - workflows ComfyUI embarqués ;
+- logs séparés UI / OpenCode / Ollama / ComfyUI / FLUX.2 / Vidéo / Installation / Système ;
 - console Ollama avec progression structurée ;
 - interface français / anglais ;
 - onglet À propos ;

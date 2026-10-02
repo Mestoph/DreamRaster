@@ -835,6 +835,65 @@ public sealed class PortableInstaller
         return $"{mib / 1024d:N2} GiB";
     }
 
+    public async Task InstallVideoModelsAsync(CancellationToken ct)
+    {
+        var root = PortablePreflight.GetComfyRoot(_s);
+        var model = Path.Combine(
+            root,
+            "models",
+            "diffusion_models",
+            _s.VideoModel);
+        var encoder = Path.Combine(
+            root,
+            "models",
+            "text_encoders",
+            _s.VideoTextEncoderModel);
+        var vae = Path.Combine(
+            root,
+            "models",
+            "vae",
+            _s.VideoVaeModel);
+
+        Directory.CreateDirectory(Path.GetDirectoryName(model)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(encoder)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(vae)!);
+
+        if (!File.Exists(model))
+            await DownloadAndVerifyAsync(
+                _s.VideoModelUrl,
+                model,
+                _s.VideoModelSha256,
+                2,
+                34,
+                ct);
+        else
+            _log("Install", "Modèle vidéo Wan déjà présent : " + Path.GetFileName(model));
+
+        if (!File.Exists(encoder))
+            await DownloadAndVerifyAsync(
+                _s.VideoTextEncoderUrl,
+                encoder,
+                _s.VideoTextEncoderSha256,
+                34,
+                92,
+                ct);
+        else
+            _log("Install", "Encodeur vidéo UMT5 déjà présent : " + Path.GetFileName(encoder));
+
+        if (!File.Exists(vae))
+            await DownloadAndVerifyAsync(
+                _s.VideoVaeUrl,
+                vae,
+                _s.VideoVaeSha256,
+                92,
+                100,
+                ct);
+        else
+            _log("Install", "VAE vidéo Wan déjà présent : " + Path.GetFileName(vae));
+
+        Progress(100, "Modèles vidéo Wan installés et vérifiés.");
+    }
+
     public async Task InstallFluxModelsAsync(CancellationToken ct)
     {
         var root = PortablePreflight.GetComfyRoot(_s);

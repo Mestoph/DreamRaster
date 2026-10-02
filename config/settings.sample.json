@@ -1,10 +1,11 @@
-{
+﻿{
   "OpenCodeExe": "bin\\opencode\\opencode.exe",
   "OllamaExe": "bin\\ollama\\ollama.exe",
   "ComfyPython": "bin\\comfyui\\ComfyUI_windows_portable\\python_embeded\\python.exe",
   "ComfyMain": "bin\\comfyui\\ComfyUI_windows_portable\\ComfyUI\\main.py",
   "Workspace": "workspace",
   "Images": "images",
+  "Videos": "videos",
   "OllamaModels": "models\\ollama",
   "VisionModel": "qwen3-vl:8b",
   "OpenCodePort": 54095,

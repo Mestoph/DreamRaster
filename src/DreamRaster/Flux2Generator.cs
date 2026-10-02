@@ -52,11 +52,13 @@ public sealed class Flux2Generator
         string prompt, int width, int height, CancellationToken ct)
         => GenerateAsync(
             prompt,
+            _s.NegativePrompt,
             width,
             height,
             inputImagePath: null,
             imgToImgStrength: 1.0,
-            ct);
+            ct,
+            seed: null);
 
     /*
     FR : Génère une image FLUX.2 en mode texte→image ou image→image selon la présence
@@ -66,11 +68,13 @@ public sealed class Flux2Generator
     */
     public async Task<ImageGenerationResult> GenerateAsync(
         string prompt,
+        string? negativePrompt,
         int width,
         int height,
         string? inputImagePath,
         double imgToImgStrength,
-        CancellationToken ct)
+        CancellationToken ct,
+        long? seed = null)
     {
         if (!await _gate.WaitAsync(0, ct))
             return new(false, null, null, "Une génération FLUX.2 est déjà en cours.");
@@ -132,18 +136,25 @@ public sealed class Flux2Generator
                 ConfigureOfficialKleinWorkflow(
                     workflow,
                     prompt,
+                    negativePrompt,
                     width,
                     height,
                     isImgToImg);
 
                 var seedValue =
-                    Random.Shared.NextInt64(1, long.MaxValue);
+                    seed is > 0
+                        ? seed.Value
+                        : Random.Shared.NextInt64(1, long.MaxValue);
 
                 SetRequiredInput(
                     workflow,
                     "RandomNoise",
                     "noise_seed",
                     JsonValue.Create(seedValue));
+
+                _log(
+                    "FLUX",
+                    $"Seed : {seedValue} · {width}x{height} · {_s.DefaultSteps} steps.");
 
                 if (isImgToImg)
                 {
@@ -313,6 +324,7 @@ public sealed class Flux2Generator
     private void ConfigureOfficialKleinWorkflow(
         JsonObject workflow,
         string prompt,
+        string? negativePrompt,
         int width,
         int height,
         bool isImgToImg)
@@ -354,11 +366,37 @@ public sealed class Flux2Generator
             "vae_name",
             JsonValue.Create(_s.VaeModel));
 
-        SetRequiredInput(
-            workflow,
-            "CLIPTextEncode",
-            "text",
-            JsonValue.Create(prompt));
+        var textEncoders = FindNodeInputs(workflow, "CLIPTextEncode");
+        if (textEncoders.Count == 0)
+            throw new InvalidDataException(
+                "Workflow FLUX.2 Klein incompatible : nœud CLIPTextEncode absent.");
+
+        var positivePrompt = prompt;
+        if (!string.IsNullOrWhiteSpace(negativePrompt))
+        {
+            if (textEncoders.Count > 1)
+            {
+                textEncoders[0]["text"] = JsonValue.Create(prompt);
+                textEncoders[1]["text"] = JsonValue.Create(negativePrompt);
+            }
+            else
+            {
+                // Klein Distilled has no separate negative-conditioning input.
+                // Qwen receives the exclusions as explicit natural-language instructions.
+                positivePrompt =
+                    prompt + Environment.NewLine + Environment.NewLine +
+                    "Avoid: " + negativePrompt.Trim();
+                textEncoders[0]["text"] = JsonValue.Create(positivePrompt);
+                _log(
+                    "FLUX",
+                    "Klein Distilled : le négatif prompt est transmis à Qwen comme instruction 'Avoid', " +
+                    "car le workflow officiel Distilled n'expose pas de conditioning négatif séparé.");
+            }
+        }
+        else
+        {
+            textEncoders[0]["text"] = JsonValue.Create(prompt);
+        }
 
         SetRequiredInput(
             workflow,
@@ -415,29 +453,29 @@ public sealed class Flux2Generator
             return;
         }
 
-        var megapixels =
-            Math.Clamp(
-                width * (double)height / 1_000_000d,
-                0.01,
-                16.0);
-
         SetRequiredInput(
             workflow,
-            "ImageScaleToTotalPixels",
+            "ImageScale",
             "upscale_method",
-            JsonValue.Create("nearest-exact"));
+            JsonValue.Create("lanczos"));
 
         SetRequiredInput(
             workflow,
-            "ImageScaleToTotalPixels",
-            "megapixels",
-            JsonValue.Create(megapixels));
+            "ImageScale",
+            "width",
+            JsonValue.Create(width));
 
         SetRequiredInput(
             workflow,
-            "ImageScaleToTotalPixels",
-            "resolution_steps",
-            JsonValue.Create(1));
+            "ImageScale",
+            "height",
+            JsonValue.Create(height));
+
+        SetRequiredInput(
+            workflow,
+            "ImageScale",
+            "crop",
+            JsonValue.Create("center"));
 
         RequireNodeInputs(workflow, "LoadImage");
         RequireNodeInputs(workflow, "GetImageSize");
