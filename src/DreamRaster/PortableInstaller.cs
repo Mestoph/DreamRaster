@@ -1098,6 +1098,9 @@ public sealed class PortableInstaller
             "Install",
             $"Racine portable : {PortablePaths.Root}");
 
+        using var multiCts =
+            CancellationTokenSource.CreateLinkedTokenSource(ct);
+
         var tasks = new List<Task>();
 
         for (var i = 0; i < segments.Count; i++)
@@ -1130,23 +1133,64 @@ public sealed class PortableInstaller
                     partPath,
                     segment.Start,
                     segment.End,
-                    ct));
+                    multiCts.Token));
         }
 
         var watch = Stopwatch.StartNew();
         var lastAt = TimeSpan.Zero;
+        var lastProgressAt = TimeSpan.Zero;
         long lastBytes = 0;
+        long lastProgressBytes = 0;
         double speedMiBps = 0;
 
         while (tasks.Any(t => !t.IsCompleted))
         {
             ct.ThrowIfCancellationRequested();
 
+            if (tasks.Any(t => t.IsFaulted))
+            {
+                multiCts.Cancel();
+                try { await Task.WhenAll(tasks); } catch { }
+
+                var failure =
+                    tasks
+                        .FirstOrDefault(t => t.IsFaulted)?
+                        .Exception?
+                        .GetBaseException();
+
+                throw new InvalidOperationException(
+                    "Un segment multi-curl a échoué." +
+                    (failure is null
+                        ? string.Empty
+                        : " " + failure.Message),
+                    failure);
+            }
+
             var current =
                 GetDownloadedPartBytes(
                     partsDir,
                     segments.Count,
                     totalLength);
+
+            if (current > lastProgressBytes)
+            {
+                lastProgressBytes = current;
+                lastProgressAt = watch.Elapsed;
+            }
+            else if (watch.Elapsed - lastProgressAt >
+                     TimeSpan.FromSeconds(45))
+            {
+                _log(
+                    "Install !",
+                    $"{fileName} · aucune progression multi-curl depuis 45 s ; " +
+                    "bascule vers une connexion unique.");
+
+                multiCts.Cancel();
+                try { await Task.WhenAll(tasks); } catch { }
+
+                throw new TimeoutException(
+                    "Multi-curl sans progression depuis 45 secondes.");
+            }
 
             var now = watch.Elapsed;
             var seconds =
@@ -1323,7 +1367,53 @@ public sealed class PortableInstaller
         var stderrTask =
             process.StandardError.ReadToEndAsync();
 
-        await process.WaitForExitAsync(ct);
+        var inactivity = Stopwatch.StartNew();
+        long lastPartLength =
+            File.Exists(partPath)
+                ? new FileInfo(partPath).Length
+                : 0L;
+
+        while (!process.HasExited)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            long currentPartLength = lastPartLength;
+            try
+            {
+                if (File.Exists(partPath))
+                    currentPartLength =
+                        new FileInfo(partPath).Length;
+            }
+            catch { }
+
+            if (currentPartLength > lastPartLength)
+            {
+                lastPartLength = currentPartLength;
+                inactivity.Restart();
+            }
+            else if (inactivity.Elapsed >
+                     TimeSpan.FromSeconds(45))
+            {
+                try
+                {
+                    if (!process.HasExited)
+                        process.Kill(entireProcessTree: true);
+                }
+                catch { }
+
+                try
+                {
+                    await process.WaitForExitAsync(
+                        CancellationToken.None);
+                }
+                catch { }
+
+                throw new TimeoutException(
+                    $"curl {start}-{end} sans progression depuis 45 secondes.");
+            }
+
+            await Task.Delay(500, ct);
+        }
 
         var stdout = await stdoutTask;
         var stderr = await stderrTask;

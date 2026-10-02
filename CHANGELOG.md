@@ -1,4 +1,13 @@
 ﻿# Changelog — DreamRaster
+## 35.0.2 — Final validation and installer hardening
+
+- Validated a complete Wan 2.1 T2V generation on the RTX 4060 Ti using the portable ComfyUI stack: 512×320, 9 frames, 8 FPS, 4 steps, H.264 MP4 output.
+- Confirmed the generated validation video contains 9 frames at 8 FPS, 512×320, with a 1.125 s duration.
+- Hardened Windows multi-curl downloads: stalled or faulted segments are cancelled and automatically fall back to the existing single-connection curl path.
+- Added a 45-second no-progress watchdog to individual curl range downloads so a dead CDN segment cannot hang the installer indefinitely.
+- Updated GitHub Actions to Node 24-compatible actions/checkout@v7 and actions/setup-dotnet@v6.
+- Revalidated the integrated 1.7B/4B benchmark output: 8 PNG images plus JSON/CSV timing reports are produced successfully.
+
 ## 35.0.1 — FLUX memory stability and benchmark hardening
 
 - Split FLUX.2 generation into a sampling phase and a lightweight VAE decode phase so the large Qwen/FLUX models can be released before image decoding.
