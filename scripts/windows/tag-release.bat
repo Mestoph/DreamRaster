@@ -7,7 +7,7 @@ cd /d "%ROOT%"
 REM FR: Cree le tag de la version courante et declenche GitHub Actions.
 REM EN: Creates the current release tag and triggers GitHub Actions.
 
-set "TAG=v37.0.0"
+set "TAG=v38.0.0"
 
 git status --short
 echo.

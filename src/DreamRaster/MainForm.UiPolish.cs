@@ -2,10 +2,10 @@
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
-FR : Finition visuelle v37 : lisibilité du thème sombre, informations du tableau
-     de bord, alignement Image/Vidéo, configuration avancée et onglets techniques.
-EN: v37 UI polish: dark-theme readability, dashboard information, aligned
-    Image/Video controls, persistent advanced configuration and technical tabs.
+FR : Interface v38 : alignements Image/Vidéo, cadres visuels cohérents,
+     configuration regroupée par catégories et interfaces techniques optionnelles.
+EN: v38 UI: aligned Image/Video workspaces, consistent visual frames,
+    categorized settings and optional technical interfaces.
 */
 
 using System.Runtime.InteropServices;
@@ -19,35 +19,13 @@ public partial class MainForm
     private bool _syncingAdvancedConfiguration;
     private bool _transientOpenCodeTabPolish;
     private bool _transientComfyTabPolish;
+    private bool _v38VisualHandlersInstalled;
 
     private Label _dashboardRuntimeInfoPolish = null!;
     private Label _dashboardModelsInfoPolish = null!;
 
     private Panel _configurationAdvancedPanelPolish = null!;
-    private NumericUpDown _cfgImageWidthPolish = null!;
-    private NumericUpDown _cfgImageHeightPolish = null!;
-    private NumericUpDown _cfgImageStepsPolish = null!;
-    private NumericUpDown _cfgImageCfgPolish = null!;
-    private NumericUpDown _cfgImageSharpnessPolish = null!;
-    private ComboBox _cfgPromptModelPolish = null!;
-    private NumericUpDown _cfgImageSeedPolish = null!;
-    private CheckBox _cfgImageRandomSeedPolish = null!;
-    private CheckBox _cfgImageAutoImprovePolish = null!;
 
-    private TextBox _cfgVideoI2vModelPolish = null!;
-    private NumericUpDown _cfgVideoWidthPolish = null!;
-    private NumericUpDown _cfgVideoHeightPolish = null!;
-    private NumericUpDown _cfgVideoFramesPolish = null!;
-    private NumericUpDown _cfgVideoFpsPolish = null!;
-    private NumericUpDown _cfgVideoStepsPolish = null!;
-    private NumericUpDown _cfgVideoCfgPolish = null!;
-    private NumericUpDown _cfgVideoShiftPolish = null!;
-    private NumericUpDown _cfgVideoSharpnessPolish = null!;
-    private ComboBox _cfgVideoSamplerPolish = null!;
-    private ComboBox _cfgVideoSchedulerPolish = null!;
-    private NumericUpDown _cfgVideoSeedPolish = null!;
-    private CheckBox _cfgVideoRandomSeedPolish = null!;
-    private CheckBox _cfgVideoAutoImprovePolish = null!;
 
     private CheckBox _cfgShowOpenCodeTabPolish = null!;
     private CheckBox _cfgShowComfyTabPolish = null!;
@@ -62,6 +40,7 @@ public partial class MainForm
         InitializeUiPolishV37();
     }
 
+    // Legacy method name kept for regression-test compatibility; this initializes v38 UI.
     private void InitializeUiPolishV37()
     {
         if (_uiPolishInitialized)
@@ -72,6 +51,7 @@ public partial class MainForm
         RestoreFeatureEditorEnabledStatesPolish();
         InitializeDashboardInfoPolish();
         InitializeAdvancedConfigurationPolish();
+        ConfigureV38VisualPolish();
         ApplyTechnicalTabVisibilityPolish();
         ConfigureComfyDarkModePolish();
 
@@ -100,13 +80,33 @@ public partial class MainForm
             if (_tabs.SelectedTab != tabOpenCode &&
                 _tabs.SelectedTab != tabComfy)
             {
-                BeginInvoke(new Action(RemoveTransientTechnicalTabsPolish));
+                if (IsHandleCreated)
+                {
+                    BeginInvoke(
+                        new Action(RemoveTransientTechnicalTabsPolish));
+                }
+                else
+                {
+                    // Unit tests can change tabs before the native window
+                    // handle exists. In that case we are already on the UI
+                    // thread, so no marshaling is required.
+                    RemoveTransientTechnicalTabsPolish();
+                }
             }
 
+            tabGenerate.Invalidate();
+            _tabVideo.Invalidate();
+            tabConfiguration.Invalidate();
             BeginInvokePolishLayout();
         };
 
-        Shown += (_, _) => BeginInvokePolishLayout();
+        Shown += (_, _) =>
+        {
+            BeginInvokePolishLayout();
+            tabGenerate.Invalidate();
+            _tabVideo.Invalidate();
+            tabConfiguration.Invalidate();
+        };
 
         btnSettingsSave.Click += (_, _) =>
         {
@@ -129,10 +129,17 @@ public partial class MainForm
 
     private static void EnableControlTreePolish(Control root)
     {
-        root.Enabled = true;
-
         foreach (Control child in root.Controls)
+        {
+            child.Enabled = true;
+
+            // NumericUpDown, TextBox, ComboBox, buttons, etc. may own internal
+            // WinForms children. Never mutate those implementation details.
+            if (IsGpuWorkspaceInteractiveControl(child))
+                continue;
+
             EnableControlTreePolish(child);
+        }
     }
 
     private void RestoreFeatureEditorEnabledStatesPolish()
@@ -306,6 +313,47 @@ public partial class MainForm
         Apply();
     }
 
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+    private struct MemoryStatusExPolish
+    {
+        public uint Length;
+        public uint MemoryLoad;
+        public ulong TotalPhysical;
+        public ulong AvailablePhysical;
+        public ulong TotalPageFile;
+        public ulong AvailablePageFile;
+        public ulong TotalVirtual;
+        public ulong AvailableVirtual;
+        public ulong AvailableExtendedVirtual;
+    }
+
+    [DllImport(
+        "kernel32.dll",
+        EntryPoint = "GlobalMemoryStatusEx",
+        CharSet = CharSet.Auto,
+        SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GlobalMemoryStatusExPolish(
+        ref MemoryStatusExPolish buffer);
+
+    private static string FormatBytesPolish(long bytes)
+    {
+        if (bytes <= 0)
+            return "0 B";
+
+        var value = (double)bytes;
+        var units = new[] { "B", "KB", "MB", "GB", "TB" };
+        var index = 0;
+
+        while (value >= 1024D && index < units.Length - 1)
+        {
+            value /= 1024D;
+            index++;
+        }
+
+        return $"{value:0.#} {units[index]}";
+    }
+
     private static Label CreateDashboardCardPolish(string name)
         => new()
         {
@@ -344,23 +392,78 @@ public partial class MainForm
             return;
         }
 
-        var architecture = RuntimeInformation.ProcessArchitecture;
+        var os = RuntimeInformation.OSDescription.Trim();
+        var architecture = RuntimeInformation.OSArchitecture;
+        var cpu =
+            Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER")
+            ?? L10n.Pick(_s.Language, "CPU non identifié", "Unknown CPU");
+
+        var totalRam = 0UL;
+        var availableRam = 0UL;
+        var memory = new MemoryStatusExPolish
+        {
+            Length = (uint)Marshal.SizeOf<MemoryStatusExPolish>()
+        };
+
+        if (GlobalMemoryStatusExPolish(ref memory))
+        {
+            totalRam = memory.TotalPhysical;
+            availableRam = memory.AvailablePhysical;
+        }
+
+        var ramText = totalRam > 0
+            ? L10n.Pick(
+                _s.Language,
+                $"RAM {FormatBytesPolish((long)availableRam)} libre / {FormatBytesPolish((long)totalRam)}",
+                $"RAM {FormatBytesPolish((long)availableRam)} free / {FormatBytesPolish((long)totalRam)}")
+            : L10n.Pick(
+                _s.Language,
+                "RAM : information indisponible",
+                "RAM: information unavailable");
 
         _dashboardRuntimeInfoPolish.Text =
             L10n.Pick(
                 _s.Language,
-                $"Runtime · DreamRaster {Application.ProductVersion} · .NET {Environment.Version} · {architecture} · " +
-                $"Ports : OpenCode {_s.OpenCodePort} · Ollama {_s.OllamaPort} · ComfyUI {_s.ComfyPort} · API {_s.GenerationApiPort}",
-                $"Runtime · DreamRaster {Application.ProductVersion} · .NET {Environment.Version} · {architecture} · " +
-                $"Ports: OpenCode {_s.OpenCodePort} · Ollama {_s.OllamaPort} · ComfyUI {_s.ComfyPort} · API {_s.GenerationApiPort}");
+                $"Machine · {Environment.MachineName} · {os} · {architecture} · {Environment.ProcessorCount} processeurs logiques · {ramText}",
+                $"Machine · {Environment.MachineName} · {os} · {architecture} · {Environment.ProcessorCount} logical processors · {ramText}");
 
-        _dashboardModelsInfoPolish.Text =
+        var storageText =
             L10n.Pick(
                 _s.Language,
-                $"Image · {Path.GetFileName(_s.FluxModel)} · {_s.DefaultWidth}×{_s.DefaultHeight} · {_s.DefaultSteps} steps · CFG {_s.ImageCfg:0.##}   |   " +
-                $"Vidéo · {Path.GetFileName(_s.VideoModel)} · {_s.VideoWidth}×{_s.VideoHeight} · {_s.VideoFrames} frames @ {_s.VideoFps} FPS",
-                $"Image · {Path.GetFileName(_s.FluxModel)} · {_s.DefaultWidth}×{_s.DefaultHeight} · {_s.DefaultSteps} steps · CFG {_s.ImageCfg:0.##}   |   " +
-                $"Video · {Path.GetFileName(_s.VideoModel)} · {_s.VideoWidth}×{_s.VideoHeight} · {_s.VideoFrames} frames @ {_s.VideoFps} FPS");
+                "Stockage · information indisponible",
+                "Storage · information unavailable");
+
+        try
+        {
+            var root =
+                Path.GetPathRoot(PortablePaths.Root)
+                ?? Path.GetPathRoot(AppContext.BaseDirectory);
+
+            if (!string.IsNullOrWhiteSpace(root))
+            {
+                var drive = new DriveInfo(root);
+                if (drive.IsReady)
+                {
+                    storageText =
+                        L10n.Pick(
+                            _s.Language,
+                            $"Stockage · {drive.Name} · {FormatBytesPolish(drive.AvailableFreeSpace)} libres / {FormatBytesPolish(drive.TotalSize)} · DreamRaster : {PortablePaths.Root}",
+                            $"Storage · {drive.Name} · {FormatBytesPolish(drive.AvailableFreeSpace)} free / {FormatBytesPolish(drive.TotalSize)} · DreamRaster: {PortablePaths.Root}");
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        _dashboardModelsInfoPolish.Text = storageText;
+
+        _generationTemplateTips.SetToolTip(
+            _dashboardRuntimeInfoPolish,
+            _dashboardRuntimeInfoPolish.Text + Environment.NewLine + cpu);
+        _generationTemplateTips.SetToolTip(
+            _dashboardModelsInfoPolish,
+            _dashboardModelsInfoPolish.Text);
     }
 
     private static Label CreateAdvancedLabelPolish(
@@ -428,82 +531,10 @@ public partial class MainForm
             Name = "configurationAdvancedPanel",
             BackColor = AppTheme.Background,
             ForeColor = AppTheme.Text,
-            BorderStyle = BorderStyle.FixedSingle,
-            AutoScroll = true,
+            BorderStyle = BorderStyle.None,
+            AutoScroll = false,
             TabStop = false
         };
-
-        _cfgImageWidthPolish =
-            CreateNumericMirrorPolish("cfgImageWidthPolish", numDefaultWidth);
-        _cfgImageHeightPolish =
-            CreateNumericMirrorPolish("cfgImageHeightPolish", numDefaultHeight);
-        _cfgImageStepsPolish =
-            CreateNumericMirrorPolish("cfgImageStepsPolish", numDefaultSteps);
-        _cfgImageCfgPolish =
-            CreateNumericMirrorPolish("cfgImageCfgPolish", _imageCfg);
-        _cfgImageSharpnessPolish =
-            CreateNumericMirrorPolish(
-                "cfgImageSharpnessPolish",
-                _imageMaxQualitySharpness);
-        _cfgImageSeedPolish =
-            CreateNumericMirrorPolish("cfgImageSeedPolish", _seedInput);
-        _cfgImageRandomSeedPolish =
-            CreateCheckMirrorPolish(
-                "cfgImageRandomSeedPolish",
-                "Seed aléatoire");
-        _cfgImageAutoImprovePolish =
-            CreateCheckMirrorPolish(
-                "cfgImageAutoImprovePolish",
-                "Amélioration auto");
-
-        _cfgPromptModelPolish =
-            CreateComboMirrorPolish(
-                "cfgPromptModelPolish",
-                ComboBoxStyle.DropDown);
-
-        _cfgVideoI2vModelPolish = new TextBox
-        {
-            Name = "cfgVideoI2vModelPolish",
-            BackColor = AppTheme.Input,
-            ForeColor = AppTheme.Text,
-            BorderStyle = BorderStyle.FixedSingle
-        };
-
-        _cfgVideoWidthPolish =
-            CreateNumericMirrorPolish("cfgVideoWidthPolish", _videoWidth);
-        _cfgVideoHeightPolish =
-            CreateNumericMirrorPolish("cfgVideoHeightPolish", _videoHeight);
-        _cfgVideoFramesPolish =
-            CreateNumericMirrorPolish("cfgVideoFramesPolish", _videoFrames);
-        _cfgVideoFpsPolish =
-            CreateNumericMirrorPolish("cfgVideoFpsPolish", _videoFps);
-        _cfgVideoStepsPolish =
-            CreateNumericMirrorPolish("cfgVideoStepsPolish", _videoSteps);
-        _cfgVideoCfgPolish =
-            CreateNumericMirrorPolish("cfgVideoCfgPolish", _videoCfg);
-        _cfgVideoShiftPolish =
-            CreateNumericMirrorPolish(
-                "cfgVideoShiftPolish",
-                _videoSamplingShift);
-        _cfgVideoSharpnessPolish =
-            CreateNumericMirrorPolish(
-                "cfgVideoSharpnessPolish",
-                _videoMaxQualitySharpness);
-        _cfgVideoSeedPolish =
-            CreateNumericMirrorPolish("cfgVideoSeedPolish", _videoSeed);
-        _cfgVideoRandomSeedPolish =
-            CreateCheckMirrorPolish(
-                "cfgVideoRandomSeedPolish",
-                "Seed aléatoire");
-        _cfgVideoAutoImprovePolish =
-            CreateCheckMirrorPolish(
-                "cfgVideoAutoImprovePolish",
-                "Amélioration auto");
-
-        _cfgVideoSamplerPolish =
-            CreateComboMirrorPolish("cfgVideoSamplerPolish");
-        _cfgVideoSchedulerPolish =
-            CreateComboMirrorPolish("cfgVideoSchedulerPolish");
 
         _cfgShowOpenCodeTabPolish =
             CreateCheckMirrorPolish(
@@ -514,104 +545,8 @@ public partial class MainForm
                 "cfgShowComfyTabPolish",
                 "Afficher l'onglet ComfyUI");
 
-        var controls = new Control[]
-        {
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedIntroPolish",
-                string.Empty),
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedImageTitlePolish",
-                "Image · génération",
-                section: true),
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedImageWidthLabelPolish",
-                "Largeur"),
-            _cfgImageWidthPolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedImageHeightLabelPolish",
-                "Hauteur"),
-            _cfgImageHeightPolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedImageStepsLabelPolish",
-                "Steps"),
-            _cfgImageStepsPolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedImageCfgLabelPolish",
-                "CFG"),
-            _cfgImageCfgPolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedPromptModelLabelPolish",
-                "Modèle prompt"),
-            _cfgPromptModelPolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedImageSeedLabelPolish",
-                "Seed"),
-            _cfgImageSeedPolish,
-            _cfgImageRandomSeedPolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedImageSharpnessLabelPolish",
-                "Netteté max (%)"),
-            _cfgImageSharpnessPolish,
-            _cfgImageAutoImprovePolish,
-
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedVideoTitlePolish",
-                "Vidéo · génération",
-                section: true),
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedVideoI2vLabelPolish",
-                "Modèle Wan I2V"),
-            _cfgVideoI2vModelPolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedVideoWidthLabelPolish",
-                "Largeur"),
-            _cfgVideoWidthPolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedVideoHeightLabelPolish",
-                "Hauteur"),
-            _cfgVideoHeightPolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedVideoFramesLabelPolish",
-                "Frames"),
-            _cfgVideoFramesPolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedVideoFpsLabelPolish",
-                "FPS"),
-            _cfgVideoFpsPolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedVideoStepsLabelPolish",
-                "Steps"),
-            _cfgVideoStepsPolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedVideoCfgLabelPolish",
-                "CFG"),
-            _cfgVideoCfgPolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedVideoShiftLabelPolish",
-                "Shift"),
-            _cfgVideoShiftPolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedVideoSamplerLabelPolish",
-                "Sampler"),
-            _cfgVideoSamplerPolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedVideoSchedulerLabelPolish",
-                "Scheduler"),
-            _cfgVideoSchedulerPolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedVideoSeedLabelPolish",
-                "Seed"),
-            _cfgVideoSeedPolish,
-            _cfgVideoRandomSeedPolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedVideoSharpnessLabelPolish",
-                "Netteté max (%)"),
-            _cfgVideoSharpnessPolish,
-            _cfgVideoAutoImprovePolish,
-            CreateAdvancedLabelPolish(
-                "cfgAdvancedContextNotePolish",
-                string.Empty),
-
+        _configurationAdvancedPanelPolish.Controls.AddRange(
+        [
             CreateAdvancedLabelPolish(
                 "cfgAdvancedInterfaceTitlePolish",
                 "Interfaces techniques",
@@ -621,220 +556,35 @@ public partial class MainForm
             CreateAdvancedLabelPolish(
                 "cfgAdvancedInterfaceNotePolish",
                 string.Empty)
+        ]);
+
+        _configurationAdvancedPanelPolish.Paint += (_, e) =>
+        {
+            var rect = _configurationAdvancedPanelPolish.ClientRectangle;
+            if (rect.Width <= 2 || rect.Height <= 2)
+                return;
+
+            using var pen = new Pen(AppTheme.Border);
+            e.Graphics.DrawRectangle(
+                pen,
+                0,
+                0,
+                rect.Width - 1,
+                rect.Height - 1);
         };
 
-        _configurationAdvancedPanelPolish.Controls.AddRange(controls);
-        tabConfiguration.Controls.Add(_configurationAdvancedPanelPolish);
+        tabConfiguration.Controls.Add(
+            _configurationAdvancedPanelPolish);
 
-        // The former hint occupied the same lower area. Its content is now
-        // retained in the richer introduction inside the scrollable panel.
         lblConfigHint.Visible = false;
-
-        WireNumericMirrorPolish(
-            _cfgImageWidthPolish,
-            numDefaultWidth);
-        WireNumericMirrorPolish(
-            _cfgImageHeightPolish,
-            numDefaultHeight);
-        WireNumericMirrorPolish(
-            _cfgImageStepsPolish,
-            numDefaultSteps);
-        WireNumericMirrorPolish(
-            _cfgImageCfgPolish,
-            _imageCfg);
-        WireNumericMirrorPolish(
-            _cfgImageSharpnessPolish,
-            _imageMaxQualitySharpness);
-        WireNumericMirrorPolish(
-            _cfgImageSeedPolish,
-            _seedInput);
-        WireCheckMirrorPolish(
-            _cfgImageRandomSeedPolish,
-            _randomSeedCheck);
-
-        WireNumericMirrorPolish(
-            _cfgVideoWidthPolish,
-            _videoWidth);
-        WireNumericMirrorPolish(
-            _cfgVideoHeightPolish,
-            _videoHeight);
-        WireNumericMirrorPolish(
-            _cfgVideoFramesPolish,
-            _videoFrames);
-        WireNumericMirrorPolish(
-            _cfgVideoFpsPolish,
-            _videoFps);
-        WireNumericMirrorPolish(
-            _cfgVideoStepsPolish,
-            _videoSteps);
-        WireNumericMirrorPolish(
-            _cfgVideoCfgPolish,
-            _videoCfg);
-        WireNumericMirrorPolish(
-            _cfgVideoShiftPolish,
-            _videoSamplingShift);
-        WireNumericMirrorPolish(
-            _cfgVideoSharpnessPolish,
-            _videoMaxQualitySharpness);
-        WireNumericMirrorPolish(
-            _cfgVideoSeedPolish,
-            _videoSeed);
-        WireCheckMirrorPolish(
-            _cfgVideoRandomSeedPolish,
-            _videoRandomSeed);
-
-        _cfgImageAutoImprovePolish.CheckedChanged += (_, _) =>
-        {
-            if (_syncingAdvancedConfiguration)
-                return;
-
-            _autoImprovePrompt.Checked =
-                _cfgImageAutoImprovePolish.Checked;
-            _s.AutoImprovePrompt =
-                _cfgImageAutoImprovePolish.Checked;
-            SettingsStore.Save(_s);
-        };
-
-        _autoImprovePrompt.CheckedChanged += (_, _) =>
-        {
-            if (!_syncingAdvancedConfiguration)
-            {
-                _s.AutoImprovePrompt = _autoImprovePrompt.Checked;
-                SettingsStore.Save(_s);
-            }
-
-            RefreshAdvancedConfigurationPolish();
-        };
-
-        _seedInput.ValueChanged += (_, _) =>
-        {
-            if (_syncingAdvancedConfiguration)
-                return;
-
-            _s.GenerationSeed = Decimal.ToInt64(_seedInput.Value);
-            SettingsStore.Save(_s);
-            RefreshAdvancedConfigurationPolish();
-        };
-
-        _randomSeedCheck.CheckedChanged += (_, _) =>
-        {
-            if (_syncingAdvancedConfiguration)
-                return;
-
-            _s.UseRandomSeed = _randomSeedCheck.Checked;
-            SettingsStore.Save(_s);
-            RefreshAdvancedConfigurationPolish();
-        };
-
-        _cfgVideoAutoImprovePolish.CheckedChanged += (_, _) =>
-        {
-            if (_syncingAdvancedConfiguration)
-                return;
-
-            _videoAutoImprovePrompt.Checked =
-                _cfgVideoAutoImprovePolish.Checked;
-            _s.VideoAutoImprovePrompt =
-                _cfgVideoAutoImprovePolish.Checked;
-            SettingsStore.Save(_s);
-        };
-
-        _videoAutoImprovePrompt.CheckedChanged += (_, _) =>
-        {
-            if (!_syncingAdvancedConfiguration)
-            {
-                _s.VideoAutoImprovePrompt = _videoAutoImprovePrompt.Checked;
-                SettingsStore.Save(_s);
-            }
-
-            RefreshAdvancedConfigurationPolish();
-        };
-
-        _cfgPromptModelPolish.Validated += (_, _) =>
-        {
-            if (_syncingAdvancedConfiguration)
-                return;
-
-            var model = _cfgPromptModelPolish.Text.Trim();
-            if (string.IsNullOrWhiteSpace(model))
-                return;
-
-            _promptModelCombo.Text = model;
-            _s.PromptModel = model;
-            SettingsStore.Save(_s);
-            RefreshDashboardInfoPolish();
-        };
-
-        _promptModelCombo.TextChanged += (_, _) =>
-        {
-            if (!_syncingAdvancedConfiguration &&
-                !string.IsNullOrWhiteSpace(_promptModelCombo.Text))
-            {
-                _s.PromptModel = _promptModelCombo.Text.Trim();
-                SettingsStore.Save(_s);
-            }
-
-            RefreshAdvancedConfigurationPolish();
-        };
-
-        _cfgVideoI2vModelPolish.Validated += (_, _) =>
-        {
-            if (_syncingAdvancedConfiguration)
-                return;
-
-            try
-            {
-                var model = _cfgVideoI2vModelPolish.Text.Trim();
-                ValidateModelFileName(model, "Modèle Wan I2V");
-                _s.VideoI2vModel = model;
-                SettingsStore.Save(_s);
-            }
-            catch (Exception ex)
-            {
-                _cfgVideoI2vModelPolish.Text = _s.VideoI2vModel;
-                MessageBox.Show(
-                    this,
-                    ex.Message,
-                    L10n.Pick(
-                        _s.Language,
-                        "Configuration vidéo",
-                        "Video configuration"),
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
-            }
-        };
-
-        _cfgVideoSamplerPolish.SelectedIndexChanged += (_, _) =>
-        {
-            if (_syncingAdvancedConfiguration)
-                return;
-
-            SelectComboText(
-                _videoSampler,
-                _cfgVideoSamplerPolish.Text);
-        };
-
-        _videoSampler.SelectedIndexChanged += (_, _) =>
-            RefreshAdvancedConfigurationPolish();
-
-        _cfgVideoSchedulerPolish.SelectedIndexChanged += (_, _) =>
-        {
-            if (_syncingAdvancedConfiguration)
-                return;
-
-            SelectComboText(
-                _videoScheduler,
-                _cfgVideoSchedulerPolish.Text);
-        };
-
-        _videoScheduler.SelectedIndexChanged += (_, _) =>
-            RefreshAdvancedConfigurationPolish();
 
         _cfgShowOpenCodeTabPolish.CheckedChanged += (_, _) =>
         {
             if (_syncingAdvancedConfiguration)
                 return;
 
-            _s.ShowOpenCodeTab = _cfgShowOpenCodeTabPolish.Checked;
+            _s.ShowOpenCodeTab =
+                _cfgShowOpenCodeTabPolish.Checked;
             SettingsStore.Save(_s);
             ApplyTechnicalTabVisibilityPolish();
         };
@@ -844,12 +594,56 @@ public partial class MainForm
             if (_syncingAdvancedConfiguration)
                 return;
 
-            _s.ShowComfyUiTab = _cfgShowComfyTabPolish.Checked;
+            _s.ShowComfyUiTab =
+                _cfgShowComfyTabPolish.Checked;
             SettingsStore.Save(_s);
             ApplyTechnicalTabVisibilityPolish();
         };
 
         _configurationAdvancedPanelPolish.BringToFront();
+
+        WireCompleteGenerationPersistencePolish();
+    }
+
+    private void WireCompleteGenerationPersistencePolish()
+    {
+        void SaveImageExtras()
+        {
+            if (_loadingSettingsExperience)
+                return;
+
+            _s.NegativePrompt =
+                _negativePrompt.Text.Trim();
+            _s.AutoImprovePrompt =
+                _autoImprovePrompt.Checked;
+
+            var promptModel =
+                _promptModelCombo.Text.Trim();
+            if (!string.IsNullOrWhiteSpace(promptModel))
+                _s.PromptModel = promptModel;
+
+            _s.GenerationSeed =
+                Decimal.ToInt64(_seedInput.Value);
+            _s.UseRandomSeed =
+                _randomSeedCheck.Checked;
+
+            SettingsStore.Save(_s);
+        }
+
+        _negativePrompt.TextChanged += (_, _) =>
+            SaveImageExtras();
+        _autoImprovePrompt.CheckedChanged += (_, _) =>
+            SaveImageExtras();
+        _promptModelCombo.TextChanged += (_, _) =>
+            SaveImageExtras();
+        _seedInput.ValueChanged += (_, _) =>
+            SaveImageExtras();
+        _randomSeedCheck.CheckedChanged += (_, _) =>
+        {
+            _seedInput.Enabled =
+                !_randomSeedCheck.Checked;
+            SaveImageExtras();
+        };
     }
 
     private void WireNumericMirrorPolish(
@@ -940,105 +734,6 @@ public partial class MainForm
         _syncingAdvancedConfiguration = true;
         try
         {
-            _cfgImageWidthPolish.Value =
-                Math.Clamp(
-                    numDefaultWidth.Value,
-                    _cfgImageWidthPolish.Minimum,
-                    _cfgImageWidthPolish.Maximum);
-            _cfgImageHeightPolish.Value =
-                Math.Clamp(
-                    numDefaultHeight.Value,
-                    _cfgImageHeightPolish.Minimum,
-                    _cfgImageHeightPolish.Maximum);
-            _cfgImageStepsPolish.Value =
-                Math.Clamp(
-                    numDefaultSteps.Value,
-                    _cfgImageStepsPolish.Minimum,
-                    _cfgImageStepsPolish.Maximum);
-            _cfgImageCfgPolish.Value =
-                Math.Clamp(
-                    _imageCfg.Value,
-                    _cfgImageCfgPolish.Minimum,
-                    _cfgImageCfgPolish.Maximum);
-            _cfgImageSharpnessPolish.Value =
-                Math.Clamp(
-                    _imageMaxQualitySharpness.Value,
-                    _cfgImageSharpnessPolish.Minimum,
-                    _cfgImageSharpnessPolish.Maximum);
-            _cfgImageSeedPolish.Value =
-                Math.Clamp(
-                    _seedInput.Value,
-                    _cfgImageSeedPolish.Minimum,
-                    _cfgImageSeedPolish.Maximum);
-            _cfgImageRandomSeedPolish.Checked =
-                _randomSeedCheck.Checked;
-            _cfgImageAutoImprovePolish.Checked =
-                _autoImprovePrompt.Checked;
-
-            CopyComboItemsPolish(
-                _promptModelCombo,
-                _cfgPromptModelPolish);
-
-            _cfgVideoI2vModelPolish.Text =
-                _s.VideoI2vModel;
-
-            _cfgVideoWidthPolish.Value =
-                Math.Clamp(
-                    _videoWidth.Value,
-                    _cfgVideoWidthPolish.Minimum,
-                    _cfgVideoWidthPolish.Maximum);
-            _cfgVideoHeightPolish.Value =
-                Math.Clamp(
-                    _videoHeight.Value,
-                    _cfgVideoHeightPolish.Minimum,
-                    _cfgVideoHeightPolish.Maximum);
-            _cfgVideoFramesPolish.Value =
-                Math.Clamp(
-                    _videoFrames.Value,
-                    _cfgVideoFramesPolish.Minimum,
-                    _cfgVideoFramesPolish.Maximum);
-            _cfgVideoFpsPolish.Value =
-                Math.Clamp(
-                    _videoFps.Value,
-                    _cfgVideoFpsPolish.Minimum,
-                    _cfgVideoFpsPolish.Maximum);
-            _cfgVideoStepsPolish.Value =
-                Math.Clamp(
-                    _videoSteps.Value,
-                    _cfgVideoStepsPolish.Minimum,
-                    _cfgVideoStepsPolish.Maximum);
-            _cfgVideoCfgPolish.Value =
-                Math.Clamp(
-                    _videoCfg.Value,
-                    _cfgVideoCfgPolish.Minimum,
-                    _cfgVideoCfgPolish.Maximum);
-            _cfgVideoShiftPolish.Value =
-                Math.Clamp(
-                    _videoSamplingShift.Value,
-                    _cfgVideoShiftPolish.Minimum,
-                    _cfgVideoShiftPolish.Maximum);
-            _cfgVideoSharpnessPolish.Value =
-                Math.Clamp(
-                    _videoMaxQualitySharpness.Value,
-                    _cfgVideoSharpnessPolish.Minimum,
-                    _cfgVideoSharpnessPolish.Maximum);
-            _cfgVideoSeedPolish.Value =
-                Math.Clamp(
-                    _videoSeed.Value,
-                    _cfgVideoSeedPolish.Minimum,
-                    _cfgVideoSeedPolish.Maximum);
-            _cfgVideoRandomSeedPolish.Checked =
-                _videoRandomSeed.Checked;
-            _cfgVideoAutoImprovePolish.Checked =
-                _videoAutoImprovePrompt.Checked;
-
-            CopyComboItemsPolish(
-                _videoSampler,
-                _cfgVideoSamplerPolish);
-            CopyComboItemsPolish(
-                _videoScheduler,
-                _cfgVideoSchedulerPolish);
-
             _cfgShowOpenCodeTabPolish.Checked =
                 _s.ShowOpenCodeTab;
             _cfgShowComfyTabPolish.Checked =
@@ -1074,46 +769,6 @@ public partial class MainForm
             return;
 
         ((Label)AdvancedControlPolish(
-            "cfgAdvancedIntroPolish")).Text =
-            english
-                ? "Persistent generation defaults added in v37. Styles, negative templates and LoRA choices remain directly in the Image/Video tabs."
-                : "Réglages de génération persistants ajoutés en v37. Les styles, négatifs et LoRA restent directement dans les onglets Image/Vidéo.";
-
-        ((Label)AdvancedControlPolish(
-            "cfgAdvancedImageTitlePolish")).Text =
-            english ? "Image · generation" : "Image · génération";
-        ((Label)AdvancedControlPolish(
-            "cfgAdvancedPromptModelLabelPolish")).Text =
-            english ? "Prompt model" : "Modèle prompt";
-        ((Label)AdvancedControlPolish(
-            "cfgAdvancedImageSharpnessLabelPolish")).Text =
-            english ? "Max sharpness (%)" : "Netteté max (%)";
-        _cfgImageRandomSeedPolish.Text =
-            english ? "Random seed" : "Seed aléatoire";
-        _cfgImageAutoImprovePolish.Text =
-            english ? "Auto enhancement" : "Amélioration auto";
-
-        ((Label)AdvancedControlPolish(
-            "cfgAdvancedVideoTitlePolish")).Text =
-            english ? "Video · generation" : "Vidéo · génération";
-        ((Label)AdvancedControlPolish(
-            "cfgAdvancedVideoI2vLabelPolish")).Text =
-            english ? "Wan I2V model" : "Modèle Wan I2V";
-        ((Label)AdvancedControlPolish(
-            "cfgAdvancedVideoSharpnessLabelPolish")).Text =
-            english ? "Max sharpness (%)" : "Netteté max (%)";
-        _cfgVideoRandomSeedPolish.Text =
-            english ? "Random seed" : "Seed aléatoire";
-        _cfgVideoAutoImprovePolish.Text =
-            english ? "Auto enhancement" : "Amélioration auto";
-
-        ((Label)AdvancedControlPolish(
-            "cfgAdvancedContextNotePolish")).Text =
-            english
-                ? "Creative presets, negative templates, runtime model selection and LoRA choices stay contextual in Image/Video and are saved automatically."
-                : "Les presets créatifs, négatifs, modèles runtime et LoRA restent contextuels dans Image/Vidéo et sont enregistrés automatiquement.";
-
-        ((Label)AdvancedControlPolish(
             "cfgAdvancedInterfaceTitlePolish")).Text =
             english
                 ? "Advanced interfaces"
@@ -1128,11 +783,481 @@ public partial class MainForm
                 ? "Show ComfyUI tab"
                 : "Afficher l'onglet ComfyUI";
 
+        chkHardStopComfy.Text =
+            english
+                ? "Stop ComfyUI after generation"
+                : "Arrêter ComfyUI après génération";
+        chkAutoUpdates.Text =
+            english
+                ? "Automatic GitHub updates"
+                : "Mises à jour GitHub automatiques";
+        chkInstallVisionModel.Text =
+            english
+                ? "Install Qwen3-VL (optional)"
+                : "Installer Qwen3-VL (optionnel)";
+        _autoSaveConfigurationCheck.Text =
+            english
+                ? "Automatic save"
+                : "Sauvegarde automatique";
+
         ((Label)AdvancedControlPolish(
             "cfgAdvancedInterfaceNotePolish")).Text =
             english
-                ? "These tabs are not required for Image/Video generation. They stay hidden by default; Dashboard buttons can still open them temporarily for advanced use or diagnostics."
-                : "Ces onglets ne sont pas requis pour générer Image/Vidéo. Ils sont masqués par défaut ; les boutons du Tableau de bord peuvent toujours les ouvrir temporairement pour un usage avancé ou le diagnostic.";
+                ? "Image and Video settings are edited only in their own tabs and are saved automatically. OpenCode and ComfyUI are optional advanced/diagnostic interfaces."
+                : "Les paramètres Image et Vidéo sont modifiés uniquement dans leurs onglets et enregistrés automatiquement. OpenCode et ComfyUI sont des interfaces avancées/diagnostic optionnelles.";
+
+        tabGenerate.Invalidate();
+        _tabVideo.Invalidate();
+        tabConfiguration.Invalidate();
+    }
+
+    private void ConfigureV38VisualPolish()
+    {
+        if (_v38VisualHandlersInstalled)
+            return;
+
+        _v38VisualHandlersInstalled = true;
+
+        tabGenerate.Paint += (_, e) =>
+            DrawImageFramesV38(e.Graphics);
+        _tabVideo.Paint += (_, e) =>
+            DrawVideoFramesV38(e.Graphics);
+        tabConfiguration.Paint += (_, e) =>
+            DrawConfigurationFramesV38(e.Graphics);
+
+        foreach (var numeric in new NumericUpDown[]
+                 {
+                     numDefaultWidth,
+                     numDefaultHeight,
+                     numDefaultSteps,
+                     _imageCfg,
+                     _seedInput,
+                     numImg2ImgStrength,
+                     _imageLoraStrength,
+                     _videoWidth,
+                     _videoHeight,
+                     _videoDurationSeconds,
+                     _videoFrames,
+                     _videoFps,
+                     _videoSteps,
+                     _videoCfg,
+                     _videoSamplingShift,
+                     _videoSeed,
+                     _videoLoraStrength,
+                     numOpenCodePort,
+                     numOllamaPort,
+                     numComfyPort,
+                     numProxyPort,
+                     numApiPort,
+                     numSafeVram,
+                     numSafeRam,
+                     numDownloadConnections,
+                     numDownloadBuffer
+                 })
+        {
+            numeric.BorderStyle = BorderStyle.FixedSingle;
+        }
+
+        foreach (var text in new TextBoxBase[]
+                 {
+                     _prompt,
+                     _negativePrompt,
+                     txtInputImage,
+                     _videoPrompt,
+                     _videoNegative,
+                     _videoReferenceImage,
+                     _videoOutput,
+                     txtConfigRoot,
+                     txtGitHubRepo,
+                     _cfgVideoModel,
+                     _cfgVideoTextEncoder,
+                     _cfgVideoVae,
+                     _cfgVideoClipVision
+                 })
+        {
+            text.BorderStyle = BorderStyle.FixedSingle;
+        }
+
+        foreach (var combo in new ComboBox[]
+                 {
+                     cmbGenerationMode,
+                     _promptModelCombo,
+                     _imageModelRuntimeCombo,
+                     _imageStyleTemplateCombo,
+                     _imageNegativeTemplateCombo,
+                     _imageLoraCombo,
+                     _videoModelRuntimeCombo,
+                     _videoQualityCombo,
+                     _videoStyleTemplateCombo,
+                     _videoNegativeTemplateCombo,
+                     _videoLoraCombo,
+                     _videoSampler,
+                     _videoScheduler,
+                     cmbLanguage,
+                     _visionModelCombo,
+                     _fluxModelCombo,
+                     _textEncoderCombo,
+                     _vaeCombo
+                 })
+        {
+            combo.FlatStyle = FlatStyle.Flat;
+        }
+
+        _configurationSaveStatus.AutoEllipsis = true;
+    }
+
+    private static Rectangle BoundsOfV38(
+        params Control[] controls)
+    {
+        var visible = controls
+            .Where(control =>
+                control is not null &&
+                control.Visible &&
+                control.Width > 0 &&
+                control.Height > 0)
+            .ToArray();
+
+        if (visible.Length == 0)
+            return Rectangle.Empty;
+
+        var rect = visible[0].Bounds;
+        foreach (var control in visible.Skip(1))
+            rect = Rectangle.Union(rect, control.Bounds);
+
+        return rect;
+    }
+
+    private static Rectangle InflateFrameV38(
+        Rectangle bounds,
+        int horizontal = 8,
+        int vertical = 7)
+    {
+        if (bounds.IsEmpty)
+            return bounds;
+
+        bounds.Inflate(horizontal, vertical);
+        return bounds;
+    }
+
+    private static void DrawFrameV38(
+        Graphics graphics,
+        Rectangle bounds)
+    {
+        if (bounds.IsEmpty ||
+            bounds.Width <= 2 ||
+            bounds.Height <= 2)
+        {
+            return;
+        }
+
+        using var pen = new Pen(AppTheme.Border);
+        graphics.DrawRectangle(
+            pen,
+            bounds.X,
+            bounds.Y,
+            bounds.Width - 1,
+            bounds.Height - 1);
+    }
+
+    private static void DrawTitledFrameV38(
+        Graphics graphics,
+        Rectangle bounds,
+        string title)
+    {
+        DrawFrameV38(graphics, bounds);
+
+        if (string.IsNullOrWhiteSpace(title))
+            return;
+
+        using var font = new Font(
+            "Segoe UI Semibold",
+            9F,
+            FontStyle.Bold);
+        using var brush = new SolidBrush(AppTheme.TextMuted);
+
+        graphics.DrawString(
+            title,
+            font,
+            brush,
+            bounds.X + 10,
+            bounds.Y + 6);
+    }
+
+    private void DrawImageFramesV38(Graphics graphics)
+    {
+        var leftFrame = InflateFrameV38(
+            BoundsOfV38(
+                lblPrompt,
+                _improvePromptButton,
+                _autoImprovePrompt,
+                _promptModelLabel,
+                _promptModelCombo,
+                _prompt,
+                _negativePromptLabel,
+                _negativePrompt,
+                lblGenerationMode,
+                cmbGenerationMode,
+                lblInputImage,
+                txtInputImage,
+                btnBrowseInputImage,
+                btnClearInputImage,
+                lblImg2ImgStrength,
+                numImg2ImgStrength,
+                _seedLabel,
+                _seedInput,
+                _randomSeedCheck,
+                _imageExtractPromptButton,
+                lblCfgWidth,
+                numDefaultWidth,
+                lblCfgHeight,
+                numDefaultHeight,
+                lblCfgSteps,
+                numDefaultSteps,
+                _imageCfgLabel,
+                _imageCfg,
+                btnGenerate,
+                _benchmarkButton,
+                _genText,
+                _genProgress));
+
+        var catalogFrame = InflateFrameV38(
+            BoundsOfV38(
+                _imageModelRuntimeLabel,
+                _imageModelRuntimeCombo,
+                _imageModelDownloadButton,
+                _imageImportModelButton,
+                _imageStyleTemplateLabel,
+                _imageStyleTemplateCombo,
+                _imageNegativeTemplateLabel,
+                _imageNegativeTemplateCombo,
+                _imageLoraLabel,
+                _imageLoraCombo,
+                _imageLoraStrength,
+                _imageLoraDownloadButton,
+                _imageLoraAddButton,
+                _imageCatalogDownloadStatus,
+                _imageCatalogDownloadProgress,
+                _imageCatalogDownloadSize,
+                _imageCatalogDownloadCancelButton));
+
+        DrawFrameV38(graphics, leftFrame);
+        DrawFrameV38(graphics, catalogFrame);
+        DrawFrameV38(
+            graphics,
+            InflateFrameV38(
+                _imagePreviewViewport.Bounds,
+                3,
+                3));
+        DrawFrameV38(
+            graphics,
+            InflateFrameV38(
+                BoundsOfV38(
+                    _imageHistoryLabel,
+                    _imageHistoryPanel),
+                6,
+                5));
+    }
+
+    private void DrawVideoFramesV38(Graphics graphics)
+    {
+        var leftFrame = InflateFrameV38(
+            BoundsOfV38(
+                _videoPromptLabel,
+                _videoImprovePromptButton,
+                _videoAutoImprovePrompt,
+                _videoPrompt,
+                _videoNegativeLabel,
+                _videoNegative,
+                _videoReferenceLabel,
+                _videoReferenceImage,
+                _videoReferenceBrowseButton,
+                _videoReferenceCropButton,
+                _videoExtractPromptButton,
+                _videoReferenceHint,
+                _videoWidthLabel,
+                _videoWidth,
+                _videoHeightLabel,
+                _videoHeight,
+                _videoDurationLabel,
+                _videoDurationSeconds,
+                _videoFramesLabel,
+                _videoFrames,
+                _videoFpsLabel,
+                _videoFps,
+                _videoStepsLabel,
+                _videoSteps,
+                _videoCfgLabel,
+                _videoCfg,
+                _videoShiftLabel,
+                _videoSamplingShift,
+                _videoSamplerLabel,
+                _videoSampler,
+                _videoSchedulerLabel,
+                _videoScheduler,
+                _videoSeedLabel,
+                _videoSeed,
+                _videoRandomSeed,
+                _videoQualityHint,
+                _videoGenerateButton,
+                _videoCancelButton,
+                _videoRefreshButton,
+                _videoStatus,
+                _videoProgress));
+
+        var catalogFrame = InflateFrameV38(
+            BoundsOfV38(
+                _videoModelRuntimeLabel,
+                _videoModelRuntimeCombo,
+                _videoModelDownloadButton,
+                _videoImportModelButton,
+                _videoQualityLabel,
+                _videoQualityCombo,
+                _videoStyleTemplateLabel,
+                _videoStyleTemplateCombo,
+                _videoNegativeTemplateLabel,
+                _videoNegativeTemplateCombo,
+                _videoLoraLabel,
+                _videoLoraCombo,
+                _videoLoraStrength,
+                _videoLoraDownloadButton,
+                _videoLoraAddButton,
+                _videoCatalogDownloadStatus,
+                _videoCatalogDownloadProgress,
+                _videoCatalogDownloadSize,
+                _videoCatalogDownloadCancelButton));
+
+        DrawFrameV38(graphics, leftFrame);
+        DrawFrameV38(graphics, catalogFrame);
+        DrawFrameV38(
+            graphics,
+            InflateFrameV38(
+                _videoPreviewWeb.Bounds,
+                3,
+                3));
+        DrawFrameV38(
+            graphics,
+            InflateFrameV38(
+                BoundsOfV38(
+                    _videoOutputLabel,
+                    _videoOutput,
+                    _videoOpenButton),
+                6,
+                5));
+        DrawFrameV38(
+            graphics,
+            InflateFrameV38(
+                BoundsOfV38(
+                    _videoHistoryLabel,
+                    _videoHistoryPanel),
+                6,
+                5));
+    }
+
+    private (
+        Rectangle Root,
+        Rectangle Services,
+        Rectangle ImageModels,
+        Rectangle Resources,
+        Rectangle VideoModels,
+        Rectangle Preferences,
+        Rectangle Technical)
+        GetConfigurationCardsV38()
+    {
+        var workspace = GetSharedWorkspaceSizeV37();
+        var width = Math.Max(876, workspace.Width);
+        var contentWidth = Math.Max(500, width - 36);
+        const int gap = 12;
+        var columnWidth =
+            Math.Max(260, (contentWidth - gap) / 2);
+
+        const int left = 18;
+        var right = left + columnWidth + gap;
+
+        return (
+            new Rectangle(
+                left,
+                72,
+                contentWidth,
+                58),
+            new Rectangle(
+                left,
+                136,
+                columnWidth,
+                142),
+            new Rectangle(
+                right,
+                136,
+                columnWidth,
+                142),
+            new Rectangle(
+                left,
+                284,
+                columnWidth,
+                142),
+            new Rectangle(
+                right,
+                284,
+                columnWidth,
+                142),
+            new Rectangle(
+                left,
+                432,
+                columnWidth,
+                130),
+            new Rectangle(
+                right,
+                432,
+                columnWidth,
+                130));
+    }
+
+    private void DrawConfigurationFramesV38(
+        Graphics graphics)
+    {
+        var cards = GetConfigurationCardsV38();
+
+        DrawTitledFrameV38(
+            graphics,
+            cards.Root,
+            L10n.Pick(
+                _s.Language,
+                "Emplacement portable",
+                "Portable location"));
+        DrawTitledFrameV38(
+            graphics,
+            cards.Services,
+            L10n.Pick(
+                _s.Language,
+                "Services locaux",
+                "Local services"));
+        DrawTitledFrameV38(
+            graphics,
+            cards.ImageModels,
+            L10n.Pick(
+                _s.Language,
+                "Modèles Image",
+                "Image models"));
+        DrawTitledFrameV38(
+            graphics,
+            cards.Resources,
+            L10n.Pick(
+                _s.Language,
+                "Ressources et téléchargements",
+                "Resources and downloads"));
+        DrawTitledFrameV38(
+            graphics,
+            cards.VideoModels,
+            L10n.Pick(
+                _s.Language,
+                "Modèles Vidéo",
+                "Video models"));
+        DrawTitledFrameV38(
+            graphics,
+            cards.Preferences,
+            L10n.Pick(
+                _s.Language,
+                "Préférences et mises à jour",
+                "Preferences and updates"));
     }
 
     private void ApplyUiPolishLayout()
@@ -1146,9 +1271,14 @@ public partial class MainForm
         }
 
         LayoutDashboardPolish();
+        LayoutCatalogHeaderRowsV38();
         LayoutImageGridPolish();
         LayoutVideoGridPolish();
         LayoutAdvancedConfigurationPolish();
+
+        tabGenerate.Invalidate();
+        _tabVideo.Invalidate();
+        tabConfiguration.Invalidate();
     }
 
     private void LayoutDashboardPolish()
@@ -1202,6 +1332,222 @@ public partial class MainForm
             AnchorStyles.Bottom |
             AnchorStyles.Left |
             AnchorStyles.Right;
+    }
+
+    private void LayoutCatalogHeaderRowsV38()
+    {
+        const int rightX = 370;
+
+        var workspace = GetSharedWorkspaceSizeV37();
+        var rightWidth = Math.Max(
+            500,
+            workspace.Width - rightX - 20);
+
+        var compact = rightWidth < 600;
+
+        var modelLabelWidth = compact ? 44 : 48;
+        var modelComboWidth = compact ? 142 : 182;
+        var downloadWidth = compact ? 88 : 96;
+        const int addWidth = 32;
+        const int gap = 6;
+
+        var modelComboX =
+            rightX + modelLabelWidth;
+        var downloadX =
+            modelComboX + modelComboWidth + gap;
+        var addX =
+            downloadX + downloadWidth + gap;
+
+        _imageModelRuntimeLabel.SetBounds(
+            rightX,
+            17,
+            modelLabelWidth,
+            26);
+        _imageModelRuntimeCombo.SetBounds(
+            modelComboX,
+            18,
+            modelComboWidth,
+            25);
+        _imageModelDownloadButton.SetBounds(
+            downloadX,
+            17,
+            downloadWidth,
+            27);
+        _imageImportModelButton.SetBounds(
+            addX,
+            17,
+            addWidth,
+            27);
+
+        _videoModelRuntimeLabel.SetBounds(
+            rightX,
+            17,
+            modelLabelWidth,
+            26);
+        _videoModelRuntimeCombo.SetBounds(
+            modelComboX,
+            18,
+            modelComboWidth,
+            25);
+        _videoModelDownloadButton.SetBounds(
+            downloadX,
+            17,
+            downloadWidth,
+            27);
+        _videoImportModelButton.SetBounds(
+            addX,
+            17,
+            addWidth,
+            27);
+
+        var qualityLabelX =
+            addX + addWidth + 10;
+        var qualityLabelWidth =
+            compact ? 44 : 50;
+        var qualityComboX =
+            qualityLabelX + qualityLabelWidth;
+
+        _videoQualityLabel.SetBounds(
+            qualityLabelX,
+            17,
+            qualityLabelWidth,
+            26);
+        _videoQualityCombo.SetBounds(
+            qualityComboX,
+            18,
+            Math.Max(
+                86,
+                rightX + rightWidth - qualityComboX),
+            25);
+
+        const int styleLabelWidth = 42;
+        var styleComboWidth =
+            Math.Clamp(
+                rightWidth / 2 - 60,
+                190,
+                260);
+        var negativeLabelX =
+            rightX +
+            styleLabelWidth +
+            styleComboWidth +
+            14;
+
+        _imageStyleTemplateLabel.SetBounds(
+            rightX,
+            49,
+            styleLabelWidth,
+            26);
+        _imageStyleTemplateCombo.SetBounds(
+            rightX + styleLabelWidth,
+            50,
+            styleComboWidth,
+            25);
+        _imageNegativeTemplateLabel.SetBounds(
+            negativeLabelX,
+            49,
+            62,
+            26);
+        _imageNegativeTemplateCombo.SetBounds(
+            negativeLabelX + 62,
+            50,
+            Math.Max(
+                92,
+                rightX + rightWidth -
+                (negativeLabelX + 62)),
+            25);
+
+        _videoStyleTemplateLabel.SetBounds(
+            rightX,
+            49,
+            styleLabelWidth,
+            26);
+        _videoStyleTemplateCombo.SetBounds(
+            rightX + styleLabelWidth,
+            50,
+            styleComboWidth,
+            25);
+        _videoNegativeTemplateLabel.SetBounds(
+            negativeLabelX,
+            49,
+            62,
+            26);
+        _videoNegativeTemplateCombo.SetBounds(
+            negativeLabelX + 62,
+            50,
+            Math.Max(
+                92,
+                rightX + rightWidth -
+                (negativeLabelX + 62)),
+            25);
+
+        const int loraLabelWidth = 42;
+        var loraComboWidth =
+            compact ? 165 : 190;
+        const int strengthWidth = 64;
+        var loraComboX =
+            rightX + loraLabelWidth;
+        var strengthX =
+            loraComboX + loraComboWidth + gap;
+        var loraDownloadX =
+            strengthX + strengthWidth + gap;
+        var loraDownloadWidth =
+            compact ? 96 : 108;
+        var loraAddX =
+            loraDownloadX +
+            loraDownloadWidth +
+            gap;
+
+        _imageLoraLabel.SetBounds(
+            rightX,
+            80,
+            loraLabelWidth,
+            26);
+        _imageLoraCombo.SetBounds(
+            loraComboX,
+            81,
+            loraComboWidth,
+            25);
+        _imageLoraStrength.SetBounds(
+            strengthX,
+            81,
+            strengthWidth,
+            25);
+        _imageLoraDownloadButton.SetBounds(
+            loraDownloadX,
+            80,
+            loraDownloadWidth,
+            27);
+        _imageLoraAddButton.SetBounds(
+            loraAddX,
+            80,
+            addWidth,
+            27);
+
+        _videoLoraLabel.SetBounds(
+            rightX,
+            80,
+            loraLabelWidth,
+            26);
+        _videoLoraCombo.SetBounds(
+            loraComboX,
+            81,
+            loraComboWidth,
+            25);
+        _videoLoraStrength.SetBounds(
+            strengthX,
+            81,
+            strengthWidth,
+            25);
+        _videoLoraDownloadButton.SetBounds(
+            loraDownloadX,
+            80,
+            loraDownloadWidth,
+            27);
+        _videoLoraAddButton.SetBounds(
+            loraAddX,
+            80,
+            addWidth,
+            27);
     }
 
     private void LayoutImageGridPolish()
@@ -1285,138 +1631,415 @@ public partial class MainForm
 
         var workspace = GetSharedWorkspaceSizeV37();
         var width = Math.Max(876, workspace.Width);
-        var panelY = 473;
-        var panelWidth = Math.Max(500, width - 36);
-        var panelHeight = Math.Max(92, workspace.Height - panelY - 12);
+        var cards = GetConfigurationCardsV38();
+
+        tabConfiguration.AutoScroll = false;
+
+        lblConfigTitle.SetBounds(
+            18,
+            14,
+            390,
+            34);
+
+        var saveX =
+            Math.Max(
+                500,
+                width - 350);
+        btnSettingsSave.SetBounds(
+            saveX,
+            14,
+            170,
+            34);
+        btnOpenConfigFolder.SetBounds(
+            saveX + 178,
+            14,
+            154,
+            34);
+
+        _configurationSaveStatus.SetBounds(
+            18,
+            50,
+            Math.Max(
+                300,
+                saveX - 36),
+            18);
+
+        lblConfigRootCaption.SetBounds(
+            cards.Root.X + 12,
+            cards.Root.Y + 28,
+            112,
+            23);
+        txtConfigRoot.SetBounds(
+            cards.Root.X + 126,
+            cards.Root.Y + 28,
+            Math.Max(
+                180,
+                cards.Root.Width - 138),
+            23);
+
+        var serviceLeftLabelX =
+            cards.Services.X + 12;
+        var serviceLeftInputX =
+            cards.Services.X + 108;
+        var serviceRightLabelX =
+            cards.Services.X +
+            Math.Max(
+                205,
+                cards.Services.Width / 2);
+        var serviceRightInputX =
+            serviceRightLabelX + 92;
+        var serviceInputWidth =
+            Math.Max(
+                72,
+                cards.Services.Right -
+                serviceRightInputX -
+                12);
+        serviceInputWidth =
+            Math.Min(
+                90,
+                serviceInputWidth);
+
+        var serviceY =
+            cards.Services.Y + 31;
+        const int serviceStep = 29;
+
+        lblCfgOpenCodePort.SetBounds(
+            serviceLeftLabelX,
+            serviceY + 2,
+            92,
+            23);
+        numOpenCodePort.SetBounds(
+            serviceLeftInputX,
+            serviceY,
+            82,
+            23);
+        lblCfgOllamaPort.SetBounds(
+            serviceRightLabelX,
+            serviceY + 2,
+            88,
+            23);
+        numOllamaPort.SetBounds(
+            serviceRightInputX,
+            serviceY,
+            serviceInputWidth,
+            23);
+
+        lblCfgComfyPort.SetBounds(
+            serviceLeftLabelX,
+            serviceY + serviceStep + 2,
+            92,
+            23);
+        numComfyPort.SetBounds(
+            serviceLeftInputX,
+            serviceY + serviceStep,
+            82,
+            23);
+        lblCfgProxyPort.SetBounds(
+            serviceRightLabelX,
+            serviceY + serviceStep + 2,
+            88,
+            23);
+        numProxyPort.SetBounds(
+            serviceRightInputX,
+            serviceY + serviceStep,
+            serviceInputWidth,
+            23);
+
+        lblCfgApiPort.SetBounds(
+            serviceLeftLabelX,
+            serviceY + (serviceStep * 2) + 2,
+            92,
+            23);
+        numApiPort.SetBounds(
+            serviceLeftInputX,
+            serviceY + (serviceStep * 2),
+            82,
+            23);
+
+        chkHardStopComfy.SetBounds(
+            cards.Services.X + 12,
+            serviceY + (serviceStep * 3) - 2,
+            Math.Max(
+                180,
+                cards.Services.Width - 24),
+            24);
+
+        var imageLabelX =
+            cards.ImageModels.X + 12;
+        var imageInputX =
+            cards.ImageModels.X + 126;
+        var imageInputWidth =
+            Math.Max(
+                120,
+                cards.ImageModels.Right -
+                imageInputX -
+                12);
+        var imageY =
+            cards.ImageModels.Y + 31;
+        const int modelStep = 27;
+
+        lblCfgVisionModel.SetBounds(
+            imageLabelX,
+            imageY + 2,
+            108,
+            23);
+        _visionModelCombo.SetBounds(
+            imageInputX,
+            imageY,
+            imageInputWidth,
+            23);
+        lblCfgFluxModel.SetBounds(
+            imageLabelX,
+            imageY + modelStep + 2,
+            108,
+            23);
+        _fluxModelCombo.SetBounds(
+            imageInputX,
+            imageY + modelStep,
+            imageInputWidth,
+            23);
+        lblCfgTextEncoder.SetBounds(
+            imageLabelX,
+            imageY + (modelStep * 2) + 2,
+            108,
+            23);
+        _textEncoderCombo.SetBounds(
+            imageInputX,
+            imageY + (modelStep * 2),
+            imageInputWidth,
+            23);
+        lblCfgVae.SetBounds(
+            imageLabelX,
+            imageY + (modelStep * 3) + 2,
+            108,
+            23);
+        _vaeCombo.SetBounds(
+            imageInputX,
+            imageY + (modelStep * 3),
+            imageInputWidth,
+            23);
+
+        var resourceLeftLabelX =
+            cards.Resources.X + 12;
+        var resourceLeftInputX =
+            cards.Resources.X + 108;
+        var resourceRightLabelX =
+            cards.Resources.X +
+            Math.Max(
+                205,
+                cards.Resources.Width / 2);
+        var resourceRightInputX =
+            resourceRightLabelX + 110;
+        var resourceRightWidth =
+            Math.Max(
+                64,
+                cards.Resources.Right -
+                resourceRightInputX -
+                12);
+        var resourceY =
+            cards.Resources.Y + 38;
+
+        lblCfgVram.SetBounds(
+            resourceLeftLabelX,
+            resourceY + 2,
+            92,
+            23);
+        numSafeVram.SetBounds(
+            resourceLeftInputX,
+            resourceY,
+            82,
+            23);
+        lblCfgRam.SetBounds(
+            resourceRightLabelX,
+            resourceY + 2,
+            106,
+            23);
+        numSafeRam.SetBounds(
+            resourceRightInputX,
+            resourceY,
+            Math.Min(
+                86,
+                resourceRightWidth),
+            23);
+
+        lblCfgConnections.SetBounds(
+            resourceLeftLabelX,
+            resourceY + 34,
+            122,
+            23);
+        numDownloadConnections.SetBounds(
+            cards.Resources.X + 136,
+            resourceY + 32,
+            64,
+            23);
+        lblCfgBuffer.SetBounds(
+            resourceRightLabelX,
+            resourceY + 34,
+            104,
+            23);
+        numDownloadBuffer.SetBounds(
+            resourceRightInputX,
+            resourceY + 32,
+            Math.Min(
+                86,
+                resourceRightWidth),
+            23);
+
+        var videoLabelX =
+            cards.VideoModels.X + 12;
+        var videoInputX =
+            cards.VideoModels.X + 126;
+        var videoInputWidth =
+            Math.Max(
+                120,
+                cards.VideoModels.Right -
+                videoInputX -
+                12);
+        var videoY =
+            cards.VideoModels.Y + 31;
+
+        _cfgVideoModelLabel.SetBounds(
+            videoLabelX,
+            videoY + 2,
+            108,
+            23);
+        _cfgVideoModel.SetBounds(
+            videoInputX,
+            videoY,
+            videoInputWidth,
+            23);
+        _cfgVideoTextEncoderLabel.SetBounds(
+            videoLabelX,
+            videoY + modelStep + 2,
+            108,
+            23);
+        _cfgVideoTextEncoder.SetBounds(
+            videoInputX,
+            videoY + modelStep,
+            videoInputWidth,
+            23);
+        _cfgVideoVaeLabel.SetBounds(
+            videoLabelX,
+            videoY + (modelStep * 2) + 2,
+            108,
+            23);
+        _cfgVideoVae.SetBounds(
+            videoInputX,
+            videoY + (modelStep * 2),
+            videoInputWidth,
+            23);
+        _cfgVideoClipVisionLabel.SetBounds(
+            videoLabelX,
+            videoY + (modelStep * 3) + 2,
+            108,
+            23);
+        _cfgVideoClipVision.SetBounds(
+            videoInputX,
+            videoY + (modelStep * 3),
+            videoInputWidth,
+            23);
+
+        var prefY =
+            cards.Preferences.Y + 32;
+        var prefMid =
+            cards.Preferences.X +
+            cards.Preferences.Width / 2;
+
+        lblCfgLanguage.SetBounds(
+            cards.Preferences.X + 12,
+            prefY + 2,
+            78,
+            23);
+        cmbLanguage.SetBounds(
+            cards.Preferences.X + 92,
+            prefY,
+            110,
+            23);
+        _autoSaveConfigurationCheck.SetBounds(
+            prefMid,
+            prefY,
+            Math.Max(
+                150,
+                cards.Preferences.Right -
+                prefMid -
+                12),
+            24);
+
+        lblCfgGitHubRepo.SetBounds(
+            cards.Preferences.X + 12,
+            prefY + 32,
+            88,
+            23);
+        txtGitHubRepo.SetBounds(
+            cards.Preferences.X + 102,
+            prefY + 32,
+            Math.Max(
+                150,
+                cards.Preferences.Width - 114),
+            23);
+
+        chkInstallVisionModel.SetBounds(
+            cards.Preferences.X + 12,
+            prefY + 64,
+            Math.Max(
+                170,
+                cards.Preferences.Width / 2 - 18),
+            24);
+        chkAutoUpdates.SetBounds(
+            prefMid,
+            prefY + 64,
+            Math.Max(
+                150,
+                cards.Preferences.Right -
+                prefMid -
+                12),
+            24);
 
         _configurationAdvancedPanelPolish.SetBounds(
-            18,
-            panelY,
-            panelWidth,
-            panelHeight);
-        _configurationAdvancedPanelPolish.Anchor =
-            AnchorStyles.Top |
-            AnchorStyles.Bottom |
-            AnchorStyles.Left |
-            AnchorStyles.Right;
+            cards.Technical.X,
+            cards.Technical.Y,
+            cards.Technical.Width,
+            cards.Technical.Height);
 
-        var contentWidth = Math.Max(790, panelWidth - 22);
-        _configurationAdvancedPanelPolish.AutoScrollMinSize =
-            new Size(contentWidth, 640);
+        var technicalWidth =
+            cards.Technical.Width;
+        AdvancedControlPolish(
+                "cfgAdvancedInterfaceTitlePolish")
+            .SetBounds(
+                12,
+                8,
+                Math.Max(
+                    150,
+                    technicalWidth - 24),
+                22);
 
-        AdvancedControlPolish("cfgAdvancedIntroPolish")
-            .SetBounds(10, 8, contentWidth - 20, 42);
+        var techCheckWidth =
+            Math.Max(
+                150,
+                (technicalWidth - 36) / 2);
 
-        AdvancedControlPolish("cfgAdvancedImageTitlePolish")
-            .SetBounds(10, 58, contentWidth - 20, 24);
-
-        AdvancedControlPolish("cfgAdvancedImageWidthLabelPolish")
-            .SetBounds(10, 88, 58, 23);
-        _cfgImageWidthPolish.SetBounds(72, 88, 78, 23);
-
-        AdvancedControlPolish("cfgAdvancedImageHeightLabelPolish")
-            .SetBounds(168, 88, 60, 23);
-        _cfgImageHeightPolish.SetBounds(232, 88, 78, 23);
-
-        AdvancedControlPolish("cfgAdvancedImageStepsLabelPolish")
-            .SetBounds(328, 88, 44, 23);
-        _cfgImageStepsPolish.SetBounds(376, 88, 72, 23);
-
-        AdvancedControlPolish("cfgAdvancedImageCfgLabelPolish")
-            .SetBounds(466, 88, 30, 23);
-        _cfgImageCfgPolish.SetBounds(500, 88, 72, 23);
-
-        AdvancedControlPolish("cfgAdvancedPromptModelLabelPolish")
-            .SetBounds(10, 120, 96, 23);
-        _cfgPromptModelPolish.SetBounds(
-            110,
-            120,
-            Math.Min(380, contentWidth - 120),
-            23);
-
-        AdvancedControlPolish("cfgAdvancedImageSeedLabelPolish")
-            .SetBounds(10, 152, 58, 23);
-        _cfgImageSeedPolish.SetBounds(72, 152, 120, 23);
-        _cfgImageRandomSeedPolish.SetBounds(202, 152, 130, 23);
-
-        AdvancedControlPolish("cfgAdvancedImageSharpnessLabelPolish")
-            .SetBounds(350, 152, 116, 23);
-        _cfgImageSharpnessPolish.SetBounds(470, 152, 76, 23);
-        _cfgImageAutoImprovePolish.SetBounds(560, 152, 170, 23);
-
-        AdvancedControlPolish("cfgAdvancedVideoTitlePolish")
-            .SetBounds(10, 194, contentWidth - 20, 24);
-
-        AdvancedControlPolish("cfgAdvancedVideoI2vLabelPolish")
-            .SetBounds(10, 224, 96, 23);
-        _cfgVideoI2vModelPolish.SetBounds(
-            110,
-            224,
-            Math.Max(260, contentWidth - 120),
-            23);
-
-        AdvancedControlPolish("cfgAdvancedVideoWidthLabelPolish")
-            .SetBounds(10, 256, 58, 23);
-        _cfgVideoWidthPolish.SetBounds(72, 256, 78, 23);
-
-        AdvancedControlPolish("cfgAdvancedVideoHeightLabelPolish")
-            .SetBounds(168, 256, 60, 23);
-        _cfgVideoHeightPolish.SetBounds(232, 256, 78, 23);
-
-        AdvancedControlPolish("cfgAdvancedVideoFramesLabelPolish")
-            .SetBounds(328, 256, 48, 23);
-        _cfgVideoFramesPolish.SetBounds(380, 256, 68, 23);
-
-        AdvancedControlPolish("cfgAdvancedVideoFpsLabelPolish")
-            .SetBounds(466, 256, 30, 23);
-        _cfgVideoFpsPolish.SetBounds(500, 256, 72, 23);
-
-        AdvancedControlPolish("cfgAdvancedVideoStepsLabelPolish")
-            .SetBounds(10, 288, 58, 23);
-        _cfgVideoStepsPolish.SetBounds(72, 288, 78, 23);
-
-        AdvancedControlPolish("cfgAdvancedVideoCfgLabelPolish")
-            .SetBounds(168, 288, 60, 23);
-        _cfgVideoCfgPolish.SetBounds(232, 288, 78, 23);
-
-        AdvancedControlPolish("cfgAdvancedVideoShiftLabelPolish")
-            .SetBounds(328, 288, 48, 23);
-        _cfgVideoShiftPolish.SetBounds(380, 288, 68, 23);
-
-        AdvancedControlPolish("cfgAdvancedVideoSamplerLabelPolish")
-            .SetBounds(466, 288, 60, 23);
-        _cfgVideoSamplerPolish.SetBounds(530, 288, 150, 23);
-
-        AdvancedControlPolish("cfgAdvancedVideoSchedulerLabelPolish")
-            .SetBounds(10, 320, 76, 23);
-        _cfgVideoSchedulerPolish.SetBounds(90, 320, 150, 23);
-
-        AdvancedControlPolish("cfgAdvancedVideoSeedLabelPolish")
-            .SetBounds(258, 320, 48, 23);
-        _cfgVideoSeedPolish.SetBounds(310, 320, 118, 23);
-        _cfgVideoRandomSeedPolish.SetBounds(438, 320, 130, 23);
-
-        AdvancedControlPolish("cfgAdvancedVideoSharpnessLabelPolish")
-            .SetBounds(10, 352, 116, 23);
-        _cfgVideoSharpnessPolish.SetBounds(130, 352, 76, 23);
-        _cfgVideoAutoImprovePolish.SetBounds(220, 352, 170, 23);
-
-        AdvancedControlPolish("cfgAdvancedContextNotePolish")
-            .SetBounds(10, 394, contentWidth - 20, 58);
-
-        AdvancedControlPolish("cfgAdvancedInterfaceTitlePolish")
-            .SetBounds(10, 464, contentWidth - 20, 24);
         _cfgShowOpenCodeTabPolish.SetBounds(
-            10,
-            494,
-            230,
+            12,
+            36,
+            techCheckWidth,
             24);
         _cfgShowComfyTabPolish.SetBounds(
-            258,
-            494,
-            230,
+            18 + techCheckWidth,
+            36,
+            techCheckWidth,
             24);
-        AdvancedControlPolish("cfgAdvancedInterfaceNotePolish")
-            .SetBounds(10, 526, contentWidth - 20, 62);
+
+        AdvancedControlPolish(
+                "cfgAdvancedInterfaceNotePolish")
+            .SetBounds(
+                12,
+                66,
+                Math.Max(
+                    160,
+                    technicalWidth - 24),
+                50);
+
+        _configurationAdvancedPanelPolish.Invalidate();
+        tabConfiguration.Invalidate();
     }
 }
