@@ -82,6 +82,8 @@ public sealed class AppSettings
     public int SafeFreeRamMiB { get; set; } = 4096;
     public bool HardStopComfyAfterGeneration { get; set; } = true;
     public bool AutoSaveConfiguration { get; set; } = true;
+    public bool ShowOpenCodeTab { get; set; } = false;
+    public bool ShowComfyUiTab { get; set; } = false;
     public string LastImprovedPromptHash { get; set; } = string.Empty;
 
     // FR : Langue de l'interface. EN: UI language.

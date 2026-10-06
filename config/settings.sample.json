@@ -59,6 +59,8 @@
   "SafeFreeRamMiB": 4096,
   "HardStopComfyAfterGeneration": true,
   "AutoSaveConfiguration": true,
+  "ShowOpenCodeTab": false,
+  "ShowComfyUiTab": false,
   "LastImprovedPromptHash": "",
   "Language": "fr",
   "AutoCheckUpdates": true,
