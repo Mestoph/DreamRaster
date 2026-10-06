@@ -1,6 +1,6 @@
 # Structure du dépôt — Français
 
-La v33 sépare le code, les scripts et la documentation afin d'éviter une racine encombrée.
+La structure introduite en v33 et conservée en v37 sépare le code, les scripts et la documentation afin d'éviter une racine encombrée.
 
 ```text
 src/DreamRaster/
@@ -26,6 +26,6 @@ scripts/common/
 
 contient le moteur de diagnostic PowerShell commun.
 
-Le cache NuGet reste à la racine dans `.nuget/packages/`, même si le `.csproj` se trouve dans `src/DreamRaster/`.
+Le cache NuGet est généré à la racine dans `.nuget/packages/`, même si le `.csproj` se trouve dans `src/DreamRaster/`. Il est régénérable par `dotnet restore` et ne doit pas être inclus dans une archive source.
 
 Les sorties `bin/` et `obj/` restent sous `src/DreamRaster/` et sont ignorées par Git.

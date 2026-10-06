@@ -34,17 +34,40 @@ public sealed class AppSettings
         "deformed, distorted, malformed, oversaturated, underexposed, overexposed";
     public bool AutoImprovePrompt { get; set; } = false;
     public string PromptModel { get; set; } = "qwen3:1.7b";
+    public string ImageStyleTemplate { get; set; } = "photo4k";
+    public string ImageNegativeTemplate { get; set; } = "safe_quality";
+    public double ImageCfg { get; set; } = 1.0;
+    public int MaximumQualityImageSharpnessPercent { get; set; } = 75;
     public long GenerationSeed { get; set; } = 1001;
     public bool UseRandomSeed { get; set; } = true;
+    public string ImageLora { get; set; } = string.Empty;
+    public double ImageLoraStrength { get; set; } = 1.0;
 
     public string VideoModel { get; set; } = "wan2.1_t2v_1.3B_fp16.safetensors";
     public string VideoTextEncoderModel { get; set; } = "umt5_xxl_fp8_e4m3fn_scaled.safetensors";
     public string VideoVaeModel { get; set; } = "wan_2.1_vae.safetensors";
+    public string VideoClipVisionModel { get; set; } = "clip_vision_h.safetensors";
+    public string VideoI2vModel { get; set; } = "wan2.1_i2v_480p_14B_fp8_e4m3fn.safetensors";
+    public string VideoStyleTemplate { get; set; } = "cinematic";
+    public string VideoNegativeTemplate { get; set; } = "safe_stable";
     public int VideoWidth { get; set; } = 832;
     public int VideoHeight { get; set; } = 480;
     public int VideoFrames { get; set; } = 33;
     public int VideoFps { get; set; } = 16;
+    public double VideoDurationSeconds { get; set; } = 2.06;
     public int VideoSteps { get; set; } = 30;
+    public double VideoCfg { get; set; } = 6.0;
+    public int MaximumQualityVideoSharpnessPercent { get; set; } = 65;
+    public double VideoSamplingShift { get; set; } = 8.0;
+    public string VideoSampler { get; set; } = "uni_pc";
+    public string VideoScheduler { get; set; } = "simple";
+    public long VideoSeed { get; set; } = 1001;
+    public bool UseRandomVideoSeed { get; set; } = true;
+    public string VideoLora { get; set; } = string.Empty;
+    public double VideoLoraStrength { get; set; } = 1.0;
+    public bool VideoAutoImprovePrompt { get; set; } = false;
+    public string LastImprovedVideoPromptHash { get; set; } = string.Empty;
+    public string VideoQualityPreset { get; set; } = "best";
 
     public int OpenCodePort { get; set; } = 54095;
     public int OllamaPort { get; set; } = 11434;
@@ -58,6 +81,8 @@ public sealed class AppSettings
     public int SafeVramMiB { get; set; } = 1800;
     public int SafeFreeRamMiB { get; set; } = 4096;
     public bool HardStopComfyAfterGeneration { get; set; } = true;
+    public bool AutoSaveConfiguration { get; set; } = true;
+    public string LastImprovedPromptHash { get; set; } = string.Empty;
 
     // FR : Langue de l'interface. EN: UI language.
     public string Language { get; set; } = "fr";
@@ -99,6 +124,10 @@ public sealed class AppSettings
         "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors?download=true";
     public string VideoVaeUrl { get; set; } =
         "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors?download=true";
+    public string VideoClipVisionUrl { get; set; } =
+        "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/clip_vision/clip_vision_h.safetensors";
+    public string VideoI2vModelUrl { get; set; } =
+        "https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_i2v_480p_14B_fp8_e4m3fn.safetensors?download=true";
 
     public string FluxSha256 { get; set; } =
         "97ed34fe0567e436200f2faee3939b88f2b5d99f8af2a4dc16532c4245c0ccb6";
@@ -112,6 +141,10 @@ public sealed class AppSettings
         "c3355d30191f1f066b26d93fba017ae9809dce6c627dda5f6a66eaa651204f68";
     public string VideoVaeSha256 { get; set; } =
         "2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b";
+    public string VideoClipVisionSha256 { get; set; } =
+        "64a7ef761bfccbadbaa3da77366aac4185a6c58fa5de5f589b42a65bcc21f161";
+    public string VideoI2vModelSha256 { get; set; } =
+        "0ca75338e7a47ca7cacddb7e626647e65829c497387f718ecb6ea0bae456944a";
     // FR : Runtime WebView2 Fixed Version x64 épinglé pour une portabilité réelle.
     // EN: Pinned x64 WebView2 Fixed Version Runtime for true portability.
     public const string DefaultWebView2FixedVersion = "154.0.4258.53";

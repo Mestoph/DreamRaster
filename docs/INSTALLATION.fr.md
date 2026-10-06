@@ -9,7 +9,7 @@
 scripts\windows\build-debug.bat
 ```
 
-Le cache NuGet reste dans `.nuget\packages` à la racine du dépôt.
+Le cache NuGet est généré par `dotnet restore` dans `.nuget\packages` à la racine du dépôt. Il est volontairement exclu des archives source et peut être supprimé sans perdre de code.
 
 ## Publication portable Windows
 

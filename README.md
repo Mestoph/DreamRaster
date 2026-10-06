@@ -1,4 +1,4 @@
-﻿# DreamRaster
+# DreamRaster
 
 [English documentation](README.en.md)
 
@@ -40,7 +40,7 @@ DreamRaster/
 ├─ config/                  # settings.sample.json
 ├─ docs/
 ├─ .github/
-├─ .nuget/
+├─ .nuget/packages/       # cache NuGet généré localement, non archivé
 ├─ DreamRaster.sln
 ├─ LICENSE
 ├─ NOTICE

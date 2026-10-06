@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -7,15 +7,15 @@
     <RootNamespace>OpenCodeLocalAI</RootNamespace>
     <Product>DreamRaster</Product>
     <Authors>Mestoph</Authors>
-    <Copyright>Copyright Â© 2026 Mestoph</Copyright>
+    <Copyright>Copyright © 2026 Mestoph</Copyright>
     <PackageLicenseExpression>AGPL-3.0-or-later</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/Mestoph/DreamRaster</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <Description>DreamRaster â€” portable Windows studio for local AI image generation with FLUX.2, ComfyUI, Ollama and OpenCode.</Description>
+    <Description>DreamRaster — portable Windows studio for local AI image generation with FLUX.2, ComfyUI, Ollama and OpenCode.</Description>
     <ApplicationIcon>Assets/AppIcon.ico</ApplicationIcon>
-    <Version>35.0.3</Version>
-    <AssemblyVersion>35.0.3.0</AssemblyVersion>
-    <FileVersion>35.0.3.0</FileVersion>
+    <Version>37.0.0</Version>
+    <AssemblyVersion>37.0.0.0</AssemblyVersion>
+    <FileVersion>37.0.0.0</FileVersion>
 
     <UseWindowsForms>true</UseWindowsForms>
     <UseWPF>false</UseWPF>
@@ -23,14 +23,15 @@
     <!--
       FR : Autorise la compilation de la cible Windows depuis Linux/macOS.
       EN: Allows building the Windows target from Linux/macOS.
-      Cela ne rend pas l'application WinForms exÃ©cutable nativement sous Linux.
+      Cela ne rend pas l'application WinForms exécutable nativement sous Linux.
     -->
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
 
     <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <Prefer32Bit>false</Prefer32Bit>
 
-    <!-- Build Visual Studio normal = lÃ©ger / framework-dependent -->
+    <!-- Build Visual Studio normal = léger / framework-dependent -->
     <SelfContained>false</SelfContained>
 
     <Nullable>enable</Nullable>
@@ -38,8 +39,8 @@
     <LangVersion>latest</LangVersion>
 
     <!--
-      Ne pas copier les fichiers de documentation XML voisins des DLL rÃ©fÃ©rencÃ©es.
-      Cela Ã©vite notamment Microsoft.Web.WebView2.Core.xml et
+      Ne pas copier les fichiers de documentation XML voisins des DLL référencées.
+      Cela évite notamment Microsoft.Web.WebView2.Core.xml et
       Microsoft.Web.WebView2.WinForms.xml dans la sortie.
     -->
     <AllowedReferenceRelatedFileExtensions>.pdb</AllowedReferenceRelatedFileExtensions>
@@ -48,7 +49,7 @@
     <RestorePackagesPath>$(MSBuildProjectDirectory)/../../.nuget/packages</RestorePackagesPath>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
 
-    <!-- WebView2 : chemins calculÃ©s Ã  partir du cache NuGet LOCAL -->
+    <!-- WebView2 : chemins calculés à partir du cache NuGet LOCAL -->
     <WebView2Version>1.0.3537.50</WebView2Version>
     <WebView2PackageDir>$(RestorePackagesPath)/microsoft.web.webview2/$(WebView2Version)</WebView2PackageDir>
 
@@ -60,9 +61,9 @@
 
     <ItemGroup>
     <!--
-      Le package est bien restaurÃ© dans .nuget\packages,
-      mais aucun asset automatique n'est importÃ©.
-      Nous rÃ©fÃ©renÃ§ons uniquement Core + WinForms.
+      Le package est bien restauré dans .nuget\packages,
+      mais aucun asset automatique n'est importé.
+      Nous référençons uniquement Core + WinForms.
     -->
     <PackageReference
       Include="Microsoft.Web.WebView2"
@@ -85,9 +86,9 @@
     </Reference>
 
     <!--
-      Le loader natif WebView2 est intÃ©grÃ© comme ressource dans DreamRaster.exe.
-      Il sera extrait Ã  la demande dans runtime\native au premier lancement.
-      Rien n'est publiÃ© Ã  cÃ´tÃ© de l'EXE.
+      Le loader natif WebView2 est intégré comme ressource dans DreamRaster.exe.
+      Il sera extrait à la demande dans runtime\native au premier lancement.
+      Rien n'est publié à côté de l'EXE.
     -->
     <EmbeddedResource Include="$(WebView2PackageDir)/runtimes/win-x64/native/WebView2Loader.dll">
       <LogicalName>OpenCodeLocalAI.Resources.WebView2Loader.dll</LogicalName>
@@ -108,6 +109,10 @@
     <EmbeddedResource Include="Assets/Workflows/wan21_text_to_video_api.json">
       <LogicalName>OpenCodeLocalAI.Workflows.wan21_text_to_video_api.json</LogicalName>
     </EmbeddedResource>
+
+    <EmbeddedResource Include="Assets/Workflows/wan21_image_to_video_api.json">
+      <LogicalName>OpenCodeLocalAI.Workflows.wan21_image_to_video_api.json</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>
@@ -126,14 +131,35 @@
       <DependentUpon>MainForm.cs</DependentUpon>
     </Compile>
 
+    <Compile Update="ModelDownloadForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="ModelDownloadForm.Designer.cs">
+      <DependentUpon>ModelDownloadForm.cs</DependentUpon>
+    </Compile>
+
+    <Compile Update="ImageRegionSelectorForm.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Update="ImageRegionSelectorForm.Designer.cs">
+      <DependentUpon>ImageRegionSelectorForm.cs</DependentUpon>
+    </Compile>
+
     <EmbeddedResource Update="MainForm.resx">
       <DependentUpon>MainForm.cs</DependentUpon>
     </EmbeddedResource>
+    <EmbeddedResource Update="ModelDownloadForm.resx">
+      <DependentUpon>ModelDownloadForm.cs</DependentUpon>
+    </EmbeddedResource>
+    <EmbeddedResource Update="ImageRegionSelectorForm.resx">
+      <DependentUpon>ImageRegionSelectorForm.cs</DependentUpon>
+    </EmbeddedResource>
+
   </ItemGroup>
 
 
   <!--
-    SÃ©curitÃ© supplÃ©mentaire : si MSBuild/NuGet recopie malgrÃ© tout
+    Sécurité supplémentaire : si MSBuild/NuGet recopie malgré tout
     les XML de documentation WebView2, on les retire de la publication.
   -->
   <Target Name="RemoveWebView2XmlDocsFromPublish" AfterTargets="Publish">

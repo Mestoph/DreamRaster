@@ -2,7 +2,6 @@
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
-
 FR : Gestion sûre des processus enfants portables et de leurs logs.
 EN: Safe management of portable child processes and their logs.
 
@@ -20,7 +19,9 @@ namespace OpenCodeLocalAI;
 public sealed class ManagedProcess : IDisposable
 {
     private readonly Action<string, string> _log;
+    private readonly SemaphoreSlim _lifecycleGate = new(1, 1);
     private Process? _process;
+    private int _expectedStopPid;
 
     public string Name { get; }
     public bool Running => _process is { HasExited: false };
@@ -39,7 +40,37 @@ public sealed class ManagedProcess : IDisposable
         IDictionary<string, string>? environment = null,
         CancellationToken ct = default)
     {
-        if (Running) return;
+        await _lifecycleGate.WaitAsync(ct);
+        try
+        {
+            await StartCoreAsync(
+                portableExe,
+                arguments,
+                workingDirectory,
+                environment,
+                ct);
+        }
+        finally
+        {
+            _lifecycleGate.Release();
+        }
+    }
+
+    private async Task StartCoreAsync(
+        string portableExe,
+        string arguments,
+        string workingDirectory,
+        IDictionary<string, string>? environment,
+        CancellationToken ct)
+    {
+        if (Running)
+            return;
+
+        if (_process is not null)
+        {
+            try { _process.Dispose(); } catch { }
+            _process = null;
+        }
 
         var exe = PortablePaths.Resolve(portableExe);
         if (!File.Exists(exe))
@@ -68,20 +99,20 @@ public sealed class ManagedProcess : IDisposable
             foreach (var kv in environment)
                 psi.Environment[kv.Key] = kv.Value;
 
-        _process = new Process { StartInfo = psi, EnableRaisingEvents = true };
-        _process.OutputDataReceived += (_, e) => { if (e.Data is not null) _log(Name, e.Data); };
-        _process.ErrorDataReceived += (_, e) => { if (e.Data is not null) _log(Name + " !", e.Data); };
-        _process.Exited += (_, _) => _log(Name, $"Processus terminé (code {_process?.ExitCode}).");
+        var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+        _process = process;
+        process.OutputDataReceived += (_, e) => { if (e.Data is not null) _log(Name, e.Data); };
+        process.ErrorDataReceived += (_, e) => { if (e.Data is not null) LogStandardError(e.Data); };
+        process.Exited += (_, _) => LogProcessExit(process);
 
         try
         {
-            if (!_process.Start())
-                throw new InvalidOperationException(
-                    $"Impossible de démarrer {Name}.");
+            if (!process.Start())
+                throw new InvalidOperationException($"Impossible de démarrer {Name}.");
 
-            _process.BeginOutputReadLine();
-            _process.BeginErrorReadLine();
-            _log(Name, $"PID {_process.Id} · {exe}");
+            process.BeginOutputReadLine();
+            process.BeginErrorReadLine();
+            _log(Name, $"PID {process.Id} · {exe}");
         }
         catch
         {
@@ -93,7 +124,125 @@ public sealed class ManagedProcess : IDisposable
         await Task.Delay(100, ct);
     }
 
+    private void LogStandardError(string line)
+    {
+        if (string.IsNullOrWhiteSpace(line))
+            return;
+
+        // ComfyUI/tqdm and some other CLIs use stderr for normal console output.
+        // Severity is inferred from content, never from stderr alone.
+        if (line.Contains("[INFO]", StringComparison.OrdinalIgnoreCase))
+        {
+            _log(Name, line);
+            return;
+        }
+
+        var isError =
+            ContainsAny(
+                line,
+                "[ERROR]",
+                "ERROR:",
+                "Traceback",
+                "Exception",
+                "RuntimeError",
+                "CUDA error",
+                "Prompt outputs failed validation",
+                "execution_error",
+                "fatal error",
+                " FATAL ");
+
+        if (isError)
+        {
+            _log(Name + " ✗", line);
+            return;
+        }
+
+        var isWarning =
+            ContainsAny(
+                line,
+                "[WARNING]",
+                "FutureWarning",
+                "RuntimeWarning",
+                "UserWarning",
+                "DeprecationWarning");
+
+        if (isWarning)
+        {
+            _log(Name + " ⚠", line);
+            return;
+        }
+
+        // ComfyUI/tqdm routinely emits ordinary progress on stderr.
+        // Other child processes keep a visible warning marker for unclassified stderr.
+        _log(
+            Name.Equals("ComfyUI", StringComparison.OrdinalIgnoreCase)
+                ? Name
+                : Name + " ⚠",
+            line);
+    }
+
+    private static bool ContainsAny(string text, params string[] needles) =>
+        needles.Any(x => text.Contains(x, StringComparison.OrdinalIgnoreCase));
+
+    private void LogProcessExit(Process process)
+    {
+        int pid = 0;
+        int? code = null;
+        try
+        {
+            pid = process.Id;
+            if (process.HasExited)
+                code = process.ExitCode;
+        }
+        catch
+        {
+        }
+
+        var expectedStop =
+            pid != 0 &&
+            pid == Volatile.Read(ref _expectedStopPid);
+
+        if (expectedStop)
+        {
+            _log(
+                Name,
+                code is null
+                    ? "Processus arrêté volontairement."
+                    : $"Processus arrêté volontairement (code {code}).");
+            Interlocked.CompareExchange(ref _expectedStopPid, 0, pid);
+            return;
+        }
+
+        if (code is null or 0)
+        {
+            _log(
+                Name,
+                code is null
+                    ? "Processus terminé."
+                    : "Processus terminé (code 0).");
+        }
+        else
+        {
+            _log(
+                Name + " ✗",
+                $"Processus terminé de façon inattendue (code {code}).");
+        }
+    }
+
     public async Task StopAsync(TimeSpan? grace = null)
+    {
+        await _lifecycleGate.WaitAsync();
+        try
+        {
+            await StopCoreAsync(grace);
+        }
+        finally
+        {
+            _lifecycleGate.Release();
+        }
+    }
+
+    private async Task StopCoreAsync(TimeSpan? grace)
     {
         var p = _process;
         if (p is null) return;
@@ -102,12 +251,16 @@ public sealed class ManagedProcess : IDisposable
         {
             if (!p.HasExited)
             {
+                Volatile.Write(ref _expectedStopPid, p.Id);
+
                 try
                 {
                     if (p.MainWindowHandle != IntPtr.Zero)
                         p.CloseMainWindow();
                 }
-                catch { }
+                catch
+                {
+                }
 
                 var until = DateTime.UtcNow + (grace ?? TimeSpan.FromSeconds(5));
                 while (!p.HasExited && DateTime.UtcNow < until)
@@ -121,19 +274,25 @@ public sealed class ManagedProcess : IDisposable
         }
         catch (Exception ex)
         {
-            _log(Name + " !", "Arrêt : " + ex.Message);
+            _log(Name + " ⚠", "Arrêt : " + ex.Message);
         }
         finally
         {
             p.Dispose();
-            _process = null;
+            if (ReferenceEquals(_process, p))
+                _process = null;
         }
     }
 
     public void Dispose()
     {
-        try { StopAsync(TimeSpan.FromSeconds(1)).GetAwaiter().GetResult(); }
-        catch { }
+        try
+        {
+            StopAsync(TimeSpan.FromSeconds(1)).GetAwaiter().GetResult();
+        }
+        catch
+        {
+        }
     }
 }
 

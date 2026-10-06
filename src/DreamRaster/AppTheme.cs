@@ -42,6 +42,7 @@ internal static class AppTheme
     public static readonly Color LogComfy = Color.FromArgb(255, 183, 93);
     public static readonly Color LogInstall = Color.FromArgb(255, 220, 115);
     public static readonly Color LogFlux = Color.FromArgb(200, 146, 255);
+    public static readonly Color LogVideo = Color.FromArgb(255, 142, 196);
     public static readonly Color LogGpu = Color.FromArgb(107, 220, 230);
     public static readonly Color LogUi = Color.FromArgb(126, 190, 255);
     public static readonly Color LogError = Color.FromArgb(255, 128, 140);

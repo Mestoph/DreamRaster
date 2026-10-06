@@ -144,6 +144,11 @@ public sealed class Flux2Generator
                     height,
                     isImgToImg);
 
+                ApplyConfiguredLora(
+                    workflow,
+                    _s.ImageLora,
+                    _s.ImageLoraStrength);
+
                 var seedValue =
                     seed is > 0
                         ? seed.Value
@@ -819,7 +824,7 @@ public sealed class Flux2Generator
             workflow,
             "CFGGuider",
             "cfg",
-            JsonValue.Create(1.0));
+            JsonValue.Create(Math.Clamp(_s.ImageCfg, 0.1, 20.0)));
 
         SetRequiredInput(
             workflow,
@@ -964,6 +969,68 @@ public sealed class Flux2Generator
 
         foreach (var inputs in nodes)
             inputs[inputName] = value?.DeepClone();
+    }
+
+    private void ApplyConfiguredLora(
+        JsonObject workflow,
+        string loraFile,
+        double strength)
+    {
+        if (string.IsNullOrWhiteSpace(loraFile))
+            return;
+
+        var fileName = Path.GetFileName(loraFile);
+        var loraPath = Path.Combine(
+            PortablePreflight.GetComfyRoot(_s),
+            "models",
+            "loras",
+            fileName);
+
+        if (!File.Exists(loraPath))
+        {
+            throw new FileNotFoundException(
+                "LoRA Image configuré mais introuvable dans ComfyUI/models/loras.",
+                loraPath);
+        }
+
+        var loaderId = RequireNodeId(workflow, "UNETLoader");
+        var loraId = NextNumericNodeId(workflow);
+
+        foreach (var entry in workflow.ToArray())
+        {
+            if (entry.Value is not JsonObject node ||
+                node["inputs"] is not JsonObject inputs ||
+                inputs["model"] is not JsonArray link ||
+                link.Count < 2)
+            {
+                continue;
+            }
+
+            var sourceId = link[0]?.GetValue<string>();
+            if (!string.Equals(sourceId, loaderId, StringComparison.Ordinal))
+                continue;
+
+            inputs["model"] = new JsonArray(
+                JsonValue.Create(loraId),
+                JsonValue.Create(0));
+        }
+
+        workflow[loraId] = new JsonObject
+        {
+            ["class_type"] = "LoraLoaderModelOnly",
+            ["inputs"] = new JsonObject
+            {
+                ["model"] = new JsonArray(
+                    JsonValue.Create(loaderId),
+                    JsonValue.Create(0)),
+                ["lora_name"] = JsonValue.Create(fileName),
+                ["strength_model"] = JsonValue.Create(Math.Clamp(strength, -2.0, 2.0))
+            }
+        };
+
+        _log(
+            "FLUX",
+            $"LoRA Image · {fileName} · force={Math.Clamp(strength, -2.0, 2.0):0.00}.");
     }
 
     private static bool TryGetComfyFailure(
