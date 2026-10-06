@@ -18,6 +18,9 @@ This page lists the external sources used by DreamRaster to install or update it
 | FLUX.2 Klein 4B FP8 | Modèle de génération / Generation model | https://huggingface.co/black-forest-labs/FLUX.2-klein-4b-fp8/resolve/main/flux-2-klein-4b-fp8.safetensors |
 | Qwen 3 4B text encoder | Encodeur de texte FLUX.2 / FLUX.2 text encoder | https://huggingface.co/Comfy-Org/flux2-klein/resolve/main/split_files/text_encoders/qwen_3_4b.safetensors |
 | FLUX.2 VAE | VAE FLUX.2 | https://huggingface.co/Comfy-Org/flux2-dev/resolve/main/split_files/vae/flux2-vae.safetensors |
+| Wan 2.1 T2V 1.3B FP16 | Modèle vidéo texte → vidéo / Text-to-video model | https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors?download=true |
+| Wan UMT5 XXL FP8 | Encodeur de texte vidéo / Video text encoder | https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors?download=true |
+| Wan 2.1 VAE | VAE vidéo / Video VAE | https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors?download=true |
 
 ## Qwen3-VL optionnel / Optional Qwen3-VL
 
@@ -88,7 +91,7 @@ DreamRaster uses the `curl.exe` supplied by Windows for large downloads. DreamRa
 
 ## Vérification / Verification
 
-Les modèles FLUX.2 intégrés au processus d'installation sont contrôlés par SHA-256 :
+Les modèles FLUX.2 et Wan intégrés au processus d'installation sont contrôlés par SHA-256 :
 
 ```text
 FLUX.2:
@@ -99,6 +102,15 @@ Text encoder:
 
 VAE:
 d64f3a68e1cc4f9f4e29b6e0da38a0204fe9a49f2d4053f0ec1fa1ca02f9c4b5
+
+Wan 2.1 T2V 1.3B FP16:
+be531024cd9018cb5b48c40cfbb6a6191645b1c792eb8bf4f8c1c6e10f924dc5
+
+Wan UMT5 XXL FP8:
+c3355d30191f1f066b26d93fba017ae9809dce6c627dda5f6a66eaa651204f68
+
+Wan 2.1 VAE:
+2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b
 ```
 
 ## Important

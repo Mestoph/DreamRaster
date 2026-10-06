@@ -1,0 +1,2 @@
+# Full YAML syntax validation for scripts/verify-local.py
+PyYAML>=6.0,<7.0
