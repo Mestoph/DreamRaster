@@ -1,4 +1,33 @@
 ﻿# Changelog — DreamRaster
+## 37.0.0 - Unified Image/Video catalog, LoRA and download experience
+
+- Unified the Image and Video workspaces so model, quality, style, negative prompt, LoRA, preview and history controls share the same layout behavior across compact and large windows.
+- Added catalog-backed Image and Video model selectors that keep compatible models visible even when they are not installed, with installed/downloadable/Hugging Face-gated states.
+- Added catalog-backed Image and Video LoRA selectors with configurable strength and support for anime, realism, sci-fi and adult/18+ entries.
+- Added explicit uncensored/18+ model and LoRA catalog metadata including direct download links, source pages and declared license information where available.
+- Added visible Download buttons beside non-installed models and LoRAs, file-size display, dedicated progress bars, cancellation and clear download errors.
+- Added cleanup of incomplete destination files and multi-curl fragments after failed or cancelled catalog downloads.
+- Added video prompt enhancement and kept Image/Video generation controls aligned while preserving advanced steps, CFG, sampler, scheduler and quality presets.
+- Added regression coverage for layout parity, catalog visibility, license metadata, download sizes, progress UI, cancellation cleanup and Video download-button visibility.
+- Promoted the application, assembly, file and release-tag version to 37.0.0.
+
+## 36.0.0 - Image/video workspace, Wan robustness and local model flexibility
+
+- Added wheel zoom and left-drag panning to the Image preview, with double-click reset.
+- Added Image and Video runtime model selectors plus local safetensors import and direct URL download with optional SHA256 verification; compatible third-party checkpoints can be added without replacing bundled defaults.
+- Added Video quality presets while retaining advanced Wan steps/CFG/shift/sampler/scheduler controls.
+- Added integrated video preview on history click, external opening on double-click, and a reorganized Video history inspired by the Image tab.
+- Added image-reference selection and rectangular crop tooling for video; Wan I2V checkpoints use a dedicated bundled Image-to-Video workflow when the required CLIP-Vision model is present.
+- Added VLM prompt extraction from imported/reference images in both Image and Video using the configured portable Vision model.
+- Added global Image/Video GPU UI locking so generation, benchmarks and vision extraction cannot collide.
+- Added MSTest regression coverage for Image/Video GPU locking and exact UI-state restoration after success, cancellation and timeout.
+- Fixed Wan cancellation and timeout by retaining ComfyUI prompt IDs, calling `/interrupt`, deleting queued prompts and cleaning intermediate latents.
+- Added a DreamRaster ComfyUI status/retry page instead of exposing raw `ERR_CONNECTION_REFUSED` browser pages, fixed the WebView2 `data:` navigation loop, and made generation wait for port 8188 even when the ComfyUI process is already starting.
+- Removed the Video-tab model installer button; model installation remains centralized in Installation.
+- Added color-coded categorized log tabs and reduced repeated WebView2 runtime log noise.
+- Added CLIP-Vision configuration for Wan I2V and bundled the Wan Image-to-Video API workflow.
+- Reworked Image/Video control spacing and aligned the 1.7B/4B comparison button.
+
 ## 35.0.3 - Memory safety, HD About artwork and log cleanup
 
 - Fixed the blurry About-tab artwork by embedding and displaying the full 1254x1254 AppIcon PNG instead of stretching the executable icon.

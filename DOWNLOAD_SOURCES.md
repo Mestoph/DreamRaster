@@ -21,6 +21,8 @@ This page lists the external sources used by DreamRaster to install or update it
 | Wan 2.1 T2V 1.3B FP16 | Modèle vidéo texte → vidéo / Text-to-video model | https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_t2v_1.3B_fp16.safetensors?download=true |
 | Wan UMT5 XXL FP8 | Encodeur de texte vidéo / Video text encoder | https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/text_encoders/umt5_xxl_fp8_e4m3fn_scaled.safetensors?download=true |
 | Wan 2.1 VAE | VAE vidéo / Video VAE | https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/vae/wan_2.1_vae.safetensors?download=true |
+| Wan CLIP-Vision H | Vision pour image → vidéo / Image-to-video vision encoder | https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/clip_vision/clip_vision_h.safetensors |
+| Wan 2.1 I2V 14B FP8 | Modèle image → vidéo / Image-to-video model | https://huggingface.co/Comfy-Org/Wan_2.1_ComfyUI_repackaged/resolve/main/split_files/diffusion_models/wan2.1_i2v_480p_14B_fp8_e4m3fn.safetensors?download=true |
 
 ## Qwen3-VL optionnel / Optional Qwen3-VL
 
@@ -111,6 +113,12 @@ c3355d30191f1f066b26d93fba017ae9809dce6c627dda5f6a66eaa651204f68
 
 Wan 2.1 VAE:
 2fc39d31359a4b0a64f55876d8ff7fa8d780956ae2cb13463b0223e15148976b
+
+Wan CLIP-Vision H:
+64a7ef761bfccbadbaa3da77366aac4185a6c58fa5de5f589b42a65bcc21f161
+
+Wan 2.1 I2V 14B FP8:
+0ca75338e7a47ca7cacddb7e626647e65829c497387f718ecb6ea0bae456944a
 ```
 
 ## Important

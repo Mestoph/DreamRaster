@@ -1,6 +1,6 @@
 # Repository layout — English
 
-v33 separates source code, scripts and documentation so the repository root stays clean.
+The layout introduced in v33 and retained in v37 separates source code, scripts, and documentation so the repository root stays clean.
 
 `src/DreamRaster/` contains the WinForms project only: `.cs`, `.resx`, `DreamRaster.csproj`, `Assets/`, and `Properties/PublishProfiles/`.
 
@@ -10,6 +10,6 @@ v33 separates source code, scripts and documentation so the repository root stay
 
 `scripts/common/` contains the shared PowerShell diagnostic engine.
 
-The NuGet cache remains at repository root under `.nuget/packages/`, even though the `.csproj` lives under `src/DreamRaster/`.
+The NuGet cache is generated at repository root under `.nuget/packages/`, even though the `.csproj` lives under `src/DreamRaster/`. It is reproducible with `dotnet restore` and should not be included in a source archive.
 
 `bin/` and `obj/` remain under `src/DreamRaster/` and are ignored by Git.

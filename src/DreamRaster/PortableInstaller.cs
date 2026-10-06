@@ -133,14 +133,10 @@ public sealed class PortableInstaller
                 "Qwen3-VL optionnel : téléchargement ignoré (désactivé dans Configuration).");
         }
 
-        var comfyRoot = PortablePreflight.GetComfyRoot(_s);
-        var flux = Path.Combine(comfyRoot, "models", "diffusion_models", _s.FluxModel);
-        var enc = Path.Combine(comfyRoot, "models", "text_encoders", _s.TextEncoderModel);
-        var vae = Path.Combine(comfyRoot, "models", "vae", _s.VaeModel);
-        if (!File.Exists(flux) || !File.Exists(enc) || !File.Exists(vae))
-            await InstallFluxModelsAsync(ct);
-        else
-            _log("Install", "Modèles FLUX.2 déjà présents : conservés.");
+        // "Installer / réparer tout" vérifie les fichiers existants par SHA256
+        // avant de décider s'il faut télécharger quoi que ce soit.
+        await InstallFluxModelsAsync(ct);
+        await InstallVideoModelsAsync(ct);
 
         if (PortablePaths.GetFixedWebView2RuntimePath() is null)
             await InstallWebView2FixedAsync(ct);
@@ -858,40 +854,90 @@ public sealed class PortableInstaller
         Directory.CreateDirectory(Path.GetDirectoryName(encoder)!);
         Directory.CreateDirectory(Path.GetDirectoryName(vae)!);
 
-        if (!File.Exists(model))
-            await DownloadAndVerifyAsync(
-                _s.VideoModelUrl,
-                model,
-                _s.VideoModelSha256,
-                2,
-                34,
-                ct);
-        else
-            _log("Install", "Modèle vidéo Wan déjà présent : " + Path.GetFileName(model));
-
-        if (!File.Exists(encoder))
-            await DownloadAndVerifyAsync(
-                _s.VideoTextEncoderUrl,
-                encoder,
-                _s.VideoTextEncoderSha256,
-                34,
-                92,
-                ct);
-        else
-            _log("Install", "Encodeur vidéo UMT5 déjà présent : " + Path.GetFileName(encoder));
-
-        if (!File.Exists(vae))
-            await DownloadAndVerifyAsync(
-                _s.VideoVaeUrl,
-                vae,
-                _s.VideoVaeSha256,
-                92,
-                100,
-                ct);
-        else
-            _log("Install", "VAE vidéo Wan déjà présent : " + Path.GetFileName(vae));
+        await EnsureDownloadedAndVerifiedAsync(
+            _s.VideoModelUrl, model, _s.VideoModelSha256, 2, 34, ct);
+        await EnsureDownloadedAndVerifiedAsync(
+            _s.VideoTextEncoderUrl, encoder, _s.VideoTextEncoderSha256, 34, 92, ct);
+        await EnsureDownloadedAndVerifiedAsync(
+            _s.VideoVaeUrl, vae, _s.VideoVaeSha256, 92, 100, ct);
 
         Progress(100, "Modèles vidéo Wan installés et vérifiés.");
+    }
+
+    public async Task EnsureExternalModelAsync(
+        string url,
+        string path,
+        string expectedSha256,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(expectedSha256) ||
+            expectedSha256.Length != 64 ||
+            expectedSha256.Any(c => !Uri.IsHexDigit(c)))
+        {
+            throw new InvalidOperationException(
+                "Le SHA256 du modèle officiel est invalide ou absent.");
+        }
+
+        await EnsureDownloadedAndVerifiedAsync(
+            url,
+            path,
+            expectedSha256,
+            0,
+            100,
+            ct);
+    }
+
+    public async Task<string> DownloadExternalModelAsync(
+        string url,
+        string path,
+        string? expectedSha256,
+        CancellationToken ct)
+    {
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != Uri.UriSchemeHttps &&
+             uri.Scheme != Uri.UriSchemeHttp))
+        {
+            throw new InvalidOperationException(
+                "L'URL du modèle doit être une URL HTTP/HTTPS valide.");
+        }
+
+        var sha = expectedSha256?.Trim() ?? string.Empty;
+        if (sha.Length > 0 &&
+            (sha.Length != 64 ||
+             sha.Any(c => !Uri.IsHexDigit(c))))
+        {
+            throw new InvalidOperationException(
+                "Le SHA256 optionnel doit contenir exactement 64 caractères hexadécimaux.");
+        }
+
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        if (File.Exists(path))
+            File.Delete(path);
+
+        Progress(0, "Téléchargement modèle tiers : " + Path.GetFileName(path));
+        await DownloadAsync(url, path, 0, 94, ct);
+
+        Progress(95, "Calcul SHA256 : " + Path.GetFileName(path));
+        var actual = await Sha256Async(path, ct);
+
+        if (sha.Length > 0 &&
+            !actual.Equals(sha, StringComparison.OrdinalIgnoreCase))
+        {
+            try { File.Delete(path); } catch { }
+
+            throw new InvalidOperationException(
+                $"SHA256 invalide pour {Path.GetFileName(path)}.\n" +
+                $"Attendu : {sha}\nObtenu : {actual}");
+        }
+
+        _log(
+            "Install",
+            sha.Length > 0
+                ? $"SHA256 OK · modèle tiers : {Path.GetFileName(path)}"
+                : $"Modèle tiers téléchargé · SHA256 {actual} · {Path.GetFileName(path)}");
+
+        Progress(100, "Modèle tiers téléchargé et vérifié.");
+        return actual;
     }
 
     public async Task InstallFluxModelsAsync(CancellationToken ct)
@@ -905,9 +951,37 @@ public sealed class PortableInstaller
         Directory.CreateDirectory(Path.GetDirectoryName(enc)!);
         Directory.CreateDirectory(Path.GetDirectoryName(vae)!);
 
-        await DownloadAndVerifyAsync(_s.FluxModelUrl, flux, _s.FluxSha256, 70, 82, ct);
-        await DownloadAndVerifyAsync(_s.TextEncoderUrl, enc, _s.TextEncoderSha256, 82, 96, ct);
-        await DownloadAndVerifyAsync(_s.VaeUrl, vae, _s.VaeSha256, 96, 99, ct);
+        await EnsureDownloadedAndVerifiedAsync(
+            _s.FluxModelUrl, flux, _s.FluxSha256, 70, 82, ct);
+        await EnsureDownloadedAndVerifiedAsync(
+            _s.TextEncoderUrl, enc, _s.TextEncoderSha256, 82, 96, ct);
+        await EnsureDownloadedAndVerifiedAsync(
+            _s.VaeUrl, vae, _s.VaeSha256, 96, 99, ct);
+    }
+
+    private async Task EnsureDownloadedAndVerifiedAsync(
+        string url,
+        string path,
+        string sha,
+        int start,
+        int end,
+        CancellationToken ct)
+    {
+        if (File.Exists(path))
+        {
+            Progress(start, "Vérification SHA256 : " + Path.GetFileName(path));
+            var existing = await Sha256Async(path, ct);
+            if (existing.Equals(sha, StringComparison.OrdinalIgnoreCase))
+            {
+                _log("Install", $"SHA256 OK · fichier existant conservé : {Path.GetFileName(path)}");
+                return;
+            }
+
+            _log("Install ⚠", $"SHA256 invalide · retéléchargement : {Path.GetFileName(path)}");
+            try { File.Delete(path); } catch { }
+        }
+
+        await DownloadAndVerifyAsync(url, path, sha, start, end, ct);
     }
 
     private async Task DownloadAndVerifyAsync(

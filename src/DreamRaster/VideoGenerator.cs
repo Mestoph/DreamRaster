@@ -28,6 +28,9 @@ public sealed class VideoGenerator
         Timeout = TimeSpan.FromSeconds(30)
     };
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly SemaphoreSlim _promptCancelGate = new(1, 1);
+    private readonly object _promptSync = new();
+    private string? _activePromptId;
 
     public event Action<int, string>? ProgressChanged;
 
@@ -46,10 +49,12 @@ public sealed class VideoGenerator
     public IReadOnlyList<(string Label, string Path)> GetMissingModels()
     {
         var root = PortablePreflight.GetComfyRoot(_s);
-        var checks = new[]
+        var checks = new List<(string Label, string Path)>
         {
             (
-                "Wan 2.1 T2V 1.3B",
+                IsImageToVideoModel(_s.VideoModel)
+                    ? "Wan 2.1 I2V"
+                    : "Wan 2.1 T2V",
                 Path.Combine(
                     root,
                     "models",
@@ -71,11 +76,26 @@ public sealed class VideoGenerator
                     _s.VideoVaeModel))
         };
 
+        if (IsImageToVideoModel(_s.VideoModel))
+        {
+            checks.Add(
+                (
+                    "CLIP Vision Wan",
+                    Path.Combine(
+                        root,
+                        "models",
+                        "clip_vision",
+                        _s.VideoClipVisionModel)));
+        }
+
         return checks
-            .Where(x => !File.Exists(x.Item2))
-            .Select(x => (x.Item1, x.Item2))
+            .Where(x => !File.Exists(x.Path))
             .ToArray();
     }
+
+    public static bool IsImageToVideoModel(string modelName) =>
+        !string.IsNullOrWhiteSpace(modelName) &&
+        modelName.Contains("i2v", StringComparison.OrdinalIgnoreCase);
 
     public async Task<VideoGenerationResult> GenerateAsync(
         string prompt,
@@ -85,7 +105,8 @@ public sealed class VideoGenerator
         int frames,
         double fps,
         int steps,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? referenceImagePath = null)
     {
         if (!await _gate.WaitAsync(0, ct))
         {
@@ -95,8 +116,21 @@ public sealed class VideoGenerator
                 "Une génération vidéo est déjà en cours.");
         }
 
+        string? comfyReferenceInputPath = null;
+
         try
         {
+            var isImageToVideo = IsImageToVideoModel(_s.VideoModel);
+            if (isImageToVideo &&
+                (string.IsNullOrWhiteSpace(referenceImagePath) ||
+                 !File.Exists(referenceImagePath)))
+            {
+                return new(
+                    false,
+                    null,
+                    "Le modèle Wan I2V sélectionné exige une image de référence valide.");
+            }
+
             var missing = GetMissingModels();
             if (missing.Count > 0)
             {
@@ -130,7 +164,9 @@ public sealed class VideoGenerator
 
             var workflowPath = Path.Combine(
                 PortablePaths.WorkflowsDir,
-                PortablePaths.WanTextToVideoWorkflowFile);
+                isImageToVideo
+                    ? PortablePaths.WanImageToVideoWorkflowFile
+                    : PortablePaths.WanTextToVideoWorkflowFile);
 
             if (!File.Exists(workflowPath))
             {
@@ -146,6 +182,76 @@ public sealed class VideoGenerator
                 ?.AsObject()
                 ?? throw new InvalidDataException(
                     "Workflow vidéo Wan JSON invalide.");
+
+            if (isImageToVideo)
+            {
+                var comfyRoot = PortablePreflight.GetComfyRoot(_s);
+                var inputRoot = Path.Combine(comfyRoot, "input");
+                Directory.CreateDirectory(inputRoot);
+
+                var extension = Path.GetExtension(referenceImagePath!);
+                if (string.IsNullOrWhiteSpace(extension))
+                    extension = ".png";
+
+                var inputName =
+                    "DreamRaster_WAN_I2V_" +
+                    Guid.NewGuid().ToString("N") +
+                    extension;
+
+                comfyReferenceInputPath =
+                    Path.Combine(
+                        inputRoot,
+                        inputName);
+
+                File.Copy(
+                    referenceImagePath!,
+                    comfyReferenceInputPath,
+                    overwrite: true);
+
+                SetInput(
+                    workflow,
+                    "LoadImage",
+                    "image",
+                    JsonValue.Create(inputName));
+
+                SetInput(
+                    workflow,
+                    "CLIPVisionLoader",
+                    "clip_name",
+                    JsonValue.Create(_s.VideoClipVisionModel));
+
+                SetInputById(
+                    workflow,
+                    "6",
+                    "text",
+                    JsonValue.Create(prompt));
+                SetInputById(
+                    workflow,
+                    "7",
+                    "text",
+                    JsonValue.Create(negativePrompt));
+
+                SetInput(
+                    workflow,
+                    "WanImageToVideo",
+                    "width",
+                    JsonValue.Create(width));
+                SetInput(
+                    workflow,
+                    "WanImageToVideo",
+                    "height",
+                    JsonValue.Create(height));
+                SetInput(
+                    workflow,
+                    "WanImageToVideo",
+                    "length",
+                    JsonValue.Create(frames));
+                SetInput(
+                    workflow,
+                    "WanImageToVideo",
+                    "batch_size",
+                    JsonValue.Create(1));
+            }
 
             SetInput(
                 workflow,
@@ -180,50 +286,62 @@ public sealed class VideoGenerator
                 "vae_name",
                 JsonValue.Create(_s.VideoVaeModel));
 
-            SetInputById(
-                workflow,
-                "4",
-                "text",
-                JsonValue.Create(prompt));
-            SetInputById(
-                workflow,
-                "5",
-                "text",
-                JsonValue.Create(negativePrompt));
+            if (!isImageToVideo)
+            {
+                SetInputById(
+                    workflow,
+                    "4",
+                    "text",
+                    JsonValue.Create(prompt));
+                SetInputById(
+                    workflow,
+                    "5",
+                    "text",
+                    JsonValue.Create(negativePrompt));
 
-            SetInput(
-                workflow,
-                "EmptyHunyuanLatentVideo",
-                "width",
-                JsonValue.Create(width));
-            SetInput(
-                workflow,
-                "EmptyHunyuanLatentVideo",
-                "height",
-                JsonValue.Create(height));
-            SetInput(
-                workflow,
-                "EmptyHunyuanLatentVideo",
-                "length",
-                JsonValue.Create(frames));
-            SetInput(
-                workflow,
-                "EmptyHunyuanLatentVideo",
-                "batch_size",
-                JsonValue.Create(1));
+                SetInput(
+                    workflow,
+                    "EmptyHunyuanLatentVideo",
+                    "width",
+                    JsonValue.Create(width));
+                SetInput(
+                    workflow,
+                    "EmptyHunyuanLatentVideo",
+                    "height",
+                    JsonValue.Create(height));
+                SetInput(
+                    workflow,
+                    "EmptyHunyuanLatentVideo",
+                    "length",
+                    JsonValue.Create(frames));
+                SetInput(
+                    workflow,
+                    "EmptyHunyuanLatentVideo",
+                    "batch_size",
+                    JsonValue.Create(1));
+            }
 
             SetInput(
                 workflow,
                 "ModelSamplingSD3",
                 "shift",
-                JsonValue.Create(8.0));
+                JsonValue.Create(Math.Clamp(_s.VideoSamplingShift, 0.0, 20.0)));
+
+            var videoSeed = _s.UseRandomVideoSeed
+                ? Random.Shared.NextInt64(1, long.MaxValue)
+                : Math.Max(1L, _s.VideoSeed);
+
+            _log(
+                "Video",
+                $"Wan paramètres · {width}x{height} · {frames} frames · {fps:0.##} FPS · " +
+                $"{steps} steps · CFG {_s.VideoCfg:0.##} · shift {_s.VideoSamplingShift:0.##} · " +
+                $"sampler={_s.VideoSampler} · scheduler={_s.VideoScheduler} · seed={videoSeed}.");
 
             SetInput(
                 workflow,
                 "KSampler",
                 "seed",
-                JsonValue.Create(
-                    Random.Shared.NextInt64(1, long.MaxValue)));
+                JsonValue.Create(videoSeed));
             SetInput(
                 workflow,
                 "KSampler",
@@ -233,17 +351,17 @@ public sealed class VideoGenerator
                 workflow,
                 "KSampler",
                 "cfg",
-                JsonValue.Create(6.0));
+                JsonValue.Create(Math.Clamp(_s.VideoCfg, 1.0, 20.0)));
             SetInput(
                 workflow,
                 "KSampler",
                 "sampler_name",
-                JsonValue.Create("uni_pc"));
+                JsonValue.Create(string.IsNullOrWhiteSpace(_s.VideoSampler) ? "uni_pc" : _s.VideoSampler));
             SetInput(
                 workflow,
                 "KSampler",
                 "scheduler",
-                JsonValue.Create("simple"));
+                JsonValue.Create(string.IsNullOrWhiteSpace(_s.VideoScheduler) ? "simple" : _s.VideoScheduler));
             SetInput(
                 workflow,
                 "KSampler",
@@ -255,6 +373,11 @@ public sealed class VideoGenerator
                 "CreateVideo",
                 "fps",
                 JsonValue.Create(fps));
+
+            ApplyConfiguredLora(
+                workflow,
+                _s.VideoLora,
+                _s.VideoLoraStrength);
 
             var prefix =
                 "video/DreamRaster_WAN_" +
@@ -270,7 +393,12 @@ public sealed class VideoGenerator
                 workflow,
                 "SaveVideo",
                 "format",
-                JsonValue.Create("auto"));
+                JsonValue.Create("mp4"));
+            SetInput(
+                workflow,
+                "SaveVideo",
+                "codec",
+                JsonValue.Create("h264"));
 
             Progress(
                 12,
@@ -312,6 +440,11 @@ public sealed class VideoGenerator
                 true,
                 destination);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            _log("Video", "Génération vidéo annulée.");
+            throw;
+        }
         catch (Exception ex)
         {
             _log("Video !", ex.Message);
@@ -319,6 +452,18 @@ public sealed class VideoGenerator
         }
         finally
         {
+            if (!string.IsNullOrWhiteSpace(comfyReferenceInputPath))
+            {
+                try
+                {
+                    if (File.Exists(comfyReferenceInputPath))
+                        File.Delete(comfyReferenceInputPath);
+                }
+                catch
+                {
+                }
+            }
+
             _gate.Release();
         }
     }
@@ -345,6 +490,7 @@ public sealed class VideoGenerator
 
         string? latentOutputPath = null;
         string? latentInputPath = null;
+        string? latentOutputFilePrefix = null;
 
         try
         {
@@ -353,12 +499,28 @@ public sealed class VideoGenerator
                     .DeepClone()
                     .AsObject();
 
-            RemoveNodesByClassType(
-                phase1,
-                "VAELoader",
-                "VAEDecode",
-                "CreateVideo",
-                "SaveVideo");
+            var phase1UsesVaeConditioning =
+                FindNodeId(
+                    phase1,
+                    "WanImageToVideo") is not null;
+
+            if (phase1UsesVaeConditioning)
+            {
+                RemoveNodesByClassType(
+                    phase1,
+                    "VAEDecode",
+                    "CreateVideo",
+                    "SaveVideo");
+            }
+            else
+            {
+                RemoveNodesByClassType(
+                    phase1,
+                    "VAELoader",
+                    "VAEDecode",
+                    "CreateVideo",
+                    "SaveVideo");
+            }
 
             var samplerId =
                 RequireNodeId(
@@ -368,6 +530,10 @@ public sealed class VideoGenerator
             var saveLatentId =
                 NextNumericNodeId(
                     phase1);
+
+            latentOutputFilePrefix =
+                "DreamRaster_WAN_intermediate_" +
+                Guid.NewGuid().ToString("N");
 
             phase1[saveLatentId] =
                 new JsonObject
@@ -384,9 +550,8 @@ public sealed class VideoGenerator
                                     JsonValue.Create(0)),
                             ["filename_prefix"] =
                                 JsonValue.Create(
-                                    "latents/DreamRaster_WAN_intermediate_" +
-                                    Guid.NewGuid()
-                                        .ToString("N"))
+                                    "latents/" +
+                                    latentOutputFilePrefix)
                         }
                 };
 
@@ -528,7 +693,9 @@ public sealed class VideoGenerator
                                         JsonValue.Create(
                                             videoPrefix),
                                     ["format"] =
-                                        JsonValue.Create("auto")
+                                        JsonValue.Create("mp4"),
+                                    ["codec"] =
+                                        JsonValue.Create("h264")
                                 }
                         }
                 };
@@ -572,7 +739,50 @@ public sealed class VideoGenerator
                 {
                 }
             }
+
+            // Si l'annulation/timeout survient juste après SaveLatent mais avant
+            // la récupération de son chemin dans l'historique, supprimer quand
+            // même l'artefact intermédiaire identifié par son préfixe unique.
+            if (!string.IsNullOrWhiteSpace(latentOutputFilePrefix))
+            {
+                try
+                {
+                    var latentDir =
+                        Path.Combine(
+                            outputRoot,
+                            "latents");
+
+                    if (Directory.Exists(latentDir))
+                    {
+                        foreach (var orphan in
+                                 Directory.EnumerateFiles(
+                                     latentDir,
+                                     latentOutputFilePrefix + "*.latent"))
+                        {
+                            File.Delete(orphan);
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
         }
+    }
+
+    public async Task CancelActivePromptAsync()
+    {
+        string? promptId;
+
+        lock (_promptSync)
+            promptId = _activePromptId;
+
+        if (string.IsNullOrWhiteSpace(promptId))
+            return;
+
+        await CancelComfyPromptAsync(
+            promptId,
+            "annulation utilisateur");
     }
 
     private async Task<JsonElement> QueueWorkflowAndWaitAsync(
@@ -583,6 +793,8 @@ public sealed class VideoGenerator
         string progressText,
         CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
+
         var body =
             JsonSerializer.Serialize(
                 new
@@ -593,6 +805,13 @@ public sealed class VideoGenerator
                             .ToString()
                 });
 
+        // Ne pas utiliser le token utilisateur pendant la très courte soumission :
+        // si l'utilisateur annule juste après POST /prompt, il faut récupérer le
+        // prompt_id afin de pouvoir interrompre le job ComfyUI au lieu de l'orpheliner.
+        using var submitCts =
+            new CancellationTokenSource(
+                TimeSpan.FromSeconds(15));
+
         using var response =
             await _http.PostAsync(
                 $"http://127.0.0.1:{_s.ComfyPort}/prompt",
@@ -600,11 +819,12 @@ public sealed class VideoGenerator
                     body,
                     Encoding.UTF8,
                     "application/json"),
-                ct);
+                submitCts.Token);
 
         var raw =
             await response.Content
-                .ReadAsStringAsync(ct);
+                .ReadAsStringAsync(
+                    submitCts.Token);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -622,62 +842,204 @@ public sealed class VideoGenerator
             ?? throw new InvalidOperationException(
                 "prompt_id vidéo absent.");
 
-        var deadline =
-            DateTime.UtcNow + timeout;
-        var progress =
-            progressStart;
+        SetActivePromptId(promptId);
 
-        while (DateTime.UtcNow < deadline)
+        try
         {
             ct.ThrowIfCancellationRequested();
 
-            using var historyDoc =
-                JsonDocument.Parse(
-                    await _http.GetStringAsync(
-                        $"http://127.0.0.1:{_s.ComfyPort}/history/{promptId}",
-                        ct));
+            var deadline =
+                DateTime.UtcNow + timeout;
+            var progress =
+                progressStart;
 
-            if (historyDoc.RootElement.TryGetProperty(
-                    promptId,
-                    out var job))
+            while (DateTime.UtcNow < deadline)
             {
-                if (TryGetFailure(
-                        job,
-                        out var error))
+                ct.ThrowIfCancellationRequested();
+
+                using var historyDoc =
+                    JsonDocument.Parse(
+                        await _http.GetStringAsync(
+                            $"http://127.0.0.1:{_s.ComfyPort}/history/{promptId}",
+                            ct));
+
+                if (historyDoc.RootElement.TryGetProperty(
+                        promptId,
+                        out var job))
                 {
-                    throw new InvalidOperationException(
-                        error);
+                    if (TryGetFailure(
+                            job,
+                            out var error))
+                    {
+                        throw new InvalidOperationException(
+                            error);
+                    }
+
+                    if (job.TryGetProperty(
+                            "status",
+                            out var status) &&
+                        status.TryGetProperty(
+                            "completed",
+                            out var completed) &&
+                        completed.ValueKind ==
+                            JsonValueKind.True)
+                    {
+                        return job.Clone();
+                    }
                 }
 
-                if (job.TryGetProperty(
-                        "status",
-                        out var status) &&
-                    status.TryGetProperty(
-                        "completed",
-                        out var completed) &&
-                    completed.ValueKind ==
-                        JsonValueKind.True)
-                {
-                    return job.Clone();
-                }
+                progress =
+                    Math.Min(
+                        progressEnd,
+                        progress + 1);
+
+                Progress(
+                    progress,
+                    progressText);
+
+                await Task.Delay(
+                    1000,
+                    ct);
             }
 
-            progress =
-                Math.Min(
-                    progressEnd,
-                    progress + 1);
+            await CancelComfyPromptAsync(
+                promptId,
+                "timeout");
 
-            Progress(
-                progress,
-                progressText);
-
-            await Task.Delay(
-                1000,
-                ct);
+            throw new TimeoutException(
+                "Timeout ComfyUI pendant la génération vidéo ; " +
+                "le job a été interrompu et retiré de la file.");
         }
+        catch (OperationCanceledException)
+            when (ct.IsCancellationRequested)
+        {
+            if (IsActivePrompt(promptId))
+            {
+                await CancelComfyPromptAsync(
+                    promptId,
+                    "annulation utilisateur");
+            }
 
-        throw new TimeoutException(
-            "Timeout ComfyUI pendant la génération vidéo.");
+            throw;
+        }
+        finally
+        {
+            ClearActivePromptId(promptId);
+        }
+    }
+
+    private void SetActivePromptId(string promptId)
+    {
+        lock (_promptSync)
+            _activePromptId = promptId;
+    }
+
+    private bool IsActivePrompt(string promptId)
+    {
+        lock (_promptSync)
+        {
+            return string.Equals(
+                _activePromptId,
+                promptId,
+                StringComparison.Ordinal);
+        }
+    }
+
+    private void ClearActivePromptId(string promptId)
+    {
+        lock (_promptSync)
+        {
+            if (string.Equals(
+                    _activePromptId,
+                    promptId,
+                    StringComparison.Ordinal))
+            {
+                _activePromptId = null;
+            }
+        }
+    }
+
+    private async Task<bool> CancelComfyPromptAsync(
+        string promptId,
+        string reason)
+    {
+        await _promptCancelGate.WaitAsync();
+
+        try
+        {
+            // Le bouton Annuler et le catch du token peuvent arriver presque
+            // simultanément. Une seule séquence HTTP doit être envoyée.
+            if (!IsActivePrompt(promptId))
+                return true;
+
+            var interruptOk =
+                await PostComfyCancellationCommandAsync(
+                    "/interrupt",
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            prompt_id = promptId
+                        }));
+
+            var dequeueOk =
+                await PostComfyCancellationCommandAsync(
+                    "/queue",
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            delete =
+                                new[]
+                                {
+                                    promptId
+                                }
+                        }));
+
+            _log(
+                "ComfyUI",
+                $"Prompt vidéo {reason} · id={promptId} · " +
+                $"interrupt={(interruptOk ? "OK" : "échec")} · " +
+                $"retrait file={(dequeueOk ? "OK" : "échec")}.");
+
+            var ok =
+                interruptOk &&
+                dequeueOk;
+
+            if (ok)
+                ClearActivePromptId(promptId);
+
+            return ok;
+        }
+        finally
+        {
+            _promptCancelGate.Release();
+        }
+    }
+
+    private async Task<bool> PostComfyCancellationCommandAsync(
+        string route,
+        string body)
+    {
+        try
+        {
+            using var timeoutCts =
+                new CancellationTokenSource(
+                    TimeSpan.FromSeconds(5));
+
+            using var response =
+                await _http.PostAsync(
+                    $"http://127.0.0.1:{_s.ComfyPort}{route}",
+                    new StringContent(
+                        body,
+                        Encoding.UTF8,
+                        "application/json"),
+                    timeoutCts.Token);
+
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private async Task FreeComfyModelsAsync(
@@ -798,6 +1160,27 @@ public sealed class VideoGenerator
         return null;
     }
 
+    private static string? FindNodeId(
+        JsonObject workflow,
+        string classType)
+    {
+        foreach (var entry in workflow)
+        {
+            if (entry.Value is not JsonObject node)
+                continue;
+
+            if (string.Equals(
+                    node["class_type"]?.GetValue<string>(),
+                    classType,
+                    StringComparison.Ordinal))
+            {
+                return entry.Key;
+            }
+        }
+
+        return null;
+    }
+
     private static string RequireNodeId(
         JsonObject workflow,
         string classType)
@@ -858,6 +1241,68 @@ public sealed class VideoGenerator
 
         foreach (var key in remove)
             workflow.Remove(key);
+    }
+
+    private void ApplyConfiguredLora(
+        JsonObject workflow,
+        string loraFile,
+        double strength)
+    {
+        if (string.IsNullOrWhiteSpace(loraFile))
+            return;
+
+        var fileName = Path.GetFileName(loraFile);
+        var loraPath = Path.Combine(
+            PortablePreflight.GetComfyRoot(_s),
+            "models",
+            "loras",
+            fileName);
+
+        if (!File.Exists(loraPath))
+        {
+            throw new FileNotFoundException(
+                "LoRA Vidéo configuré mais introuvable dans ComfyUI/models/loras.",
+                loraPath);
+        }
+
+        var loaderId = RequireNodeId(workflow, "UNETLoader");
+        var loraId = NextNumericNodeId(workflow);
+
+        foreach (var entry in workflow.ToArray())
+        {
+            if (entry.Value is not JsonObject node ||
+                node["inputs"] is not JsonObject inputs ||
+                inputs["model"] is not JsonArray link ||
+                link.Count < 2)
+            {
+                continue;
+            }
+
+            var sourceId = link[0]?.GetValue<string>();
+            if (!string.Equals(sourceId, loaderId, StringComparison.Ordinal))
+                continue;
+
+            inputs["model"] = new JsonArray(
+                JsonValue.Create(loraId),
+                JsonValue.Create(0));
+        }
+
+        workflow[loraId] = new JsonObject
+        {
+            ["class_type"] = "LoraLoaderModelOnly",
+            ["inputs"] = new JsonObject
+            {
+                ["model"] = new JsonArray(
+                    JsonValue.Create(loaderId),
+                    JsonValue.Create(0)),
+                ["lora_name"] = JsonValue.Create(fileName),
+                ["strength_model"] = JsonValue.Create(Math.Clamp(strength, -2.0, 2.0))
+            }
+        };
+
+        _log(
+            "Video",
+            $"LoRA Vidéo · {fileName} · force={Math.Clamp(strength, -2.0, 2.0):0.00}.");
     }
 
     private static void SetInput(

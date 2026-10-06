@@ -12,6 +12,7 @@ EN: Structural comments are bilingual. API, class and protocol names remain in t
     technical form to keep the code readable and compatible.
 */
 
+using System.ComponentModel;
 using System.Net;
 using System.Net.WebSockets;
 using System.Net.Sockets;
@@ -179,14 +180,19 @@ public sealed class LocalProxyServer : IAsyncDisposable
                 SocketError.ConnectionReset or
                 SocketError.NetworkReset or
                 SocketError.Shutdown or
+                SocketError.NotConnected or
                 SocketError.NotSocket;
         }
 
         if (ex is HttpListenerException listener)
         {
-            // 995 = operation aborted, 64 = network name unavailable.
-            return listener.ErrorCode is 995 or 64;
+            // 995 = operation aborted, 64 = network name unavailable,
+            // 1229 = ERROR_CONNECTION_INVALID (browser/network peer disconnected).
+            return listener.ErrorCode is 995 or 64 or 1229;
         }
+
+        if (ex is Win32Exception win32 && win32.NativeErrorCode == 1229)
+            return true;
 
         return ex.InnerException is not null &&
                IsExpectedDisconnect(ex.InnerException, ct);

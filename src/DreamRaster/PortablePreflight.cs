@@ -155,12 +155,22 @@ public static class PortablePreflight
         try
         {
             using var c = new TcpClient();
-            var task = c.ConnectAsync("127.0.0.1", port);
-            if (await Task.WhenAny(task, Task.Delay(250)) != task)
-                return (false, null, null);
-            await task;
+            using var timeout = new CancellationTokenSource(
+                TimeSpan.FromMilliseconds(250));
+
+            await c.ConnectAsync(
+                "127.0.0.1",
+                port,
+                timeout.Token);
         }
-        catch { return (false, null, null); }
+        catch (OperationCanceledException)
+        {
+            return (false, null, null);
+        }
+        catch (SocketException)
+        {
+            return (false, null, null);
+        }
 
         try
         {
@@ -210,6 +220,7 @@ public static class PortablePreflight
         throw new InvalidOperationException(
             $"{label} ne sera pas démarré : le port {port} est déjà utilisé par {where}.\n\n" +
             $"PID : {info.Pid?.ToString() ?? "?"}\nChemin : {owner}\n\n" +
-            "L'application n'utilise volontairement aucune installation système.");
+            "DreamRaster n'utilise volontairement aucune installation système.\n" +
+            "Fermez le processus externe, ou choisissez un autre port dans l'onglet Configuration puis enregistrez.");
     }
 }

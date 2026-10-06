@@ -47,8 +47,12 @@ public static class AnsiLogRenderer
     private static Color SourceColor(string source)
     {
         if (source.Contains("!", StringComparison.OrdinalIgnoreCase) ||
+            source.Contains("✗", StringComparison.Ordinal) ||
             source.StartsWith("ERREUR", StringComparison.OrdinalIgnoreCase))
             return AppTheme.LogError;
+
+        if (source.Contains("⚠", StringComparison.Ordinal))
+            return AppTheme.WarningHover;
 
         if (source.StartsWith("OpenCode", StringComparison.OrdinalIgnoreCase) ||
             source.StartsWith("Proxy", StringComparison.OrdinalIgnoreCase) ||
