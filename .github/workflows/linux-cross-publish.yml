@@ -40,7 +40,7 @@ jobs:
 
       - name: Cross publish
         shell: bash
-        run: ./scripts/linux/publish-windows.sh
+        run: bash ./scripts/linux/publish-windows.sh
 
       - name: Verify single EXE
         shell: bash
@@ -53,4 +53,5 @@ jobs:
             find "$OUT" -maxdepth 1 -type f -print
             exit 1
           fi
+
 
