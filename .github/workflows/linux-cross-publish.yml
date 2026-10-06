@@ -16,6 +16,9 @@ concurrency:
   group: linux-cross-publish-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+
 jobs:
   publish-win-x64:
     name: Publish Windows EXE from Linux
@@ -50,3 +53,4 @@ jobs:
             find "$OUT" -maxdepth 1 -type f -print
             exit 1
           fi
+

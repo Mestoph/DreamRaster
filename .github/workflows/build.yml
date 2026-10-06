@@ -14,6 +14,9 @@ concurrency:
   group: build-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+
 jobs:
   verify-sources:
     name: Verify repository
@@ -133,3 +136,4 @@ jobs:
           --no-restore
           --nologo
           -p:EnableWindowsTargeting=true
+
