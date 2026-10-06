@@ -1,6 +1,6 @@
 # Structure du dépôt — Français
 
-La structure introduite en v33 et conservée en v37 sépare le code, les scripts et la documentation afin d'éviter une racine encombrée.
+La structure introduite en v33 et conservée en v38 sépare le code, les scripts et la documentation afin d'éviter une racine encombrée.
 
 ```text
 src/DreamRaster/

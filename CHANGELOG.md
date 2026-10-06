@@ -1,4 +1,17 @@
 ﻿# Changelog — DreamRaster
+## 38.0.0 - UI polish, categorized configuration and optional technical tabs
+
+- Promoted DreamRaster application, assembly, file and release-tag version to 38.0.0.
+- Kept OpenCode and ComfyUI hidden by default while preserving optional permanent display through Configuration and temporary Dashboard access.
+- Kept Image and Video editors usable when required models/backends are missing; only generation actions are blocked.
+- Completed automatic persistence for Image/Video generation settings directly from their own tabs without duplicating creative settings in Configuration.
+- Reworked the Dashboard with machine, RAM and storage/free-space information.
+- Added consistent dark-theme borders and aligned model/style/LoRA rows across Image and Video.
+- Added visual section frames around prompt/source, generation, model/preset, preview/output and history areas without introducing overlapping WinForms controls.
+- Reorganized Configuration into framed categories for portable location, local services, Image models, Video models, resources/downloads, preferences/updates and technical interfaces.
+- Hardened GPU UI restoration so internal WinForms children such as NumericUpDown UpDownEdit are never restored independently.
+- Added v38 regression coverage for categorized Configuration and Image/Video header alignment.
+
 ## 37.0.0 - Unified Image/Video catalog, LoRA and download experience
 
 - Unified the Image and Video workspaces so model, quality, style, negative prompt, LoRA, preview and history controls share the same layout behavior across compact and large windows.

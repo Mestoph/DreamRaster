@@ -1409,6 +1409,7 @@ public partial class MainForm : Form
         }
 
         openCodeCore.Navigate($"http://127.0.0.1:{_s.ImageProxyPort}/");
+        EnsureTechnicalTabVisibleForDirectOpenPolish(tabOpenCode);
         _tabs.SelectedTab = tabOpenCode;
     }
 
@@ -1479,6 +1480,7 @@ public partial class MainForm : Form
         core.Navigate(
             $"http://127.0.0.1:{_s.ComfyPort}/");
 
+        EnsureTechnicalTabVisibleForDirectOpenPolish(tabComfy);
         _tabs.SelectedTab = tabComfy;
     }
 
@@ -5134,8 +5136,38 @@ public partial class MainForm : Form
     }
     private void SetFeatureTab(TabPage page, bool enabled, string reason)
     {
-        page.Enabled = enabled;
         page.ToolTipText = enabled ? string.Empty : reason;
+
+        // Image and Video are editors as well as launch surfaces. Missing
+        // models/backends must block generation, not lock the entire page.
+        // Users still need access to prompts, dimensions, presets, model
+        // selectors and installation/configuration helpers.
+        if (page == tabGenerate || page == _tabVideo)
+        {
+            page.Enabled = true;
+
+            if (page == tabGenerate)
+            {
+                btnGenerate.Enabled =
+                    enabled && !_gpuUiLocked;
+                if (!enabled)
+                    _genText.Text = reason;
+            }
+            else
+            {
+                _videoGenerateButton.Enabled =
+                    enabled &&
+                    !_gpuUiLocked &&
+                    _videoCts is null;
+                if (!enabled)
+                    _videoStatus.Text = reason;
+            }
+
+            _tabs.Invalidate();
+            return;
+        }
+
+        page.Enabled = enabled;
         _tabs.Invalidate();
     }
 
@@ -8484,12 +8516,7 @@ public partial class MainForm : Form
                 _videoSeed.Enabled = !_videoRandomSeed.Checked;
 
             if (_improvePromptButton is not null)
-            {
-                _improvePromptButton.Enabled =
-                    !IsPromptAlreadyImproved(
-                        _prompt.Text.Trim());
-            }
-
+                UpdatePromptEnhancementState();
             if (_videoImprovePromptButton is not null)
                 UpdateVideoPromptEnhancementStateV37();
         }
@@ -8525,6 +8552,11 @@ public partial class MainForm : Form
         foreach (Control child in parent.Controls)
         {
             yield return child;
+            // Un NumericUpDown et d'autres contrôles WinForms possèdent
+            // des enfants internes (par exemple UpDownEdit). Leur état
+            // doit être géré uniquement par le contrôle parent.
+            if (IsGpuWorkspaceInteractiveControl(child))
+                continue;
 
             foreach (var descendant in
                      EnumerateDescendantControls(child))

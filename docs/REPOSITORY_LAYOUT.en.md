@@ -1,6 +1,6 @@
 # Repository layout — English
 
-The layout introduced in v33 and retained in v37 separates source code, scripts, and documentation so the repository root stays clean.
+The layout introduced in v33 and retained in v38 separates source code, scripts, and documentation so the repository root stays clean.
 
 `src/DreamRaster/` contains the WinForms project only: `.cs`, `.resx`, `DreamRaster.csproj`, `Assets/`, and `Properties/PublishProfiles/`.
 

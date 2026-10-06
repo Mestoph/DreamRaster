@@ -67,6 +67,11 @@ internal static class AppTheme
                 page.UseVisualStyleBackColor = false;
                 break;
 
+            case TabControl tabs:
+                tabs.BackColor = Background;
+                tabs.ForeColor = Text;
+                break;
+
             case FlowLayoutPanel:
             case TableLayoutPanel:
             case Panel:
@@ -86,14 +91,65 @@ internal static class AppTheme
                 text.BorderStyle = BorderStyle.FixedSingle;
                 break;
 
+            case ComboBox combo:
+                combo.BackColor = Input;
+                combo.ForeColor = Text;
+                combo.FlatStyle = FlatStyle.Flat;
+                break;
+
             case NumericUpDown numeric:
                 numeric.BackColor = Input;
                 numeric.ForeColor = Text;
                 break;
 
+            case CheckedListBox checkedList:
+                checkedList.BackColor = Input;
+                checkedList.ForeColor = Text;
+                break;
+
+            case ListBox list:
+                list.BackColor = Input;
+                list.ForeColor = Text;
+                break;
+
+            case TreeView tree:
+                tree.BackColor = Input;
+                tree.ForeColor = Text;
+                tree.BorderStyle = BorderStyle.FixedSingle;
+                break;
+
+            case ListView listView:
+                listView.BackColor = Input;
+                listView.ForeColor = Text;
+                listView.BorderStyle = BorderStyle.FixedSingle;
+                break;
+
+            case GroupBox group:
+                group.BackColor = Background;
+                group.ForeColor = Text;
+                break;
+
             case CheckBox checkBox:
                 checkBox.BackColor = Background;
                 checkBox.ForeColor = Text;
+                break;
+
+            case RadioButton radio:
+                radio.BackColor = Background;
+                radio.ForeColor = Text;
+                break;
+
+            case TrackBar track:
+                track.BackColor = Background;
+                track.ForeColor = Text;
+                break;
+
+            case LinkLabel link:
+                link.BackColor = Background;
+                link.ForeColor = Text;
+                link.LinkColor = PrimaryHover;
+                link.ActiveLinkColor = Text;
+                link.VisitedLinkColor = Primary;
                 break;
 
             case Button button:
@@ -103,9 +159,14 @@ internal static class AppTheme
                 break;
 
             case Label label:
+                // Do not replace semantic colors (warning/success/error).
+                // Only repair the WinForms default dark text on the dark theme.
                 if (label.ForeColor == SystemColors.ControlText ||
-                    label.ForeColor.GetBrightness() < 0.45f)
+                    label.ForeColor == Color.Black ||
+                    label.ForeColor == Color.Empty)
+                {
                     label.ForeColor = Text;
+                }
                 break;
         }
 

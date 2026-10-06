@@ -13,9 +13,9 @@
     <RepositoryType>git</RepositoryType>
     <Description>DreamRaster — portable Windows studio for local AI image generation with FLUX.2, ComfyUI, Ollama and OpenCode.</Description>
     <ApplicationIcon>Assets/AppIcon.ico</ApplicationIcon>
-    <Version>37.0.0</Version>
-    <AssemblyVersion>37.0.0.0</AssemblyVersion>
-    <FileVersion>37.0.0.0</FileVersion>
+    <Version>38.0.0</Version>
+    <AssemblyVersion>38.0.0.0</AssemblyVersion>
+    <FileVersion>38.0.0.0</FileVersion>
 
     <UseWindowsForms>true</UseWindowsForms>
     <UseWPF>false</UseWPF>
