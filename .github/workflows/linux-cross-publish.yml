@@ -1,4 +1,4 @@
-﻿name: Linux Cross Publish
+name: Linux Cross Publish
 
 on:
   workflow_dispatch:
@@ -12,19 +12,28 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: linux-cross-publish-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   publish-win-x64:
     name: Publish Windows EXE from Linux
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "9.0.x"
+          cache: true
+          cache-dependency-path: src/DreamRaster/packages.lock.json
 
       - name: Cross publish
         shell: bash

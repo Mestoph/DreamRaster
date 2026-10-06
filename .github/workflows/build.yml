@@ -1,6 +1,7 @@
-﻿name: Build
+name: Build
 
 on:
+  workflow_dispatch:
   push:
     branches: ["main"]
   pull_request:
@@ -9,24 +10,58 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  windows-build:
-    name: Windows build
-    runs-on: windows-latest
+  verify-sources:
+    name: Verify repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: scripts/requirements-verify.txt
+
+      - name: Install verifier dependencies
+        run: python -m pip install -r scripts/requirements-verify.txt
+
+      - name: Verify source tree
+        run: python scripts/verify-local.py --root .
+
+  windows-build:
+    name: Windows build and tests
+    needs: verify-sources
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "9.0.x"
+          cache: true
+          cache-dependency-path: src/DreamRaster/packages.lock.json
 
-      - name: Restore
-        run: dotnet restore src/DreamRaster/DreamRaster.csproj -r win-x64
+      - name: Restore application
+        run: dotnet restore src/DreamRaster/DreamRaster.csproj -r win-x64 --locked-mode
 
-      - name: Build
+      - name: Build application
         run: >
           dotnet build src/DreamRaster/DreamRaster.csproj
           -c Release
@@ -34,24 +69,61 @@ jobs:
           --no-restore
           --nologo
 
+      - name: Run tests when test project exists
+        shell: pwsh
+        run: |
+          $testProject = "tests\DreamRaster.Tests\DreamRaster.Tests.csproj"
+          if (-not (Test-Path $testProject)) {
+            Write-Host "Test project not present on this branch; skipping MSTest."
+            exit 0
+          }
+
+          dotnet restore $testProject -r win-x64
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          dotnet test $testProject `
+            -c Release `
+            -r win-x64 `
+            --no-restore `
+            --nologo `
+            --logger "console;verbosity=normal" `
+            --logger "trx;LogFileName=dreamraster-tests.trx"
+          exit $LASTEXITCODE
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-test-results
+          path: "**/TestResults/**/*.trx"
+          if-no-files-found: ignore
+          retention-days: 7
+
   linux-cross-build:
     name: Linux cross-build to Windows
+    needs: verify-sources
     runs-on: ubuntu-latest
+    timeout-minutes: 25
 
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Setup .NET 9
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: "9.0.x"
+          cache: true
+          cache-dependency-path: src/DreamRaster/packages.lock.json
 
       - name: Restore Windows target from Linux
         run: >
           dotnet restore src/DreamRaster/DreamRaster.csproj
           -r win-x64
           -p:EnableWindowsTargeting=true
+          --locked-mode
 
       - name: Build Windows target from Linux
         run: >
