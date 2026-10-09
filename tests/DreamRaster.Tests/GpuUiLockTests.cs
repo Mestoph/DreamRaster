@@ -1705,6 +1705,9 @@ public sealed class GpuUiLockTests
             var imageModels = GetField<ComboBox>(
                 form,
                 "_imageModelRuntimeCombo");
+            var imageEncoders = GetField<ComboBox>(
+                form,
+                "_imageTextEncoderRuntimeCombo");
             var videoModels = GetField<ComboBox>(
                 form,
                 "_videoModelRuntimeCombo");
@@ -1720,9 +1723,9 @@ public sealed class GpuUiLockTests
                 "FLUX.2 Klein 4B FP8",
                 "Le modèle Image officiel doit rester visible dans le catalogue.");
             AssertComboContains(
-                imageModels,
+                imageEncoders,
                 "Uncensored",
-                "L'encodeur FLUX.2 uncensored doit être visible avant téléchargement.");
+                "L'encodeur FLUX.2 uncensored doit être visible dans le sélecteur Encodeur avant téléchargement.");
             AssertComboContains(
                 videoModels,
                 "Wan 2.1 T2V 1.3B",

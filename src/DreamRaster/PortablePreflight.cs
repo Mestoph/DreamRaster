@@ -1,15 +1,11 @@
-﻿/*
+/*
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
 
-FR : Contrôles des composants, ports et environnement portable.
-EN: Component, port and portable-environment checks.
-
-FR : Les commentaires structurants sont bilingues. Les noms d'API, classes et protocoles
+Contrôles des composants, ports et environnement portable.
+Les commentaires structurants sont r?dig?s en fran?ais. Les noms d'API, classes et protocoles
      restent dans leur forme technique afin de garder le code lisible et compatible.
-EN: Structural comments are bilingual. API, class and protocol names remain in their
-    technical form to keep the code readable and compatible.
 */
 
 using System.Diagnostics;
@@ -17,10 +13,23 @@ using System.Net.Sockets;
 
 namespace OpenCodeLocalAI;
 
+/// <summary>
+
+/// Définit record « MissingComponent », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 public sealed record MissingComponent(string Key, string Label, string Path);
 
+/// <summary>
+
+/// Définit class « PortablePreflight », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 public static class PortablePreflight
 {
+    /// <summary>
+    /// Retourne GetMissing calculé à partir de l’état courant de l’application.
+    /// </summary>
     public static IReadOnlyList<MissingComponent> GetMissing(AppSettings s)
     {
         var result = new List<MissingComponent>();
@@ -42,13 +51,16 @@ public static class PortablePreflight
         var comfyRoot = GetComfyRoot(s);
         CheckAbsoluteFile(result, "flux", "FLUX.2",
             Path.Combine(comfyRoot, "models", "diffusion_models", s.FluxModel));
-        CheckAbsoluteFile(result, "text-encoder", "Text encoder FLUX.2",
-            Path.Combine(comfyRoot, "models", "text_encoders", s.TextEncoderModel));
+        CheckAbsoluteFile(
+            result,
+            "text-encoder",
+            "Text encoder FLUX.2",
+            GetComfyTextEncoderPath(s, s.TextEncoderModel));
         CheckAbsoluteFile(result, "vae", "VAE FLUX.2",
             Path.Combine(comfyRoot, "models", "vae", s.VaeModel));
 
-        // FR : Le modèle Vision est optionnel et son manifeste est dérivé du nom configuré.
-        // EN: The Vision model is optional and its manifest is derived from the configured model name.
+        // Le modèle Vision est optionnel et son manifeste est dérivé du nom configuré.
+        // Le modèle Vision est facultatif et son manifeste est déduit du nom du modèle configuré.
         if (s.InstallVisionModel)
         {
             var manifest = GetPortableOllamaManifestPath(
@@ -62,6 +74,11 @@ public static class PortablePreflight
         return result;
     }
 
+    /// <summary>
+
+    /// Retourne GetPortableOllamaManifestPath calculé à partir de l’état courant de l’application.
+
+    /// </summary>
     internal static string GetPortableOllamaManifestPath(
         string modelsDirectory,
         string modelName)
@@ -102,6 +119,11 @@ public static class PortablePreflight
             .ToArray());
     }
 
+    /// <summary>
+
+    /// Référence le contrôle WinForms « CheckFile » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+
+    /// </summary>
     private static void CheckFile(List<MissingComponent> list, string key, string label, string configured)
     {
         string p;
@@ -114,12 +136,22 @@ public static class PortablePreflight
         if (!File.Exists(p)) list.Add(new(key, label, p));
     }
 
+    /// <summary>
+
+    /// Référence le contrôle WinForms « CheckAbsoluteFile » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+
+    /// </summary>
     private static void CheckAbsoluteFile(List<MissingComponent> list, string key, string label, string path)
     {
         if (!PortablePaths.IsInsidePack(path) || !File.Exists(path))
             list.Add(new(key, label, path));
     }
 
+    /// <summary>
+
+    /// Retourne GetComfyRoot calculé à partir de l’état courant de l’application.
+
+    /// </summary>
     public static string GetComfyRoot(AppSettings s)
     {
         var main = PortablePaths.Resolve(s.ComfyMain);
@@ -127,6 +159,40 @@ public static class PortablePreflight
                ?? throw new InvalidOperationException("Chemin ComfyUI invalide.");
     }
 
+    /// <summary>
+
+    /// Retourne GetComfyTextEncoderPath calculé à partir de l’état courant de l’application.
+
+    /// </summary>
+    public static string GetComfyTextEncoderPath(
+        AppSettings s,
+        string fileName)
+    {
+        var root = GetComfyRoot(s);
+        var textEncoders = Path.Combine(
+            root,
+            "models",
+            "text_encoders",
+            fileName);
+        var clip = Path.Combine(
+            root,
+            "models",
+            "clip",
+            fileName);
+
+        if (File.Exists(textEncoders))
+            return textEncoders;
+        if (File.Exists(clip))
+            return clip;
+
+        return textEncoders;
+    }
+
+    /// <summary>
+
+    /// Exécute le traitement <c>PortableEnvironment</c> et conserve un état cohérent en cas de succès comme d’erreur.
+
+    /// </summary>
     public static Dictionary<string,string> PortableEnvironment(string runtimeName)
     {
         var home = Path.Combine(PortablePaths.RuntimeDir, runtimeName);
@@ -150,6 +216,9 @@ public static class PortablePreflight
         };
     }
 
+    /// <summary>
+    /// Inspecte un port TCP local et retourne son état, le PID propriétaire éventuel et le chemin du processus associé.
+    /// </summary>
     public static async Task<(bool Open, int? Pid, string? Path)> InspectPortAsync(int port)
     {
         try
@@ -210,6 +279,11 @@ public static class PortablePreflight
         return (true, null, null);
     }
 
+    /// <summary>
+
+    /// Référence le contrôle WinForms « RejectOccupiedExternalPortAsync » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+
+    /// </summary>
     public static async Task RejectOccupiedExternalPortAsync(int port, string label)
     {
         var info = await InspectPortAsync(port);

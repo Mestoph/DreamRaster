@@ -2,8 +2,7 @@
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
-FR : Validation légère des modèles FLUX.2 Klein à partir des en-têtes safetensors.
-EN: Lightweight FLUX.2 Klein model validation from safetensors headers.
+Validation légère des modèles FLUX.2 Klein à partir des en-têtes safetensors.
 */
 
 using System.Text;
@@ -11,6 +10,11 @@ using System.Text.Json;
 
 namespace OpenCodeLocalAI;
 
+/// <summary>
+
+/// Définit enum « ModelCompatibilityState », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 internal enum ModelCompatibilityState
 {
     Compatible,
@@ -19,6 +23,11 @@ internal enum ModelCompatibilityState
     Missing
 }
 
+/// <summary>
+
+/// Définit enum « Flux2ModelRole », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 internal enum Flux2ModelRole
 {
     Diffusion,
@@ -26,22 +35,48 @@ internal enum Flux2ModelRole
     Vae
 }
 
+/// <summary>
+
+/// Définit record « ModelCompatibilityResult », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 internal sealed record ModelCompatibilityResult(
     ModelCompatibilityState State,
     string Reason);
 
+/// <summary>
+
+/// Définit record « ModelChoice », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 internal sealed record ModelChoice(
     string FileName,
     ModelCompatibilityState State,
     string Display)
 {
+    /// <summary>
+    /// Retourne une représentation textuelle lisible de l’état courant de cet objet.
+    /// </summary>
     public override string ToString() => Display;
 }
 
+/// <summary>
+
+/// Définit class « Flux2ModelCompatibility », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 internal static class Flux2ModelCompatibility
 {
+    /// <summary>
+    /// Définit la constante « MaxHeaderBytes » utilisée comme valeur de référence stable par ce composant.
+    /// </summary>
     private const ulong MaxHeaderBytes = 64UL * 1024UL * 1024UL;
 
+    /// <summary>
+
+    /// Valide un fichier de modèle selon son rôle FLUX.2 et retourne un diagnostic de compatibilité exploitable par l’interface.
+
+    /// </summary>
     public static ModelCompatibilityResult Validate(
         string path,
         Flux2ModelRole role)
@@ -51,6 +86,14 @@ internal static class Flux2ModelCompatibility
 
         if (!path.EndsWith(".safetensors", StringComparison.OrdinalIgnoreCase))
         {
+            if (role == Flux2ModelRole.TextEncoder &&
+                path.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase))
+            {
+                return new(
+                    ModelCompatibilityState.Incompatible,
+                    "encodeur GGUF détecté, mais le CLIPLoader FLUX.2 actuel de ComfyUI n'accepte pas ce format");
+            }
+
             return new(
                 ModelCompatibilityState.Unverified,
                 "format détecté mais validation structurelle indisponible");
@@ -96,6 +139,11 @@ internal static class Flux2ModelCompatibility
         }
     }
 
+    /// <summary>
+
+    /// Analyse la structure safetensors d’un modèle de diffusion et reconnaît les signatures FLUX.2 Klein prises en charge.
+
+    /// </summary>
     private static ModelCompatibilityResult ValidateDiffusion(JsonElement root)
     {
         var flux2Marker =
@@ -129,6 +177,11 @@ internal static class Flux2ModelCompatibility
                 "architecture FLUX.2 reconnue, variante différente du Klein 4B validé");
     }
 
+    /// <summary>
+
+    /// Analyse la structure de l’encodeur texte et vérifie qu’elle correspond à une variante Qwen3 compatible avec FLUX.2 Klein.
+
+    /// </summary>
     private static ModelCompatibilityResult ValidateTextEncoder(JsonElement root)
     {
         if (!TryShape(
@@ -171,6 +224,11 @@ internal static class Flux2ModelCompatibility
             "famille d'encodeur non reconnue pour FLUX.2 Klein");
     }
 
+    /// <summary>
+
+    /// Analyse la structure du VAE et vérifie les dimensions caractéristiques attendues par FLUX.2.
+
+    /// </summary>
     private static ModelCompatibilityResult ValidateVae(JsonElement root)
     {
         var standardFlux2 =
@@ -206,13 +264,28 @@ internal static class Flux2ModelCompatibility
             "signature VAE FLUX.2 non détectée");
     }
 
+    /// <summary>
+
+    /// Indique si la condition représentée par HasTensor est satisfaite dans l’état courant.
+
+    /// </summary>
     private static bool HasTensor(JsonElement root, string key)
         => root.TryGetProperty(key, out var value) &&
            value.ValueKind == JsonValueKind.Object;
 
+    /// <summary>
+
+    /// Indique si la condition représentée par HasAnyTensor est satisfaite dans l’état courant.
+
+    /// </summary>
     private static bool HasAnyTensor(JsonElement root, params string[] keys)
         => keys.Any(key => HasTensor(root, key));
 
+    /// <summary>
+
+    /// Calcule l’empreinte SHA-256 du fichier géré par <c>ShapeEquals</c> pour contrôler son intégrité.
+
+    /// </summary>
     private static bool ShapeEquals(
         JsonElement root,
         string key,
@@ -220,6 +293,11 @@ internal static class Flux2ModelCompatibility
         => TryShape(root, key, out var actual) &&
            actual.SequenceEqual(expected);
 
+    /// <summary>
+
+    /// Exécute le traitement <c>TryShape</c> et conserve un état cohérent en cas de succès comme d’erreur.
+
+    /// </summary>
     private static bool TryShape(
         JsonElement root,
         string key,
@@ -250,6 +328,11 @@ internal static class Flux2ModelCompatibility
         }
     }
 
+    /// <summary>
+
+    /// Exécute le traitement <c>CountBlocks</c> et conserve un état cohérent en cas de succès comme d’erreur.
+
+    /// </summary>
     private static int CountBlocks(JsonElement root, string prefix)
     {
         var blocks = new HashSet<int>();

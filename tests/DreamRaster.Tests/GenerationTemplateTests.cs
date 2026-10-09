@@ -138,6 +138,162 @@ public sealed class GenerationTemplateTests
     }
 
     [TestMethod]
+    public void PipelinePresets_AreUniqueAndReferenceExistingTemplates()
+    {
+        var imagePresets = GetPrivateStaticItems(
+            typeof(MainForm),
+            "ImagePipelinePresets");
+        var videoPresets = GetPrivateStaticItems(
+            typeof(MainForm),
+            "VideoPipelinePresets");
+
+        AssertUniqueObjectIds(imagePresets, "ImagePipelinePresets");
+        AssertUniqueObjectIds(videoPresets, "VideoPipelinePresets");
+
+        var imageStyleIds = GetItems("ImageStyles")
+            .Select(item => GetString(item, "Id"))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var imageNegativeIds = GetItems("ImageNegatives")
+            .Select(item => GetString(item, "Id"))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var videoStyleIds = GetItems("VideoStyles")
+            .Select(item => GetString(item, "Id"))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var videoNegativeIds = GetItems("VideoNegatives")
+            .Select(item => GetString(item, "Id"))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var qualityIds = GetPrivateStaticItems(
+                typeof(MainForm),
+                "VideoQualityPresets")
+            .Select(item => GetString(item, "Id"))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var preset in imagePresets)
+        {
+            var id = GetString(preset, "Id");
+            if (id.Equals("custom", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            Assert.IsFalse(
+                string.IsNullOrWhiteSpace(GetString(preset, "Model")),
+                $"Le profil Image '{id}' doit définir un modèle.");
+            Assert.IsFalse(
+                string.IsNullOrWhiteSpace(GetString(preset, "Encoder")),
+                $"Le profil Image '{id}' doit définir un encodeur.");
+            Assert.IsFalse(
+                string.IsNullOrWhiteSpace(GetString(preset, "Vae")),
+                $"Le profil Image '{id}' doit définir un VAE.");
+
+            Assert.IsTrue(
+                imageStyleIds.Contains(GetString(preset, "Style")),
+                $"Le style du profil Image '{id}' doit exister.");
+            Assert.IsTrue(
+                imageNegativeIds.Contains(GetString(preset, "Negative")),
+                $"Le négatif du profil Image '{id}' doit exister.");
+
+            var lora = GetString(preset, "Lora");
+            if (!string.IsNullOrWhiteSpace(lora))
+            {
+                Assert.IsTrue(
+                    GetDouble(preset, "LoraStrength") > 0,
+                    $"Le LoRA du profil Image '{id}' doit avoir une force positive.");
+            }
+        }
+
+        foreach (var preset in videoPresets)
+        {
+            var id = GetString(preset, "Id");
+            if (id.Equals("custom", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            Assert.IsFalse(
+                string.IsNullOrWhiteSpace(GetString(preset, "Model")),
+                $"Le profil Vidéo '{id}' doit définir un modèle Wan.");
+            Assert.IsFalse(
+                string.IsNullOrWhiteSpace(GetString(preset, "Encoder")),
+                $"Le profil Vidéo '{id}' doit définir un encodeur.");
+            Assert.IsFalse(
+                string.IsNullOrWhiteSpace(GetString(preset, "Vae")),
+                $"Le profil Vidéo '{id}' doit définir un VAE.");
+            Assert.IsFalse(
+                string.IsNullOrWhiteSpace(GetString(preset, "ClipVision")),
+                $"Le profil Vidéo '{id}' doit définir CLIP Vision.");
+
+            Assert.IsTrue(
+                videoStyleIds.Contains(GetString(preset, "Style")),
+                $"Le style du profil Vidéo '{id}' doit exister.");
+            Assert.IsTrue(
+                videoNegativeIds.Contains(GetString(preset, "Negative")),
+                $"Le négatif du profil Vidéo '{id}' doit exister.");
+            Assert.IsTrue(
+                qualityIds.Contains(GetString(preset, "Quality")),
+                $"La qualité du profil Vidéo '{id}' doit exister.");
+
+            var lora = GetString(preset, "Lora");
+            if (!string.IsNullOrWhiteSpace(lora))
+            {
+                Assert.IsTrue(
+                    GetDouble(preset, "LoraStrength") > 0,
+                    $"Le LoRA du profil Vidéo '{id}' doit avoir une force positive.");
+            }
+        }
+    }
+
+    [TestMethod]
+    public void PipelinePresets_CoverPrimaryUserScenarios()
+    {
+        var imageIds = GetPrivateStaticItems(
+                typeof(MainForm),
+                "ImagePipelinePresets")
+            .Select(item => GetString(item, "Id"))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var videoIds = GetPrivateStaticItems(
+                typeof(MainForm),
+                "VideoPipelinePresets")
+            .Select(item => GetString(item, "Id"))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var id in new[]
+                 {
+                     "photo",
+                     "realism",
+                     "portrait",
+                     "product",
+                     "landscape",
+                     "fantasy",
+                     "anime",
+                     "scifi",
+                     "lowlight",
+                     "max-quality"
+                 })
+        {
+            Assert.IsTrue(
+                imageIds.Contains(id),
+                $"Le scénario Image '{id}' doit avoir un profil complet.");
+        }
+
+        foreach (var id in new[]
+                 {
+                     "cinematic",
+                     "i2v-quality",
+                     "portrait",
+                     "product",
+                     "landscape",
+                     "photorealistic",
+                     "anime",
+                     "scifi",
+                     "lowlight",
+                     "max-quality"
+                 })
+        {
+            Assert.IsTrue(
+                videoIds.Contains(id),
+                $"Le scénario Vidéo '{id}' doit avoir un profil complet.");
+        }
+    }
+
+    [TestMethod]
     public void MaximumQuality_FirstPassUsesStableNativeResolution()
     {
         var image = FindSettings("ImageObjectiveSettings", "max-quality");
@@ -212,6 +368,50 @@ public sealed class GenerationTemplateTests
             0,
             duplicates.Length,
             $"IDs dupliqués dans {propertyName}: {string.Join(", ", duplicates)}");
+    }
+
+    private static object[] GetPrivateStaticItems(
+        Type ownerType,
+        string fieldName)
+    {
+        var field = ownerType.GetField(
+            fieldName,
+            BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new AssertFailedException(
+                $"Champ privé statique {fieldName} introuvable.");
+
+        var enumerable = field.GetValue(null) as IEnumerable
+            ?? throw new AssertFailedException(
+                $"{fieldName} n'est pas énumérable.");
+
+        return enumerable.Cast<object>().ToArray();
+    }
+
+    private static void AssertUniqueObjectIds(
+        IEnumerable<object> items,
+        string collectionName)
+    {
+        var ids = items
+            .Select(item => GetString(item, "Id"))
+            .ToArray();
+
+        Assert.IsTrue(
+            ids.Length > 0,
+            $"{collectionName} ne doit pas être vide.");
+
+        var duplicates = ids
+            .GroupBy(
+                id => id,
+                StringComparer.OrdinalIgnoreCase)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .ToArray();
+
+        Assert.AreEqual(
+            0,
+            duplicates.Length,
+            $"IDs dupliqués dans {collectionName}: " +
+            string.Join(", ", duplicates));
     }
 
     private static object FindSettings(string propertyName, string id)

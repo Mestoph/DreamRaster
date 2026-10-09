@@ -99,6 +99,33 @@ public sealed class V38UiTests
                     $"Contrôle Configuration hors zone : " +
                     $"{control.Name} {control.Bounds} / {workspace}.");
             }
+
+            var hint = GetField<Label>(
+                form,
+                "lblConfigHint");
+            var technicalPanel = GetField<Panel>(
+                form,
+                "_configurationAdvancedPanelPolish");
+
+            Assert.IsTrue(
+                page.AutoScroll,
+                "Configuration doit rester scrollable en vue compacte.");
+            if (hint.Visible)
+            {
+                Assert.IsTrue(
+                    hint.Top >= technicalPanel.Bottom + 8,
+                    "Le texte d'aide Configuration ne doit pas recouvrir les interfaces techniques.");
+            }
+
+            Assert.IsTrue(
+                technicalPanel.Bottom <= workspace.Height,
+                "Les interfaces techniques doivent être entièrement visibles en vue compacte.");
+            Assert.IsFalse(
+                hint.Visible,
+                "Le texte d'aide long doit être masqué en vue compacte pour éviter un scroll inutile.");
+            Assert.IsTrue(
+                page.AutoScrollMinSize.Height <= workspace.Height,
+                "La Configuration compacte ne doit pas nécessiter de défilement.");
         });
 
     [TestMethod]
@@ -122,12 +149,36 @@ public sealed class V38UiTests
             var videoStyle = GetField<ComboBox>(
                 form,
                 "_videoStyleTemplateCombo");
+            var imageEncoder = GetField<ComboBox>(
+                form,
+                "_imageTextEncoderRuntimeCombo");
+            var videoEncoder = GetField<ComboBox>(
+                form,
+                "_videoTextEncoderRuntimeCombo");
             var imageLora = GetField<ComboBox>(
                 form,
                 "_imageLoraCombo");
             var videoLora = GetField<ComboBox>(
                 form,
                 "_videoLoraCombo");
+            var imageProfile = GetField<ComboBox>(
+                form,
+                "_imagePipelinePresetCombo");
+            var videoProfile = GetField<ComboBox>(
+                form,
+                "_videoPipelinePresetCombo");
+            var imageSharpness = GetField<NumericUpDown>(
+                form,
+                "_imageMaxQualitySharpness");
+            var videoSharpness = GetField<NumericUpDown>(
+                form,
+                "_videoMaxQualitySharpness");
+            var imageSharpnessPreview = GetField<Button>(
+                form,
+                "_imageSharpnessPreviewButton");
+            var videoSharpnessPreview = GetField<Button>(
+                form,
+                "_videoSharpnessPreviewButton");
 
             Assert.AreEqual(
                 imageModel.Top,
@@ -138,9 +189,30 @@ public sealed class V38UiTests
                 videoStyle.Top,
                 "La rangée Style doit être alignée.");
             Assert.AreEqual(
+                imageEncoder.Top,
+                videoEncoder.Top,
+                "La rangée Encodeur doit être alignée.");
+            Assert.AreEqual(
                 imageLora.Top,
                 videoLora.Top,
                 "La rangée LoRA doit être alignée.");
+            Assert.AreEqual(
+                imageProfile.Bounds,
+                videoProfile.Bounds,
+                "Les profils complets Image/Vidéo doivent partager exactement la même géométrie.");
+
+            Assert.IsTrue(
+                imageEncoder.Top > imageModel.Top,
+                "Encodeur doit être placé sous le modèle pour rendre le pipeline explicite.");
+            Assert.IsTrue(
+                imageStyle.Top > imageEncoder.Top,
+                "Les presets Style/Négatif doivent être placés sous les dépendances du pipeline.");
+            Assert.IsTrue(
+                imageLora.Top > imageStyle.Top,
+                "LoRA doit être placé sous les presets pour garder la hiérarchie visuelle claire.");
+            Assert.IsTrue(
+                imageProfile.Top > imageLora.Top,
+                "Le profil complet doit occuper la dernière rangée du catalogue, à côté de la netteté.");
 
             Assert.AreEqual(
                 imageModel.Left,
@@ -151,9 +223,103 @@ public sealed class V38UiTests
                 videoStyle.Left,
                 "Les sélecteurs Style doivent partager la même colonne.");
             Assert.AreEqual(
+                imageEncoder.Left,
+                videoEncoder.Left,
+                "Les sélecteurs Encodeur doivent partager la même colonne.");
+            Assert.AreEqual(
                 imageLora.Left,
                 videoLora.Left,
                 "Les sélecteurs LoRA doivent partager la même colonne.");
+
+            Assert.AreEqual(
+                imageSharpness.Bounds,
+                videoSharpness.Bounds,
+                "La netteté maximale Image/Vidéo doit partager la même grille.");
+            Assert.AreEqual(
+                imageSharpnessPreview.Bounds,
+                videoSharpnessPreview.Bounds,
+                "Les boutons d'aperçu netteté Image/Vidéo doivent être alignés.");
+        });
+
+    [TestMethod]
+    public void CreativePresets_ContainAdultAndGenreProfiles()
+        => RunOnSta(() =>
+        {
+            using var form = new MainForm();
+
+            var imageCombo = GetField<ComboBox>(
+                form,
+                "_imageStyleTemplateCombo");
+            var videoCombo = GetField<ComboBox>(
+                form,
+                "_videoStyleTemplateCombo");
+
+            static string[] ReadIds(ComboBox combo) =>
+                combo.Items
+                    .Cast<object>()
+                    .Select(item =>
+                        item.GetType()
+                            .GetProperty("Id")
+                            ?.GetValue(item)
+                            ?.ToString() ??
+                        string.Empty)
+                    .Where(id => id.Length > 0)
+                    .ToArray();
+
+            var imageIds = ReadIds(imageCombo);
+            var videoIds = ReadIds(videoCombo);
+
+            foreach (var expected in new[]
+                     {
+                         "anime",
+                         "scifi",
+                         "erotic",
+                         "adult-explicit"
+                     })
+            {
+                CollectionAssert.Contains(
+                    imageIds,
+                    expected,
+                    $"Le preset Image {expected} doit être visible dans l'interface.");
+                CollectionAssert.Contains(
+                    videoIds,
+                    expected,
+                    $"Le preset Vidéo {expected} doit être visible dans l'interface.");
+            }
+
+            var templateType = typeof(MainForm).Assembly.GetType(
+                "OpenCodeLocalAI.GenerationTemplates")
+                ?? throw new AssertFailedException(
+                    "GenerationTemplates introuvable.");
+
+            var imageStyles = templateType.GetProperty(
+                    "ImageStyles",
+                    BindingFlags.Static |
+                    BindingFlags.Public |
+                    BindingFlags.NonPublic)
+                ?.GetValue(null) as System.Collections.IEnumerable
+                ?? throw new AssertFailedException(
+                    "ImageStyles introuvable.");
+
+            var adultImage = imageStyles
+                .Cast<object>()
+                .Single(item =>
+                    string.Equals(
+                        item.GetType()
+                            .GetProperty("Id")
+                            ?.GetValue(item)
+                            ?.ToString(),
+                        "adult-explicit",
+                        StringComparison.Ordinal));
+
+            StringAssert.Contains(
+                adultImage.GetType()
+                    .GetProperty("NegativePrompt")
+                    ?.GetValue(adultImage)
+                    ?.ToString() ??
+                string.Empty,
+                "underage",
+                "Le preset adulte doit exclure explicitement les sujets mineurs ou d'âge ambigu.");
         });
 
     private static void Invoke(

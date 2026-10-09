@@ -1,15 +1,11 @@
-﻿/*
+/*
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
 
-FR : Installation portable, téléchargements et modèles.
-EN: Portable installation, downloads and models.
-
-FR : Les commentaires structurants sont bilingues. Les noms d'API, classes et protocoles
+Installation portable, téléchargements et modèles.
+Les commentaires structurants sont r?dig?s en fran?ais. Les noms d'API, classes et protocoles
      restent dans leur forme technique afin de garder le code lisible et compatible.
-EN: Structural comments are bilingual. API, class and protocol names remain in their
-    technical form to keep the code readable and compatible.
 */
 
 using System.Diagnostics;
@@ -22,18 +18,51 @@ using System.Text.Json;
 
 namespace OpenCodeLocalAI;
 
+/// <summary>
+
+/// Définit class « PortableInstaller », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 public sealed class PortableInstaller
 {
+    /// <summary>
+    /// Stocke « _s », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly AppSettings _s;
+    /// <summary>
+    /// Stocke « _log », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly Action<string,string> _log;
+    /// <summary>
+    /// Stocke « _http », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly HttpClient _http = CreateHttpClient();
 
+    /// <summary>
+
+    /// Stocke « _lastProgressValue », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+
+    /// </summary>
     private int _lastProgressValue = -1;
+    /// <summary>
+    /// Stocke « _lastProgressText », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private string _lastProgressText = "";
+    /// <summary>
+    /// Stocke « _lastProgressUtc », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private DateTime _lastProgressUtc = DateTime.MinValue;
 
+    /// <summary>
+
+    /// Expose l’événement « ProgressChanged » utilisé pour notifier les composants abonnés d’un changement d’état.
+
+    /// </summary>
     public event Action<int,string>? ProgressChanged;
 
+/// <summary>
+/// Initialise l?installateur portable avec la configuration et le journal, puis pr?pare les chemins, sources et contr?les n?cessaires aux installations atomiques.
+/// </summary>
     public PortableInstaller(AppSettings settings, Action<string,string> log)
     {
         _s = settings;
@@ -46,6 +75,11 @@ public sealed class PortableInstaller
         _http.DefaultRequestHeaders.Accept.ParseAdd("*/*");
     }
 
+    /// <summary>
+
+    /// Crée CreateHttpClient avec les valeurs nécessaires au scénario courant.
+
+    /// </summary>
     private static HttpClient CreateHttpClient()
     {
         var handler = new SocketsHttpHandler
@@ -70,6 +104,11 @@ public sealed class PortableInstaller
         };
     }
 
+    /// <summary>
+
+    /// Transmet l’avancement courant au callback de progression associé au traitement.
+
+    /// </summary>
     private void Progress(int value, string text)
     {
         value = Math.Clamp(value, 0, 100);
@@ -93,6 +132,11 @@ public sealed class PortableInstaller
         ProgressChanged?.Invoke(value, text);
     }
 
+    /// <summary>
+
+    /// Installe InstallAllAsync dans l’environnement portable de DreamRaster sans modifier les ressources non concernées.
+
+    /// </summary>
     public async Task InstallAllAsync(CancellationToken ct)
     {
         PortablePaths.EnsureLayout();
@@ -113,8 +157,8 @@ public sealed class PortableInstaller
         else
             _log("Install", "ComfyUI portable déjà présent : conservé.");
 
-        // FR : Qwen3-VL est facultatif. Il sert aux fonctions de vision Ollama/OpenCode.
-        // EN: Qwen3-VL is optional. It is only needed for Ollama/OpenCode vision features.
+        // Qwen3-VL est facultatif. Il sert aux fonctions de vision Ollama/OpenCode.
+        // Qwen3-VL est facultatif. Il n’est requis que pour les fonctions de vision Ollama/OpenCode.
         if (_s.InstallVisionModel)
         {
             var manifest = Path.Combine(
@@ -146,6 +190,11 @@ public sealed class PortableInstaller
         Progress(100, "Installation portable terminée.");
     }
 
+    /// <summary>
+
+    /// Installe InstallOpenCodeAsync dans l’environnement portable de DreamRaster sans modifier les ressources non concernées.
+
+    /// </summary>
     public async Task InstallOpenCodeAsync(CancellationToken ct)
     {
         Progress(2, "Téléchargement OpenCode…");
@@ -176,6 +225,11 @@ public sealed class PortableInstaller
         _log("Install", "OpenCode portable installé : " + expected);
     }
 
+    /// <summary>
+
+    /// Installe InstallOllamaAsync dans l’environnement portable de DreamRaster sans modifier les ressources non concernées.
+
+    /// </summary>
     public async Task InstallOllamaAsync(CancellationToken ct)
     {
         Progress(16, "Téléchargement Ollama portable…");
@@ -201,6 +255,11 @@ public sealed class PortableInstaller
         _log("Install", "Ollama portable installé.");
     }
 
+    /// <summary>
+
+    /// Installe InstallComfyAsync dans l’environnement portable de DreamRaster sans modifier les ressources non concernées.
+
+    /// </summary>
     public async Task InstallComfyAsync(CancellationToken ct)
     {
         Progress(31, "Téléchargement ComfyUI portable…");
@@ -304,6 +363,11 @@ public sealed class PortableInstaller
         _log("Install", "ComfyUI portable installé.");
     }
 
+    /// <summary>
+
+    /// Installe InstallWebView2FixedAsync dans l’environnement portable de DreamRaster sans modifier les ressources non concernées.
+
+    /// </summary>
     public async Task InstallWebView2FixedAsync(CancellationToken ct)
     {
         if (_s.EnsureWebView2FixedDefaults())
@@ -494,6 +558,9 @@ public sealed class PortableInstaller
             await TryDeleteDirectoryAsync(temp);
         }
     }
+    /// <summary>
+    /// Installe InstallQwenAsync dans l’environnement portable de DreamRaster sans modifier les ressources non concernées.
+    /// </summary>
     public async Task InstallQwenAsync(CancellationToken ct)
     {
         Progress(54, $"Installation {_s.VisionModel} dans Ollama portable…");
@@ -561,6 +628,11 @@ public sealed class PortableInstaller
             _s.VisionModel + " installé dans models\\ollama.");
     }
 
+    /// <summary>
+
+    /// Télécharge le modèle géré par <c>PullOllamaModelViaApiAsync</c> via l’API Ollama et suit sa progression.
+
+    /// </summary>
     private async Task PullOllamaModelViaApiAsync(
         int port,
         CancellationToken ct)
@@ -784,6 +856,11 @@ public sealed class PortableInstaller
             $"{_s.VisionModel} · téléchargement terminé.");
     }
 
+    /// <summary>
+
+    /// Construit BuildOllamaPullText à partir de l’état courant sans modifier les données utilisateur au-delà de ce qui est explicitement requis.
+
+    /// </summary>
     private static string BuildOllamaPullText(
         string status,
         string? digest,
@@ -815,6 +892,11 @@ public sealed class PortableInstaller
         return string.Join(" · ", parts);
     }
 
+    /// <summary>
+
+    /// Formate la valeur gérée par <c>FormatBytes</c> sous une forme lisible pour l’utilisateur.
+
+    /// </summary>
     private static string FormatBytes(long bytes)
     {
         if (bytes < 1024)
@@ -831,6 +913,11 @@ public sealed class PortableInstaller
         return $"{mib / 1024d:N2} GiB";
     }
 
+    /// <summary>
+
+    /// Installe InstallVideoModelsAsync dans l’environnement portable de DreamRaster sans modifier les ressources non concernées.
+
+    /// </summary>
     public async Task InstallVideoModelsAsync(CancellationToken ct)
     {
         var root = PortablePreflight.GetComfyRoot(_s);
@@ -839,10 +926,8 @@ public sealed class PortableInstaller
             "models",
             "diffusion_models",
             _s.VideoModel);
-        var encoder = Path.Combine(
-            root,
-            "models",
-            "text_encoders",
+        var encoder = PortablePreflight.GetComfyTextEncoderPath(
+            _s,
             _s.VideoTextEncoderModel);
         var vae = Path.Combine(
             root,
@@ -864,6 +949,11 @@ public sealed class PortableInstaller
         Progress(100, "Modèles vidéo Wan installés et vérifiés.");
     }
 
+    /// <summary>
+
+    /// Vérifie puis garantit la condition requise par <c>EnsureExternalModelAsync</c> avant de poursuivre.
+
+    /// </summary>
     public async Task EnsureExternalModelAsync(
         string url,
         string path,
@@ -887,6 +977,11 @@ public sealed class PortableInstaller
             ct);
     }
 
+    /// <summary>
+    /// Télécharge un modèle externe fourni par l’utilisateur après validation
+    /// de l’URL et de l’éventuelle empreinte SHA-256, puis retourne son chemin
+    /// local une fois le fichier validé.
+    /// </summary>
     public async Task<string> DownloadExternalModelAsync(
         string url,
         string path,
@@ -940,11 +1035,18 @@ public sealed class PortableInstaller
         return actual;
     }
 
+    /// <summary>
+
+    /// Installe InstallFluxModelsAsync dans l’environnement portable de DreamRaster sans modifier les ressources non concernées.
+
+    /// </summary>
     public async Task InstallFluxModelsAsync(CancellationToken ct)
     {
         var root = PortablePreflight.GetComfyRoot(_s);
         var flux = Path.Combine(root, "models", "diffusion_models", _s.FluxModel);
-        var enc = Path.Combine(root, "models", "text_encoders", _s.TextEncoderModel);
+        var enc = PortablePreflight.GetComfyTextEncoderPath(
+            _s,
+            _s.TextEncoderModel);
         var vae = Path.Combine(root, "models", "vae", _s.VaeModel);
 
         Directory.CreateDirectory(Path.GetDirectoryName(flux)!);
@@ -959,6 +1061,11 @@ public sealed class PortableInstaller
             _s.VaeUrl, vae, _s.VaeSha256, 96, 99, ct);
     }
 
+    /// <summary>
+
+    /// Vérifie puis garantit la condition requise par <c>EnsureDownloadedAndVerifiedAsync</c> avant de poursuivre.
+
+    /// </summary>
     private async Task EnsureDownloadedAndVerifiedAsync(
         string url,
         string path,
@@ -984,6 +1091,11 @@ public sealed class PortableInstaller
         await DownloadAndVerifyAsync(url, path, sha, start, end, ct);
     }
 
+    /// <summary>
+    /// Télécharge un fichier puis calcule son SHA-256. Le fichier est supprimé
+    /// et une erreur explicite est levée lorsque l’empreinte obtenue ne correspond
+    /// pas à celle attendue.
+    /// </summary>
     private async Task DownloadAndVerifyAsync(
         string url, string path, string sha, int start, int end, CancellationToken ct)
     {
@@ -999,6 +1111,11 @@ public sealed class PortableInstaller
         _log("Install", $"SHA256 OK : {Path.GetFileName(path)}");
     }
 
+    /// <summary>
+    /// Choisit la meilleure stratégie de téléchargement disponible sous Windows :
+    /// multi-curl pour les gros fichiers avec support des plages HTTP, curl simple
+    /// lorsque la segmentation n’est pas utile, puis repli HTTP séquentiel si nécessaire.
+    /// </summary>
     private async Task DownloadAsync(
         string url,
         string path,
@@ -1079,6 +1196,11 @@ public sealed class PortableInstaller
             ct);
     }
 
+    /// <summary>
+
+    /// Retourne GetWindowsCurlPath calculé à partir de l’état courant de l’application.
+
+    /// </summary>
     private static string? GetWindowsCurlPath()
     {
         var candidate = Path.Combine(
@@ -1090,6 +1212,14 @@ public sealed class PortableInstaller
             : null;
     }
 
+    /// <summary>
+    /// Sonde une URL de téléchargement avec une requête partielle afin de savoir
+    /// si le serveur accepte les plages HTTP. Cette information permet de choisir
+    /// entre un téléchargement séquentiel et un téléchargement segmenté.
+    /// </summary>
+    /// <param name="url">Adresse distante du fichier à sonder.</param>
+    /// <param name="ct">Jeton permettant d'annuler immédiatement la sonde réseau.</param>
+    /// <returns>Le support des plages, la taille connue et l'URL effective après redirections.</returns>
     private async Task<(bool SupportsRanges, long? Length, string? EffectiveUrl)>
         ProbeRangeSupportAsync(
             string url,
@@ -1137,6 +1267,11 @@ public sealed class PortableInstaller
         }
     }
 
+    /// <summary>
+    /// Télécharge en parallèle plusieurs plages d’un même fichier avec curl,
+    /// surveille la progression globale, assemble les segments dans l’ordre puis
+    /// nettoie le dossier temporaire utilisé pour les parties.
+    /// </summary>
     private async Task DownloadWithMultiCurlAsync(
         string curlExe,
         string url,
@@ -1403,6 +1538,10 @@ public sealed class PortableInstaller
             $"{fileName} · téléchargement terminé · multi-curl");
     }
 
+    /// <summary>
+    /// Télécharge avec curl une plage inclusive d’octets dans un fichier de partie
+    /// et transforme tout code de sortie non nul en erreur détaillée.
+    /// </summary>
     private async Task DownloadCurlRangeAsync(
         string curlExe,
         string url,
@@ -1508,6 +1647,11 @@ public sealed class PortableInstaller
         }
     }
 
+    /// <summary>
+    /// Télécharge un fichier avec une seule instance de curl en autorisant la reprise,
+    /// suit l’avancement à partir de la taille du fichier temporaire puis remplace
+    /// atomiquement la destination lorsque le transfert est terminé.
+    /// </summary>
     private async Task DownloadWithSingleCurlAsync(
         string curlExe,
         string url,
@@ -1651,6 +1795,11 @@ public sealed class PortableInstaller
             $"{fileName} · téléchargement terminé · curl Windows");
     }
 
+    /// <summary>
+
+    /// Crée CreateCurlStartInfo avec les valeurs nécessaires au scénario courant.
+
+    /// </summary>
     private static ProcessStartInfo CreateCurlStartInfo(
         string curlExe)
     {
@@ -1685,6 +1834,11 @@ public sealed class PortableInstaller
         return psi;
     }
 
+    /// <summary>
+
+    /// Tente d’obtenir la valeur gérée par <c>TryGetContentLengthAsync</c> sans lever d’exception en cas d’absence.
+
+    /// </summary>
     private async Task<long?> TryGetContentLengthAsync(
         string url,
         CancellationToken ct)
@@ -1715,6 +1869,14 @@ public sealed class PortableInstaller
         return null;
     }
 
+    /// <summary>
+    /// Découpe un fichier distant en segments byte-range contigus destinés aux
+    /// connexions parallèles de curl. Aucun octet n'est omis ni dupliqué entre
+    /// deux segments successifs.
+    /// </summary>
+    /// <param name="totalLength">Taille totale du fichier distant en octets.</param>
+    /// <param name="connections">Nombre maximal de connexions parallèles souhaité.</param>
+    /// <returns>La liste ordonnée des plages inclusives à télécharger.</returns>
     private static List<(long Start, long End)>
         BuildCurlSegments(
             long totalLength,
@@ -1742,6 +1904,11 @@ public sealed class PortableInstaller
         return result;
     }
 
+    /// <summary>
+
+    /// Retourne GetCurlPartPath calculé à partir de l’état courant de l’application.
+
+    /// </summary>
     private static string GetCurlPartPath(
         string partsDir,
         int index)
@@ -1749,6 +1916,11 @@ public sealed class PortableInstaller
             partsDir,
             $"part-{index:D2}.bin");
 
+    /// <summary>
+
+    /// Retourne GetDownloadedPartBytes calculé à partir de l’état courant de l’application.
+
+    /// </summary>
     private static long GetDownloadedPartBytes(
         string partsDir,
         int partCount,
@@ -1772,6 +1944,11 @@ public sealed class PortableInstaller
         return Math.Clamp(total, 0, max);
     }
 
+    /// <summary>
+    /// Effectue le téléchargement HTTP séquentiel de secours lorsque curl ou les
+    /// plages HTTP ne peuvent pas être utilisés, tout en conservant progression,
+    /// annulation et remplacement sûr du fichier final.
+    /// </summary>
     private async Task DownloadSequentialFallbackAsync(
         string url,
         string path,
@@ -1870,6 +2047,11 @@ public sealed class PortableInstaller
         }
     }
 
+    /// <summary>
+
+    /// Déplace la ressource gérée par <c>MoveFileWithRetryAsync</c> avec les reprises nécessaires en cas de verrou temporaire.
+
+    /// </summary>
     private static async Task MoveFileWithRetryAsync(
         string source,
         string destination,
@@ -1911,6 +2093,11 @@ public sealed class PortableInstaller
             last);
     }
 
+    /// <summary>
+
+    /// Extrait les données gérées par <c>ExtractZipAsync</c> vers la destination prévue.
+
+    /// </summary>
     private async Task ExtractZipAsync(
         string archivePath,
         string destination,
@@ -1975,6 +2162,11 @@ public sealed class PortableInstaller
         }
     }
 
+    /// <summary>
+
+    /// Réinitialise les données ou le dossier géré par <c>ResetDirectoryAsync</c> dans un état propre.
+
+    /// </summary>
     private static async Task ResetDirectoryAsync(
         string path,
         CancellationToken ct)
@@ -1991,6 +2183,11 @@ public sealed class PortableInstaller
         }, ct);
     }
 
+    /// <summary>
+
+    /// Exécute le traitement <c>TryDeleteDirectoryAsync</c> et conserve un état cohérent en cas de succès comme d’erreur.
+
+    /// </summary>
     private static async Task TryDeleteDirectoryAsync(string path)
     {
         try
@@ -2007,6 +2204,11 @@ public sealed class PortableInstaller
         }
     }
 
+    /// <summary>
+
+    /// Démarre l’opération gérée par <c>StartPortable</c> et prépare ses ressources.
+
+    /// </summary>
     private static Process StartPortable(
         string exe, string args, string cwd, IDictionary<string,string> env, bool redirect = false)
     {
@@ -2025,6 +2227,11 @@ public sealed class PortableInstaller
         return Process.Start(psi) ?? throw new InvalidOperationException("Démarrage impossible : " + exe);
     }
 
+    /// <summary>
+
+    /// Exécute le traitement <c>WaitHttpAsync</c> et conserve un état cohérent en cas de succès comme d’erreur.
+
+    /// </summary>
     private static async Task WaitHttpAsync(string url, TimeSpan timeout, CancellationToken ct)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
@@ -2043,6 +2250,11 @@ public sealed class PortableInstaller
         throw new TimeoutException("Service portable non prêt : " + url);
     }
 
+    /// <summary>
+
+    /// Calcule l’empreinte SHA-256 du fichier géré par <c>Sha256Async</c> pour contrôler son intégrité.
+
+    /// </summary>
     private static async Task<string> Sha256Async(string path, CancellationToken ct)
     {
         await using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 1024, true);

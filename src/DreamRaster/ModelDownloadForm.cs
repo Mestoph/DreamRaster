@@ -1,29 +1,54 @@
-﻿/*
+/*
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
-FR : Dialogue compact pour télécharger un checkpoint tiers par URL.
-EN: Compact dialog for downloading a third-party checkpoint by URL.
+Dialogue compact pour télécharger un checkpoint tiers par URL.
 */
 
 namespace OpenCodeLocalAI;
 
+/// <summary>
+
+/// Définit class « ModelDownloadForm », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 public sealed partial class ModelDownloadForm : Form
 {
+    /// <summary>
+    /// Stocke « _language », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private string _language = "fr";
+    /// <summary>
+    /// Stocke « _imageModel », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private bool _imageModel = true;
 
+        /// <summary>
+    /// URL saisie ou s?lectionn?e par l?utilisateur et retourn?e au code appelant lorsqu?il confirme le t?l?chargement du mod?le.
+    /// </summary>
     public string ModelUrl => _url.Text.Trim();
+    /// <summary>
+    /// Valeur de configuration Trim utilisée par DreamRaster.
+    /// </summary>
     public string FileName => _fileName.Text.Trim();
+    /// <summary>
+    /// Valeur de configuration Trim utilisée par DreamRaster.
+    /// </summary>
     public string Sha256 => _sha256.Text.Trim();
 
     // Constructeur sans paramètre requis par le WinForms Designer.
+/// <summary>
+/// Constructeur sans param?tre r?serv? au Designer WinForms ; il initialise la bo?te de dialogue sans pr?s?lectionner de type de mod?le.
+/// </summary>
     public ModelDownloadForm()
     {
         InitializeComponent();
         ApplyPresentation();
     }
 
+/// <summary>
+/// Cr?e la bo?te de dialogue de t?l?chargement pour un mod?le Image ou Vid?o, applique la langue de l?interface et pr?pare les libell?s adapt?s.
+/// </summary>
     public ModelDownloadForm(bool imageModel, string language)
         : this()
     {
@@ -32,6 +57,11 @@ public sealed partial class ModelDownloadForm : Form
         ApplyPresentation();
     }
 
+    /// <summary>
+
+    /// Applique ApplyPresentation aux réglages ou contrôles concernés en respectant les contraintes de DreamRaster.
+
+    /// </summary>
     private void ApplyPresentation()
     {
         Text = L10n.Pick(
@@ -61,6 +91,11 @@ public sealed partial class ModelDownloadForm : Form
         _cancelButton.Text = L10n.Pick(_language, "Annuler", "Cancel");
     }
 
+    /// <summary>
+
+    /// Synchronise les champs de téléchargement lorsque l’URL du modèle est modifiée.
+
+    /// </summary>
     private void Url_TextChanged(object? sender, EventArgs e)
     {
         if (!string.IsNullOrWhiteSpace(_fileName.Text))
@@ -78,6 +113,11 @@ public sealed partial class ModelDownloadForm : Form
         }
     }
 
+    /// <summary>
+
+    /// Interrompt proprement le téléchargement en cours lorsque la fenêtre est fermée.
+
+    /// </summary>
     private void ModelDownloadForm_FormClosing(
         object? sender,
         FormClosingEventArgs e)

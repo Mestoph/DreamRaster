@@ -2,12 +2,16 @@
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
-FR : Modèles de style réutilisables pour les générations image et vidéo.
-EN: Reusable style templates for image and video generation.
+Modèles de style réutilisables pour les générations image et vidéo.
 */
 
 namespace OpenCodeLocalAI;
 
+/// <summary>
+
+/// Définit record « GenerationStyleTemplate », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 internal sealed record GenerationStyleTemplate(
     string Id,
     string FrenchName,
@@ -18,6 +22,11 @@ internal sealed record GenerationStyleTemplate(
     string NegativePrompt,
     string RecommendedSettings);
 
+/// <summary>
+
+/// Définit record « GenerationNegativeTemplate », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 internal sealed record GenerationNegativeTemplate(
     string Id,
     string FrenchName,
@@ -25,6 +34,10 @@ internal sealed record GenerationNegativeTemplate(
     string NegativePrompt,
     bool IncludeStyleNegative = false);
 
+/// <summary>
+/// Décrit les paramètres numériques recommandés pour un objectif de génération Image :
+/// résolution, nombre d’étapes et valeur CFG associée au preset.
+/// </summary>
 internal sealed record GenerationImageObjectiveSettings(
     string Id,
     int Width,
@@ -32,6 +45,10 @@ internal sealed record GenerationImageObjectiveSettings(
     int Steps,
     double Cfg);
 
+/// <summary>
+/// Décrit les paramètres complets d’un objectif de génération Vidéo Wan : résolution,
+/// frames, FPS, étapes, CFG, sampling shift, sampler, scheduler et niveau de qualité.
+/// </summary>
 internal sealed record GenerationVideoObjectiveSettings(
     string Id,
     int Width,
@@ -45,30 +62,70 @@ internal sealed record GenerationVideoObjectiveSettings(
     string Scheduler,
     string QualityPreset);
 
+/// <summary>
+/// Centralise les presets de génération Image et Vidéo, leurs fragments de prompts
+/// localisés, leurs prompts négatifs et les réglages numériques recommandés.
+/// </summary>
 internal static class GenerationTemplates
 {
+    /// <summary>
+    /// Définit la constante « GeneralQualityNegative » utilisée comme valeur de référence stable par ce composant.
+    /// </summary>
     private const string GeneralQualityNegative =
         "low quality, blurry, out of focus, jpeg artifacts, compression artifacts, " +
         "watermark, signature, logo, accidental text, oversharpening, oversaturated, " +
         "underexposed, overexposed, malformed, distorted";
 
+    /// <summary>
+
+    /// Définit la constante « PeopleAnatomyNegative » utilisée comme valeur de référence stable par ce composant.
+
+    /// </summary>
     private const string PeopleAnatomyNegative =
         "extra fingers, missing fingers, fused fingers, extra limbs, duplicated body parts, " +
         "malformed hands, malformed face, asymmetrical eyes, deformed anatomy, extra teeth";
 
+    /// <summary>
+
+    /// Définit la constante « ExplicitContentNegative » utilisée comme valeur de référence stable par ce composant.
+
+    /// </summary>
     private const string ExplicitContentNegative =
         "pornography, explicit sexual content, explicit sex, exposed genitals, genitalia, " +
         "sexualized nudity, fetish content, erotic explicit content, sexualized minor, " +
         "underage sexual content, child sexual content";
 
+    /// <summary>
+
+    /// Définit la constante « GraphicViolenceNegative » utilisée comme valeur de référence stable par ce composant.
+
+    /// </summary>
     private const string GraphicViolenceNegative =
         "graphic gore, dismemberment, exposed organs, graphic injury, excessive blood, " +
         "torture imagery";
 
+    /// <summary>
+
+    /// Définit la constante « AdultSafetyNegative » utilisée comme valeur de référence stable par ce composant.
+
+    /// </summary>
+    private const string AdultSafetyNegative =
+        "child, minor, underage, teenager, young-looking person, youthful appearance, " +
+        "school uniform, age ambiguity, non-consensual sexual content, coercion";
+
+    /// <summary>
+
+    /// Définit la constante « VideoStabilityNegative » utilisée comme valeur de référence stable par ce composant.
+
+    /// </summary>
     private const string VideoStabilityNegative =
         "flicker, jitter, camera shake, frame tearing, temporal inconsistency, warped motion, " +
         "duplicated objects, sudden cuts, frame skipping, unstable geometry";
 
+    /// <summary>
+    /// Catalogue des profils numériques Image indexés par identifiant de preset.
+    /// Chaque entrée fournit la résolution, les étapes et le CFG recommandés.
+    /// </summary>
     public static IReadOnlyDictionary<string, GenerationImageObjectiveSettings> ImageObjectiveSettings { get; } =
         new Dictionary<string, GenerationImageObjectiveSettings>(StringComparer.OrdinalIgnoreCase)
         {
@@ -78,12 +135,31 @@ internal static class GenerationTemplates
             ["product"] = new("product", 1024, 1024, 6, 1.0),
             ["landscape"] = new("landscape", 1344, 768, 6, 1.0),
             ["anime"] = new("anime", 1024, 1024, 6, 1.0),
+            ["erotic"] = new("erotic", 896, 1344, 8, 1.0),
+            ["adult-explicit"] = new("adult-explicit", 896, 1344, 8, 1.0),
             ["cinematic"] = new("cinematic", 1344, 768, 6, 1.0),
             ["lowlight"] = new("lowlight", 1344, 768, 8, 1.0),
+            ["macro"] = new("macro", 1024, 1024, 6, 1.0),
+            ["food"] = new("food", 1024, 1024, 6, 1.0),
+            ["ecommerce"] = new("ecommerce", 1024, 1024, 6, 1.0),
+            ["architecture"] = new("architecture", 1344, 768, 6, 1.0),
+            ["interior"] = new("interior", 1344, 768, 6, 1.0),
+            ["travel"] = new("travel", 1344, 768, 6, 1.0),
+            ["illustration"] = new("illustration", 1024, 1024, 6, 1.0),
+            ["digitalart"] = new("digitalart", 1024, 1024, 6, 1.0),
+            ["concept"] = new("concept", 1344, 768, 6, 1.0),
+            ["fantasy"] = new("fantasy", 1344, 768, 6, 1.0),
+            ["scifi"] = new("scifi", 1344, 768, 6, 1.0),
+            ["pixelart"] = new("pixelart", 1024, 1024, 6, 1.0),
+            ["sprite"] = new("sprite", 1024, 1024, 6, 1.0),
             ["photo4k"] = new("photo4k", 1536, 1024, 6, 1.0),
             ["max-quality"] = new("max-quality", 1024, 1024, 8, 1.0)
         };
 
+    /// <summary>
+    /// Catalogue des profils numériques Vidéo Wan indexés par identifiant de preset.
+    /// Chaque entrée regroupe résolution, durée, diffusion, sampler et niveau de qualité.
+    /// </summary>
     public static IReadOnlyDictionary<string, GenerationVideoObjectiveSettings> VideoObjectiveSettings { get; } =
         new Dictionary<string, GenerationVideoObjectiveSettings>(StringComparer.OrdinalIgnoreCase)
         {
@@ -92,12 +168,26 @@ internal static class GenerationTemplates
             ["product"] = new("product", 832, 480, 33, 16, 40, 6.0, 8.0, "uni_pc", "simple", "quality"),
             ["landscape"] = new("landscape", 832, 480, 49, 16, 40, 6.0, 8.0, "uni_pc", "simple", "quality"),
             ["anime"] = new("anime", 832, 480, 33, 16, 40, 6.0, 8.0, "uni_pc", "simple", "quality"),
+            ["erotic"] = new("erotic", 480, 832, 33, 16, 40, 6.0, 8.0, "uni_pc", "simple", "quality"),
+            ["adult-explicit"] = new("adult-explicit", 480, 832, 33, 16, 50, 6.0, 8.0, "uni_pc", "simple", "best"),
             ["cinematic"] = new("cinematic", 832, 480, 49, 16, 40, 6.0, 8.0, "uni_pc", "simple", "quality"),
             ["lowlight"] = new("lowlight", 832, 480, 33, 16, 40, 6.0, 8.0, "uni_pc", "simple", "quality"),
+            ["tracking"] = new("tracking", 832, 480, 41, 16, 40, 6.0, 8.0, "uni_pc", "simple", "quality"),
+            ["static"] = new("static", 832, 480, 33, 16, 40, 6.0, 8.0, "uni_pc", "simple", "quality"),
+            ["drone"] = new("drone", 832, 480, 49, 16, 40, 6.0, 8.0, "uni_pc", "simple", "quality"),
+            ["slowmotion"] = new("slowmotion", 832, 480, 49, 16, 50, 6.0, 8.0, "uni_pc", "simple", "best"),
+            ["nature"] = new("nature", 832, 480, 49, 16, 40, 6.0, 8.0, "uni_pc", "simple", "quality"),
+            ["atmospheric"] = new("atmospheric", 832, 480, 49, 16, 40, 6.0, 8.0, "uni_pc", "simple", "quality"),
+            ["scifi"] = new("scifi", 832, 480, 41, 16, 40, 6.0, 8.0, "uni_pc", "simple", "quality"),
             ["4k"] = new("4k", 1280, 720, 33, 16, 50, 6.0, 8.0, "uni_pc", "simple", "best"),
             ["max-quality"] = new("max-quality", 832, 480, 33, 16, 50, 6.0, 8.0, "uni_pc", "simple", "best")
         };
 
+    /// <summary>
+    /// Expose la liste ordonnée des styles Image disponibles dans l’interface.
+    /// Chaque entrée associe un identifiant stable, des libellés traduits, un
+    /// enrichissement de prompt, un négatif de style et un conseil de réglage.
+    /// </summary>
     public static IReadOnlyList<GenerationStyleTemplate> ImageStyles { get; } =
     [
         S("none","Aucun / personnalisé","None / custom",
@@ -210,6 +300,20 @@ internal static class GenerationTemplates
             "photorealistic skin, muddy line art, inconsistent eyes, malformed hands, extra fingers, broken anatomy, text, watermark",
             "1024×1024 · 4+ steps"),
 
+        S("erotic","Érotique 18+","Erotic 18+",
+            "Portrait sensuel réservé à des adultes clairement majeurs, sans scène sexuelle graphique.",
+            "Sensual portrait restricted to clearly adult subjects, without graphic sexual activity.",
+            "sensual adult editorial photography, consenting adults age 25 and older, elegant intimate atmosphere, tasteful nudity or lingerie, natural anatomy, refined skin texture, flattering cinematic light, sophisticated composition",
+            AdultSafetyNegative + ", explicit sex act, graphic genital focus, coercion, violence, malformed anatomy, text, watermark",
+            "Portrait vertical · 896×1344 · 8 steps · réservé aux adultes 18+"),
+
+        S("adult-explicit","Adulte explicite 18+","Explicit adult 18+",
+            "Contenu sexuel explicite réservé à des adultes clairement majeurs et consentants.",
+            "Explicit sexual content restricted to clearly adult consenting subjects.",
+            "explicit adult erotic photography, consenting adults age 25 and older, mature adult anatomy, realistic skin texture, physically coherent anatomy, controlled cinematic lighting, premium photographic composition, clear adult age cues",
+            AdultSafetyNegative + ", non-consensual content, coercion, injury, malformed anatomy, extra limbs, extra fingers, text, watermark",
+            "Portrait vertical · 896×1344 · 8 steps · réservé aux adultes 18+"),
+
         S("illustration","Illustration","Illustration",
             "Illustration éditoriale soignée.",
             "Polished editorial illustration.",
@@ -266,6 +370,11 @@ internal static class GenerationTemplates
             "Passe 1 sûre : 1024×1024 · 8 steps · CFG 1.0 · Passe 2 : 2048×2048 Lanczos + sharpen")
     ];
 
+    /// <summary>
+    /// Expose les presets de prompt négatif Image. Ils couvrent notamment
+    /// qualité générale, anatomie, texte parasite, arrière-plan, sécurité et
+    /// peuvent fusionner automatiquement le négatif propre au style actif.
+    /// </summary>
     public static IReadOnlyList<GenerationNegativeTemplate> ImageNegatives { get; } =
     [
         N("style","Adapté au style","Style-aware","",true),
@@ -285,6 +394,12 @@ internal static class GenerationTemplates
         N("hands","Mains / doigts","Hands / fingers",
             "extra fingers, missing fingers, fused fingers, malformed hands, duplicated hands, " +
             "broken wrists, impossible finger joints"),
+        N("adult-erotic","Adulte 18+ · érotique","Adult 18+ · erotic",
+            AdultSafetyNegative + ", explicit sex act, graphic genital focus, coercion, violence, " +
+            GeneralQualityNegative + ", " + PeopleAnatomyNegative,true),
+        N("adult-explicit","Adulte 18+ · explicite autorisé","Adult 18+ · explicit allowed",
+            AdultSafetyNegative + ", non-consensual content, coercion, injury, " +
+            GeneralQualityNegative + ", " + PeopleAnatomyNegative,true),
         N("no-text","Sans texte / logo","No text / logo",
             "letters, words, captions, subtitles, watermark, signature, logo, UI elements, fake labels"),
         N("clean-bg","Fond propre","Clean background",
@@ -293,6 +408,11 @@ internal static class GenerationTemplates
         N("none","Aucun preset","No preset","")
     ];
 
+    /// <summary>
+    /// Expose les styles Vidéo proposés pour Wan. Chaque style définit
+    /// l’enrichissement de prompt, les défauts temporels à éviter et les
+    /// recommandations de résolution, frames, steps et qualité associées.
+    /// </summary>
     public static IReadOnlyList<GenerationStyleTemplate> VideoStyles { get; } =
     [
         V("none","Aucun / personnalisé","None / custom",
@@ -370,6 +490,20 @@ internal static class GenerationTemplates
             "line boil, flicker, inconsistent proportions, melting features, color shifts, subtitles, watermark",
             "33+ frames · mouvement simple"),
 
+        V("erotic","Érotique 18+","Erotic 18+",
+            "Vidéo sensuelle réservée à des adultes clairement majeurs, sans action sexuelle graphique.",
+            "Sensual video restricted to clearly adult subjects, without graphic sexual activity.",
+            "sensual adult cinematic portrait, consenting adults age 25 and older, elegant intimate atmosphere, tasteful nudity or lingerie, natural body motion, stable adult anatomy, soft cinematic lighting, coherent identity",
+            AdultSafetyNegative + ", explicit sex act, graphic genital focus, coercion, violence, identity drift, flicker, warped anatomy, subtitles, watermark",
+            "480×832 · 33 frames · 16 fps · 40 steps · Qualité"),
+
+        V("adult-explicit","Adulte explicite 18+","Explicit adult 18+",
+            "Vidéo sexuelle explicite réservée à des adultes clairement majeurs et consentants.",
+            "Explicit sexual video restricted to clearly adult consenting subjects.",
+            "explicit adult erotic cinematic video, consenting adults age 25 and older, mature adult anatomy, stable identity, coherent body motion, realistic skin texture, controlled camera movement, consistent lighting, clear adult age cues",
+            AdultSafetyNegative + ", non-consensual content, coercion, injury, identity drift, flicker, malformed anatomy, subtitles, watermark",
+            "480×832 · 33 frames · 16 fps · 50 steps · Best · réservé aux adultes 18+"),
+
         V("scifi","Science-fiction","Sci-fi",
             "Mouvement SF cinématique et mécanique cohérent.",
             "Cinematic sci-fi motion with coherent mechanics.",
@@ -413,6 +547,11 @@ internal static class GenerationTemplates
             "Passe 1 sûre : 832×480 · 33 frames · 16 fps · 50 steps · Passe 2 : 1664×960 Lanczos + sharpen · H.264 CRF 16")
     ];
 
+    /// <summary>
+    /// Expose les presets négatifs Vidéo utilisés pour limiter scintillement,
+    /// dérive d’identité, géométrie instable, contenu indésirable et autres
+    /// défauts temporels selon le scénario sélectionné.
+    /// </summary>
     public static IReadOnlyList<GenerationNegativeTemplate> VideoNegatives { get; } =
     [
         N("style","Adapté au style","Style-aware","",true),
@@ -431,6 +570,12 @@ internal static class GenerationTemplates
         N("identity","Visage / identité stable","Stable face / identity",
             "face flicker, identity drift, facial morphing, melting features, changing eye color, " +
             "changing hairstyle, duplicated face, asymmetrical eyes",true),
+        N("adult-erotic","Adulte 18+ · érotique","Adult 18+ · erotic",
+            AdultSafetyNegative + ", explicit sex act, graphic genital focus, coercion, violence, " +
+            VideoStabilityNegative + ", " + PeopleAnatomyNegative,true),
+        N("adult-explicit","Adulte 18+ · explicite autorisé","Adult 18+ · explicit allowed",
+            AdultSafetyNegative + ", non-consensual content, coercion, injury, " +
+            VideoStabilityNegative + ", " + PeopleAnatomyNegative,true),
         N("animation","Animation propre","Clean animation",
             "flicker, line boil, inconsistent proportions, broken outlines, color shifts, " +
             "duplicate frames, abrupt pose changes, subtitles, watermark",true),
@@ -440,6 +585,11 @@ internal static class GenerationTemplates
         N("none","Aucun preset","No preset","")
     ];
 
+    /// <summary>
+
+    /// Crée une définition de style Image avec ses libellés et son fragment de prompt localisé.
+
+    /// </summary>
     private static GenerationStyleTemplate S(
         string id,
         string fr,
@@ -451,6 +601,11 @@ internal static class GenerationTemplates
         string settings) =>
         new(id, fr, en, frDesc, enDesc, suffix, negative, settings);
 
+    /// <summary>
+
+    /// Crée une définition de style Vidéo avec ses libellés et son fragment de prompt localisé.
+
+    /// </summary>
     private static GenerationStyleTemplate V(
         string id,
         string fr,
@@ -462,6 +617,11 @@ internal static class GenerationTemplates
         string settings) =>
         new(id, fr, en, frDesc, enDesc, suffix, negative, settings);
 
+    /// <summary>
+
+    /// Crée une définition de prompt négatif avec ses libellés et son contenu localisé.
+
+    /// </summary>
     private static GenerationNegativeTemplate N(
         string id,
         string fr,
@@ -470,21 +630,41 @@ internal static class GenerationTemplates
         bool includeStyleNegative = false) =>
         new(id, fr, en, negative, includeStyleNegative);
 
+    /// <summary>
+
+    /// Retourne le libellé localisé utilisé pour afficher cet élément dans l’interface.
+
+    /// </summary>
     public static string Display(GenerationStyleTemplate item, string language) =>
         language.Equals("en", StringComparison.OrdinalIgnoreCase)
             ? item.EnglishName
             : item.FrenchName;
 
+    /// <summary>
+
+    /// Retourne la description localisée associée à cet élément.
+
+    /// </summary>
     public static string Description(GenerationStyleTemplate item, string language) =>
         language.Equals("en", StringComparison.OrdinalIgnoreCase)
             ? item.EnglishDescription
             : item.FrenchDescription;
 
+    /// <summary>
+
+    /// Retourne le libellé localisé utilisé pour afficher cet élément dans l’interface.
+
+    /// </summary>
     public static string Display(GenerationNegativeTemplate item, string language) =>
         language.Equals("en", StringComparison.OrdinalIgnoreCase)
             ? item.EnglishName
             : item.FrenchName;
 
+    /// <summary>
+
+    /// Applique ApplyPrompt aux réglages ou contrôles concernés en respectant les contraintes de DreamRaster.
+
+    /// </summary>
     public static string ApplyPrompt(
         string prompt,
         GenerationStyleTemplate? template)
@@ -498,6 +678,11 @@ internal static class GenerationTemplates
         return prompt.TrimEnd().TrimEnd('.') + ". " + template.PromptSuffix;
     }
 
+    /// <summary>
+
+    /// Exécute le traitement <c>MergeNegative</c> et conserve un état cohérent en cas de succès comme d’erreur.
+
+    /// </summary>
     public static string MergeNegative(
         string custom,
         GenerationNegativeTemplate? preset,
@@ -521,30 +706,55 @@ internal static class GenerationTemplates
         return string.Join(", ", parts);
     }
 
+    /// <summary>
+
+    /// Recherche la ressource ou valeur demandée par <c>FindStyle</c> dans les données disponibles.
+
+    /// </summary>
     public static GenerationStyleTemplate? FindStyle(
         IEnumerable<GenerationStyleTemplate> source,
         string? id) =>
         source.FirstOrDefault(x =>
             x.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>
+
+    /// Recherche la ressource ou valeur demandée par <c>FindNegative</c> dans les données disponibles.
+
+    /// </summary>
     public static GenerationNegativeTemplate? FindNegative(
         IEnumerable<GenerationNegativeTemplate> source,
         string? id) =>
         source.FirstOrDefault(x =>
             x.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>
+
+    /// Recherche la ressource ou valeur demandée par <c>FindImageSettings</c> dans les données disponibles.
+
+    /// </summary>
     public static GenerationImageObjectiveSettings? FindImageSettings(string? id) =>
         !string.IsNullOrWhiteSpace(id) &&
         ImageObjectiveSettings.TryGetValue(id, out var settings)
             ? settings
             : null;
 
+    /// <summary>
+
+    /// Recherche la ressource ou valeur demandée par <c>FindVideoSettings</c> dans les données disponibles.
+
+    /// </summary>
     public static GenerationVideoObjectiveSettings? FindVideoSettings(string? id) =>
         !string.IsNullOrWhiteSpace(id) &&
         VideoObjectiveSettings.TryGetValue(id, out var settings)
             ? settings
             : null;
 
+    /// <summary>
+
+    /// Indique si la condition ou stratégie représentée par <c>UsesTwoPassMaximumQuality</c> est active.
+
+    /// </summary>
     public static bool UsesTwoPassMaximumQuality(string? id) =>
         string.Equals(
             id,

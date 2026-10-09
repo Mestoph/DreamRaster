@@ -1,27 +1,39 @@
-﻿/*
+/*
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
 
-FR : Racine portable, confinement des chemins et settings.json.
-EN: Portable root, path confinement and settings.json.
-
-FR : Les commentaires structurants sont bilingues. Les noms d'API, classes et protocoles
+Racine portable, confinement des chemins et settings.json.
+Les commentaires structurants sont r?dig?s en fran?ais. Les noms d'API, classes et protocoles
      restent dans leur forme technique afin de garder le code lisible et compatible.
-EN: Structural comments are bilingual. API, class and protocol names remain in their
-    technical form to keep the code readable and compatible.
 */
 
 using System.Text.Json;
 
 namespace OpenCodeLocalAI;
 
+/// <summary>
+
+/// Définit class « PortablePaths », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 public static class PortablePaths
 {
+    /// <summary>
+    /// Stocke « _root », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private static readonly string _root = ResolvePortableRoot();
 
+        /// <summary>
+    /// Racine portable effective de DreamRaster. Tous les chemins de configuration, runtime, mod?les et donn?es sont r?solus relativement ? cette racine confin?e.
+    /// </summary>
     public static string Root => _root;
 
+    /// <summary>
+
+    /// Exécute le traitement <c>ResolvePortableRoot</c> et conserve un état cohérent en cas de succès comme d’erreur.
+
+    /// </summary>
     private static string ResolvePortableRoot()
     {
         // Pour une application publiée, on veut le dossier du vrai EXE
@@ -43,23 +55,63 @@ public static class PortablePaths
             }
         }
 
-        // Build/Designer : AppContext.BaseDirectory reste le meilleur fallback.
+        // Compilation/Designer : AppContext.BaseDirectory reste la meilleure solution de repli.
         return Path.TrimEndingDirectorySeparator(
             Path.GetFullPath(AppContext.BaseDirectory));
     }
+    /// <summary>
+    /// Dossier contenant la configuration persistante de DreamRaster.
+    /// </summary>
     public static string ConfigDir => Path.Combine(Root, "config");
+    /// <summary>
+    /// Valeur de configuration downloads utilisée par DreamRaster.
+    /// </summary>
     public static string DownloadsDir => Path.Combine(Root, "downloads");
+    /// <summary>
+    /// Dossier contenant les journaux applicatifs et fichiers de diagnostic.
+    /// </summary>
     public static string LogsDir => Path.Combine(Root, "logs");
+    /// <summary>
+    /// Exécute RuntimeDir en coordonnant les ressources et les mécanismes d’annulation nécessaires.
+    /// </summary>
     public static string RuntimeDir => Path.Combine(Root, "runtime");
+    /// <summary>
+    /// Valeur de configuration models utilisée par DreamRaster.
+    /// </summary>
     public static string ModelsDir => Path.Combine(Root, "models");
+    /// <summary>
+    /// Valeur de configuration workflows utilisée par DreamRaster.
+    /// </summary>
     public static string WorkflowsDir => Path.Combine(Root, "workflows");
 
+    /// <summary>
+
+    /// Définit la constante « TextToImageWorkflowFile » utilisée comme valeur de référence stable par ce composant.
+
+    /// </summary>
     public const string TextToImageWorkflowFile = "flux2_text_to_image_api.json";
+    /// <summary>
+    /// Définit la constante « ImgToImgWorkflowFile » utilisée comme valeur de référence stable par ce composant.
+    /// </summary>
     public const string ImgToImgWorkflowFile = "flux2_img_to_img_api.json";
+    /// <summary>
+    /// Définit la constante « WanTextToVideoWorkflowFile » utilisée comme valeur de référence stable par ce composant.
+    /// </summary>
     public const string WanTextToVideoWorkflowFile = "wan21_text_to_video_api.json";
+    /// <summary>
+    /// Définit la constante « WanImageToVideoWorkflowFile » utilisée comme valeur de référence stable par ce composant.
+    /// </summary>
     public const string WanImageToVideoWorkflowFile = "wan21_image_to_video_api.json";
+    /// <summary>
+    /// Définit la constante « LegacyWorkflowFile » utilisée comme valeur de référence stable par ce composant.
+    /// </summary>
     public const string LegacyWorkflowFile = "flux2_workflow_api.json";
 
+    /// <summary>
+
+    /// Vérifie puis garantit la condition requise par <c>EnsureLayout</c> avant de poursuivre.
+
+    /// </summary>
     public static void EnsureLayout()
     {
         foreach (var dir in new[]
@@ -74,6 +126,11 @@ public static class PortablePaths
         EnsureBundledWorkflows();
     }
 
+    /// <summary>
+
+    /// Vérifie puis garantit la condition requise par <c>EnsureBundledWorkflows</c> avant de poursuivre.
+
+    /// </summary>
     public static void EnsureBundledWorkflows()
     {
         Directory.CreateDirectory(WorkflowsDir);
@@ -100,6 +157,11 @@ public static class PortablePaths
             "OpenCodeLocalAI.Workflows.flux2_text_to_image_api.json");
     }
 
+    /// <summary>
+
+    /// Écrit les données gérées par <c>WriteEmbeddedFileIfDifferent</c> vers leur destination.
+
+    /// </summary>
     private static void WriteEmbeddedFileIfDifferent(
         string targetPath,
         string resourceName)
@@ -148,6 +210,11 @@ public static class PortablePaths
         }
     }
 
+    /// <summary>
+
+    /// Exécute le traitement <c>Resolve</c> et conserve un état cohérent en cas de succès comme d’erreur.
+
+    /// </summary>
     public static string Resolve(string configured)
     {
         if (string.IsNullOrWhiteSpace(configured))
@@ -166,6 +233,11 @@ public static class PortablePaths
         return full;
     }
 
+    /// <summary>
+
+    /// Indique si la condition représentée par IsInsidePack est satisfaite dans l’état courant.
+
+    /// </summary>
     public static bool IsInsidePack(string? path)
     {
         if (string.IsNullOrWhiteSpace(path)) return false;
@@ -179,6 +251,11 @@ public static class PortablePaths
         catch { return false; }
     }
 
+    /// <summary>
+
+    /// Retourne GetFixedWebView2RuntimePath calculé à partir de l’état courant de l’application.
+
+    /// </summary>
     public static string? GetFixedWebView2RuntimePath()
     {
         var root = Path.Combine(Root, "bin", "webview2-fixed");
@@ -206,10 +283,23 @@ public static class PortablePaths
     }
 }
 
+/// <summary>
+
+/// Définit class « SettingsStore », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 public static class SettingsStore
 {
+    /// <summary>
+    /// Chemin complet du fichier settings.json persistant.
+    /// </summary>
     private static string FilePath => Path.Combine(PortablePaths.ConfigDir, "settings.json");
 
+    /// <summary>
+
+    /// Charge les réglages persistants depuis settings.json, applique les migrations nécessaires et retourne des valeurs par défaut en cas d’erreur.
+
+    /// </summary>
     public static AppSettings Load()
     {
         PortablePaths.EnsureLayout();
@@ -226,8 +316,8 @@ public static class SettingsStore
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true })
                 ?? new AppSettings();
 
-            // FR : Migration silencieuse des anciennes configurations v34 et antérieures.
-            // EN: Silently migrate legacy v34-and-earlier configuration files.
+            // Migration silencieuse des anciennes configurations v34 et antérieures.
+            // Migre silencieusement les fichiers de configuration hérités de la v34 et des versions antérieures.
             if (loaded.EnsureWebView2FixedDefaults())
                 Save(loaded);
 
@@ -240,6 +330,11 @@ public static class SettingsStore
         }
     }
 
+    /// <summary>
+
+    /// Enregistre Save de manière persistante afin de conserver le choix de l’utilisateur.
+
+    /// </summary>
     public static void Save(AppSettings settings)
     {
         PortablePaths.EnsureLayout();

@@ -1,10 +1,9 @@
-﻿/*
+/*
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
 
-FR : Client de mise à jour basé sur GitHub Releases. Il ne touche qu'au pack portable.
-EN: GitHub Releases updater. It only modifies files inside the portable pack.
+Client de mise à jour basé sur GitHub Releases. Il ne touche qu'au pack portable.
 */
 using System.Diagnostics;
 using System.IO.Compression;
@@ -15,6 +14,11 @@ using System.Windows.Forms;
 
 namespace OpenCodeLocalAI;
 
+/// <summary>
+
+/// Définit record « GitHubUpdateInfo », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 internal sealed record GitHubUpdateInfo(
     bool Available,
     Version CurrentVersion,
@@ -24,11 +28,25 @@ internal sealed record GitHubUpdateInfo(
     string? AssetUrl,
     string? Notes);
 
+/// <summary>
+
+/// Définit class « GitHubUpdater », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 internal sealed class GitHubUpdater : IDisposable
 {
+    /// <summary>
+    /// Stocke « _settings », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly AppSettings _settings;
+    /// <summary>
+    /// Stocke « _http », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly HttpClient _http;
 
+/// <summary>
+/// Initialise le client de mise ? jour avec la configuration courante afin de r?soudre le d?p?t GitHub, comparer les versions et pr?parer les t?l?chargements autoris?s.
+/// </summary>
     public GitHubUpdater(AppSettings settings)
     {
         _settings = settings;
@@ -40,19 +58,33 @@ internal sealed class GitHubUpdater : IDisposable
             new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
     }
 
+/// <summary>
+/// Retourne l?URL publique du d?p?t GitHub actuellement configur? ? partir du propri?taire et du nom de d?p?t valid?s.
+/// </summary>
     public string RepositoryUrl
         => $"https://github.com/{Owner}/{Repository}";
 
+/// <summary>
+/// Extrait et m?morise le propri?taire GitHub du d?p?t configur? afin de construire les appels ? l?API Releases.
+/// </summary>
     private string Owner
         => string.IsNullOrWhiteSpace(_settings.GitHubOwner)
             ? BrandInfo.DefaultGitHubOwner
             : _settings.GitHubOwner.Trim();
 
+/// <summary>
+/// Extrait et m?morise le nom du d?p?t GitHub utilis? pour rechercher les releases de DreamRaster.
+/// </summary>
     private string Repository
         => string.IsNullOrWhiteSpace(_settings.GitHubRepository)
             ? BrandInfo.DefaultGitHubRepository
             : _settings.GitHubRepository.Trim();
 
+    /// <summary>
+
+    /// Vérifie l’état géré par <c>CheckAsync</c> et retourne un diagnostic exploitable.
+
+    /// </summary>
     public async Task<GitHubUpdateInfo?> CheckAsync(CancellationToken ct)
     {
         var uri =
@@ -138,6 +170,11 @@ internal sealed class GitHubUpdater : IDisposable
             notes);
     }
 
+    /// <summary>
+
+    /// Exécute le traitement <c>StageAndLaunchAsync</c> et conserve un état cohérent en cas de succès comme d’erreur.
+
+    /// </summary>
     public async Task StageAndLaunchAsync(
         GitHubUpdateInfo update,
         IProgress<int>? progress,
@@ -207,6 +244,11 @@ internal sealed class GitHubUpdater : IDisposable
         }
     }
 
+    /// <summary>
+    /// Télécharge un fichier de mise à jour depuis GitHub en flux continu,
+    /// écrit son contenu sur disque et publie la progression lorsque la taille
+    /// distante est connue.
+    /// </summary>
     private async Task DownloadAsync(
         string url,
         string path,
@@ -259,6 +301,11 @@ internal sealed class GitHubUpdater : IDisposable
         progress?.Report(100);
     }
 
+    /// <summary>
+
+    /// Analyse la valeur traitée par <c>ParseVersion</c> et la convertit dans sa représentation interne.
+
+    /// </summary>
     private static Version ParseVersion(string? raw)
     {
         raw ??= "0.0.0";
@@ -280,6 +327,11 @@ internal sealed class GitHubUpdater : IDisposable
             : new Version(0, 0, 0);
     }
 
+    /// <summary>
+
+    /// Construit BuildUpdateScript à partir de l’état courant sans modifier les données utilisateur au-delà de ce qui est explicitement requis.
+
+    /// </summary>
     private static string BuildUpdateScript()
         => """
 @echo off
@@ -306,5 +358,10 @@ start "" "%TARGET%"
 del "%~f0"
 """;
 
+    /// <summary>
+
+    /// Libère les ressources détenues par cette instance et termine proprement les objets associés.
+
+    /// </summary>
     public void Dispose() => _http.Dispose();
 }

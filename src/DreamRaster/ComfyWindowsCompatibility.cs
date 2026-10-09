@@ -1,19 +1,34 @@
-﻿/*
+/*
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
-FR : Contrôles de compatibilité ciblés pour le runtime ComfyUI portable.
-EN: Targeted compatibility checks for the portable ComfyUI runtime.
+Contrôles de compatibilité ciblés pour le runtime ComfyUI portable.
 */
 
 namespace OpenCodeLocalAI;
 
+/// <summary>
+
+/// Définit class « ComfyWindowsCompatibility », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 internal static class ComfyWindowsCompatibility
 {
+    /// <summary>
+    /// Définit la constante « SupportedVersion » utilisée comme valeur de référence stable par ce composant.
+    /// </summary>
     private const string SupportedVersion = "0.38.0";
+    /// <summary>
+    /// Définit la constante « LegacyPatchMarker » utilisée comme valeur de référence stable par ce composant.
+    /// </summary>
     private const string LegacyPatchMarker =
         "# DreamRaster stability patch: bypass AIMDO direct file-to-GPU on Windows.";
 
+    /// <summary>
+
+    /// Vérifie l’état géré par <c>CheckAimdoCompatibility</c> et retourne un diagnostic exploitable.
+
+    /// </summary>
     public static bool CheckAimdoCompatibility(
         AppSettings settings,
         Action<string, string> log)

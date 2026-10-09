@@ -33,6 +33,16 @@ See [BUILD_LINUX.en.md](BUILD_LINUX.en.md). Linux can cross-build/publish the Wi
 
 The portable installer manages OpenCode, Ollama, ComfyUI and FLUX.2 models. Qwen3-VL is optional.
 
+## Wan 2.1 I2V prerequisites and safe deployment
+
+Image-to-video requires a compatible Wan I2V model, text encoder, Wan VAE, CLIP-Vision, and an **existing reference image**. Model installation remains explicit in the portable application; multi-gigabyte model downloads do not start silently.
+
+The I2V 14B model runs ComfyUI with `--lowvram`. DreamRaster restarts ComfyUI between latent sampling and VAE decoding to reduce memory pressure. **832 × 480, 33 frames, 50 steps** was successfully tested on an RTX 4060 Ti 16 GB, but runtime and memory usage vary by machine.
+
+See [Wan video validation](VIDEO_VALIDATION.en.md) for suggested settings, MP4 checks and troubleshooting.
+
+**Safe upgrades:** publish to a separate directory and replace only authorized application files; preserve `config\settings.json`, models, images, videos, and workspace. See the [cleanup audit](AUDIT_NETTOYAGE.md).
+
 ## Portable WebView2 Fixed Version
 
 The Microsoft WebView2 Fixed Version Runtime x64 is a required DreamRaster component. The installer downloads it automatically, verifies its SHA-256, then extracts it under `bin\webview2-fixed\`.

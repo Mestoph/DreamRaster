@@ -3,13 +3,9 @@ Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
 
-FR : Déclaration Designer WinForms de tous les contrôles.
-EN: WinForms Designer declaration for all controls.
-
-FR : Les commentaires structurants sont bilingues. Les noms d'API, classes et protocoles
+Déclaration Designer WinForms de tous les contrôles.
+Les commentaires structurants sont r?dig?s en fran?ais. Les noms d'API, classes et protocoles
      restent dans leur forme technique afin de garder le code lisible et compatible.
-EN: Structural comments are bilingual. API, class and protocol names remain in their
-    technical form to keep the code readable and compatible.
 */
 
 #nullable enable
@@ -18,281 +14,1164 @@ namespace OpenCodeLocalAI;
 
 partial class MainForm
 {
+    /// <summary>
+    /// Contient les composants WinForms créés et libérés par le Designer.
+    /// </summary>
     private System.ComponentModel.IContainer? components = null;
 
+    /// <summary>
+    /// Contrôle d’onglets WinForms « _tabs » : représente tabs et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabControl _tabs = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « tabDashboard » : représente tab dashboard et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage tabDashboard = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « tabOpenCode » : représente tab open code et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage tabOpenCode = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « tabComfy » : représente tab comfy et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage tabComfy = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « tabOllama » : représente tab ollama et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage tabOllama = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « tabGenerate » : représente tab generate et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage tabGenerate = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « tabInstallation » : représente tab installation et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage tabInstallation = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « tabConfiguration » : représente tab configuration et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage tabConfiguration = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « tabLogs » : représente tab logs et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage tabLogs = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « tabAbout » : représente tab about et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage tabAbout = null!;
 
+    /// <summary>
+    /// Libellé WinForms « lblTitle » : représente lbl title et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblTitle = null!;
+    /// <summary>
+    /// Bouton WinForms « btnStart » : représente btn start et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button btnStart = null!;
+    /// <summary>
+    /// Bouton WinForms « btnStop » : représente btn stop et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button btnStop = null!;
+    /// <summary>
+    /// Bouton WinForms « btnOpenCode » : représente btn open code et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button btnOpenCode = null!;
+    /// <summary>
+    /// Bouton WinForms « btnComfy » : représente btn comfy et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button btnComfy = null!;
+    /// <summary>
+    /// Bouton WinForms « btnDiagnostic » : représente btn diagnostic et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button btnDiagnostic = null!;
+    /// <summary>
+    /// Libellé WinForms « _status » : représente status et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _status = null!;
+    /// <summary>
+    /// Libellé WinForms « _gpu » : représente gpu et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _gpu = null!;
+    /// <summary>
+    /// Libellé WinForms « lblLiveLog » : représente lbl live log et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblLiveLog = null!;
+    /// <summary>
+    /// Zone de journal WinForms « _liveLog » : représente live log et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private RichTextBox _liveLog = null!;
 
+    /// <summary>
+    /// Libellé WinForms « _dashboardRuntimeInfoPolish » : représente dashboard runtime info et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
+    private Label _dashboardRuntimeInfoPolish = null!;
+    /// <summary>
+    /// Libellé WinForms « _dashboardModelsInfoPolish » : représente dashboard models info et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
+    private Label _dashboardModelsInfoPolish = null!;
+
+
+    /// <summary>
+    /// Vue WebView2 « _web » : représente web et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Microsoft.Web.WebView2.WinForms.WebView2 _web = null!;
+    /// <summary>
+    /// Vue WebView2 « _comfyWeb » : représente comfy web et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Microsoft.Web.WebView2.WinForms.WebView2 _comfyWeb = null!;
+    /// <summary>
+    /// Zone de journal WinForms « _ollamaLog » : représente ollama log et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private RichTextBox _ollamaLog = null!;
 
+    /// <summary>
+    /// Libellé WinForms « lblPrompt » : représente lbl prompt et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblPrompt = null!;
+    /// <summary>
+    /// Zone de texte WinForms « _prompt » : représente prompt et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox _prompt = null!;
+    /// <summary>
+    /// Libellé WinForms « lblGenerationMode » : représente lbl generation mode et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblGenerationMode = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « cmbGenerationMode » : représente cmb generation mode et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox cmbGenerationMode = null!;
+    /// <summary>
+    /// Libellé WinForms « lblInputImage » : représente lbl input image et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblInputImage = null!;
+    /// <summary>
+    /// Zone de texte WinForms « txtInputImage » : représente txt input image et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox txtInputImage = null!;
+    /// <summary>
+    /// Bouton WinForms « btnBrowseInputImage » : représente btn browse input image et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button btnBrowseInputImage = null!;
+    /// <summary>
+    /// Bouton WinForms « btnClearInputImage » : représente btn clear input image et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button btnClearInputImage = null!;
+    /// <summary>
+    /// Libellé WinForms « lblImg2ImgStrength » : représente lbl img2 img strength et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblImg2ImgStrength = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « numImg2ImgStrength » : représente num img2 img strength et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown numImg2ImgStrength = null!;
+    /// <summary>
+    /// Bouton WinForms « btnGenerate » : représente btn generate et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button btnGenerate = null!;
+    /// <summary>
+    /// Libellé WinForms « _genText » : représente gen text et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _genText = null!;
+    /// <summary>
+    /// Barre de progression WinForms « _genProgress » : représente gen progress et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ProgressBar _genProgress = null!;
+    /// <summary>
+    /// Zone d’aperçu graphique WinForms « _preview » : représente preview et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private PictureBox _preview = null!;
 
+    /// <summary>
+    /// Libellé WinForms « lblInstallTitle » : représente lbl install title et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblInstallTitle = null!;
+    /// <summary>
+    /// Libellé WinForms « lblInstallInfo » : représente lbl install info et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblInstallInfo = null!;
+    /// <summary>
+    /// Bouton WinForms « btnInstallAll » : représente btn install all et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button btnInstallAll = null!;
+    /// <summary>
+    /// Bouton WinForms « btnInstallCancel » : représente btn install cancel et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button btnInstallCancel = null!;
+    /// <summary>
+    /// Libellé WinForms « _installText » : représente install text et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _installText = null!;
+    /// <summary>
+    /// Barre de progression WinForms « _installProgress » : représente install progress et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ProgressBar _installProgress = null!;
+    /// <summary>
+    /// Zone de journal WinForms « _installLog » : représente install log et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private RichTextBox _installLog = null!;
 
+    /// <summary>
+    /// Libellé WinForms « lblConfigTitle » : représente lbl config title et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblConfigTitle = null!;
+    /// <summary>
+    /// Libellé WinForms « lblConfigRootCaption » : représente lbl config root caption et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblConfigRootCaption = null!;
+    /// <summary>
+    /// Zone de texte WinForms « txtConfigRoot » : représente txt config root et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox txtConfigRoot = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgOpenCodePort » : représente lbl cfg open code port et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgOpenCodePort = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgOllamaPort » : représente lbl cfg ollama port et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgOllamaPort = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgComfyPort » : représente lbl cfg comfy port et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgComfyPort = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgProxyPort » : représente lbl cfg proxy port et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgProxyPort = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgApiPort » : représente lbl cfg api port et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgApiPort = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « numOpenCodePort » : représente num open code port et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown numOpenCodePort = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « numOllamaPort » : représente num ollama port et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown numOllamaPort = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « numComfyPort » : représente num comfy port et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown numComfyPort = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « numProxyPort » : représente num proxy port et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown numProxyPort = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « numApiPort » : représente num api port et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown numApiPort = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgVisionModel » : représente lbl cfg vision model et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgVisionModel = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgFluxModel » : représente lbl cfg flux model et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgFluxModel = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgTextEncoder » : représente lbl cfg text encoder et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgTextEncoder = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgVae » : représente lbl cfg vae et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgVae = null!;
+    /// <summary>
+    /// Zone de texte WinForms « txtVisionModel » : représente txt vision model et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox txtVisionModel = null!;
+    /// <summary>
+    /// Zone de texte WinForms « txtFluxModel » : représente txt flux model et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox txtFluxModel = null!;
+    /// <summary>
+    /// Zone de texte WinForms « txtTextEncoder » : représente txt text encoder et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox txtTextEncoder = null!;
+    /// <summary>
+    /// Zone de texte WinForms « txtVae » : représente txt vae et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox txtVae = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgWidth » : représente lbl cfg width et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgWidth = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgHeight » : représente lbl cfg height et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgHeight = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgSteps » : représente lbl cfg steps et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgSteps = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « numDefaultWidth » : représente num default width et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown numDefaultWidth = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « numDefaultHeight » : représente num default height et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown numDefaultHeight = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « numDefaultSteps » : représente num default steps et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown numDefaultSteps = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgVram » : représente lbl cfg vram et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgVram = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgRam » : représente lbl cfg ram et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgRam = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « numSafeVram » : représente num safe vram et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown numSafeVram = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « numSafeRam » : représente num safe ram et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown numSafeRam = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgConnections » : représente lbl cfg connections et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgConnections = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgBuffer » : représente lbl cfg buffer et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgBuffer = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « numDownloadConnections » : représente num download connections et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown numDownloadConnections = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « numDownloadBuffer » : représente num download buffer et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown numDownloadBuffer = null!;
+    /// <summary>
+    /// Case à cocher WinForms « chkHardStopComfy » : représente chk hard stop comfy et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private CheckBox chkHardStopComfy = null!;
+    /// <summary>
+    /// Bouton WinForms « btnSettingsSave » : représente btn settings save et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button btnSettingsSave = null!;
+    /// <summary>
+    /// Bouton WinForms « btnOpenConfigFolder » : représente btn open config folder et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button btnOpenConfigFolder = null!;
+    /// <summary>
+    /// Libellé WinForms « lblConfigHint » : représente lbl config hint et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblConfigHint = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgLanguage » : représente lbl cfg language et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgLanguage = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « cmbLanguage » : représente cmb language et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox cmbLanguage = null!;
+    /// <summary>
+    /// Case à cocher WinForms « chkAutoUpdates » : représente chk auto updates et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private CheckBox chkAutoUpdates = null!;
+    /// <summary>
+    /// Libellé WinForms « lblCfgGitHubRepo » : représente lbl cfg git hub repo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblCfgGitHubRepo = null!;
+    /// <summary>
+    /// Zone de texte WinForms « txtGitHubRepo » : représente txt git hub repo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox txtGitHubRepo = null!;
+    /// <summary>
+    /// Case à cocher WinForms « chkInstallVisionModel » : représente chk install vision model et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private CheckBox chkInstallVisionModel = null!;
 
+    /// <summary>
+    /// Conteneur WinForms « _configurationAdvancedPanelPolish » : représente configuration advanced panel et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
+    private Panel _configurationAdvancedPanelPolish = null!;
+    /// <summary>
+    /// Libellé WinForms « _cfgAdvancedInterfaceTitlePolish » : représente cfg advanced interface title et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
+    private Label _cfgAdvancedInterfaceTitlePolish = null!;
+    /// <summary>
+    /// Case à cocher WinForms « _cfgShowOpenCodeTabPolish » : représente cfg show open code tab et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
+    private CheckBox _cfgShowOpenCodeTabPolish = null!;
+    /// <summary>
+    /// Case à cocher WinForms « _cfgShowComfyTabPolish » : représente cfg show comfy tab et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
+    private CheckBox _cfgShowComfyTabPolish = null!;
+    /// <summary>
+    /// Libellé WinForms « _cfgAdvancedInterfaceNotePolish » : représente cfg advanced interface note et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
+    private Label _cfgAdvancedInterfaceNotePolish = null!;
+
+
+    /// <summary>
+    /// Zone de journal WinForms « _allLog » : représente all log et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private RichTextBox _allLog = null!;
 
+    /// <summary>
+    /// Zone d’aperçu graphique WinForms « picAboutIcon » : représente pic about icon et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private PictureBox picAboutIcon = null!;
+    /// <summary>
+    /// Libellé WinForms « lblAboutTitle » : représente lbl about title et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblAboutTitle = null!;
+    /// <summary>
+    /// Libellé WinForms « lblAboutDescription » : représente lbl about description et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblAboutDescription = null!;
+    /// <summary>
+    /// Libellé WinForms « lblAboutVersion » : représente lbl about version et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblAboutVersion = null!;
+    /// <summary>
+    /// Libellé WinForms « lblAboutAuthor » : représente lbl about author et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblAboutAuthor = null!;
+    /// <summary>
+    /// Libellé WinForms « lblAboutRepository » : représente lbl about repository et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblAboutRepository = null!;
+    /// <summary>
+    /// Libellé WinForms « lblAboutLicense » : représente lbl about license et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label lblAboutLicense = null!;
+    /// <summary>
+    /// Libellé WinForms « _aboutUpdateStatus » : représente about update status et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _aboutUpdateStatus = null!;
+    /// <summary>
+    /// Barre de progression WinForms « _aboutUpdateProgress » : représente about update progress et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ProgressBar _aboutUpdateProgress = null!;
+    /// <summary>
+    /// Bouton WinForms « btnCheckUpdates » : représente btn check updates et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button btnCheckUpdates = null!;
+    /// <summary>
+    /// Bouton WinForms « btnOpenGitHub » : représente btn open git hub et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button btnOpenGitHub = null!;
 
+    /// <summary>
+    /// Bouton WinForms « _imageModelDownloadButton » : représente image model download button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _imageModelDownloadButton = null!;
+    /// <summary>
+    /// Bouton WinForms « _benchmarkButton » : représente benchmark button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _benchmarkButton = null!;
+    /// <summary>
+    /// Case à cocher WinForms « _randomSeedCheck » : représente random seed check et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private CheckBox _randomSeedCheck = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « _seedInput » : représente seed input et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown _seedInput = null!;
+    /// <summary>
+    /// Libellé WinForms « _seedLabel » : représente seed label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _seedLabel = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _promptModelCombo » : représente prompt model combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox _promptModelCombo = null!;
+    /// <summary>
+    /// Libellé WinForms « _promptModelLabel » : représente prompt model label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _promptModelLabel = null!;
+    /// <summary>
+    /// Case à cocher WinForms « _autoImprovePrompt » : représente auto improve prompt et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private CheckBox _autoImprovePrompt = null!;
+    /// <summary>
+    /// Bouton WinForms « _improvePromptButton » : représente improve prompt button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _improvePromptButton = null!;
+    /// <summary>
+    /// Zone de texte WinForms « _negativePrompt » : représente negative prompt et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox _negativePrompt = null!;
+    /// <summary>
+    /// Libellé WinForms « _negativePromptLabel » : représente negative prompt label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _negativePromptLabel = null!;
+    /// <summary>
+    /// Libellé WinForms « _imageStyleTemplateLabel » : représente image style template label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _imageStyleTemplateLabel = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _imageStyleTemplateCombo » : représente image style template combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox _imageStyleTemplateCombo = null!;
+    /// <summary>
+    /// Libellé WinForms « _imageNegativeTemplateLabel » : représente image negative template label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _imageNegativeTemplateLabel = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _imageNegativeTemplateCombo » : représente image negative template combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox _imageNegativeTemplateCombo = null!;
+    /// <summary>
+    /// Libellé WinForms « _imageHistoryLabel » : représente image history label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _imageHistoryLabel = null!;
+    /// <summary>
+    /// Conteneur de disposition fluide WinForms « _imageHistoryPanel » : représente image history panel et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private FlowLayoutPanel _imageHistoryPanel = null!;
+    /// <summary>
+    /// Libellé WinForms « _imageCfgLabel » : représente image cfg label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _imageCfgLabel = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « _imageCfg » : représente image cfg et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown _imageCfg = null!;
+    /// <summary>
+    /// Référence l’étiquette du profil complet Image.
+    /// </summary>
+    private Label _imagePipelinePresetLabel = null!;
+    /// <summary>
+    /// Référence le sélecteur de profil complet Image.
+    /// </summary>
+    private ComboBox _imagePipelinePresetCombo = null!;
+    /// <summary>
+    /// Libellé WinForms « _imageMaxQualitySharpnessLabel » : représente image max quality sharpness label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _imageMaxQualitySharpnessLabel = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « _imageMaxQualitySharpness » : représente image max quality sharpness et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown _imageMaxQualitySharpness = null!;
+    /// <summary>
+    /// Bouton WinForms « _imageSharpnessPreviewButton » : représente image sharpness preview button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _imageSharpnessPreviewButton = null!;
+    /// <summary>
+    /// Libellé WinForms « _imageSharpnessBeforeLabel » : représente image sharpness before label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _imageSharpnessBeforeLabel = null!;
+    /// <summary>
+    /// Libellé WinForms « _imageSharpnessAfterLabel » : représente image sharpness after label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _imageSharpnessAfterLabel = null!;
+    /// <summary>
+    /// Zone d’aperçu graphique WinForms « _imageSharpnessBeforePreview » : représente image sharpness before preview et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private PictureBox _imageSharpnessBeforePreview = null!;
+    /// <summary>
+    /// Zone d’aperçu graphique WinForms « _imageSharpnessAfterPreview » : représente image sharpness after preview et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private PictureBox _imageSharpnessAfterPreview = null!;
+    /// <summary>
+    /// Conteneur WinForms « _imageSharpnessComparisonPanel » : représente image sharpness comparison panel et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Panel _imageSharpnessComparisonPanel = null!;
+    /// <summary>
+    /// Curseur WinForms « _imageSharpnessComparisonSlider » : représente image sharpness comparison slider et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TrackBar _imageSharpnessComparisonSlider = null!;
+    /// <summary>
+    /// Contrôle WinForms « _imagePreviewViewport » : représente image preview viewport et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private FocusPanel _imagePreviewViewport = null!;
+    /// <summary>
+    /// Libellé WinForms « _imageModelRuntimeLabel » : représente image model runtime label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _imageModelRuntimeLabel = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _imageModelRuntimeCombo » : représente image model runtime combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox _imageModelRuntimeCombo = null!;
+    /// <summary>
+    /// Libellé WinForms « _imageTextEncoderRuntimeLabel » : représente image text encoder runtime label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
+    private Label _imageTextEncoderRuntimeLabel = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _imageTextEncoderRuntimeCombo » : représente image text encoder runtime combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
+    private ComboBox _imageTextEncoderRuntimeCombo = null!;
+    /// <summary>
+    /// Libellé WinForms « _imageVaeRuntimeLabel » : représente image vae runtime label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
+    private Label _imageVaeRuntimeLabel = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _imageVaeRuntimeCombo » : représente image vae runtime combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
+    private ComboBox _imageVaeRuntimeCombo = null!;
+    /// <summary>
+    /// Bouton WinForms « _imageImportModelButton » : représente image import model button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _imageImportModelButton = null!;
+    /// <summary>
+    /// Bouton WinForms « _imageExtractPromptButton » : représente image extract prompt button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _imageExtractPromptButton = null!;
+    /// <summary>
+    /// Libellé WinForms « _imageLoraLabel » : représente image lora label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _imageLoraLabel = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _imageLoraCombo » : représente image lora combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox _imageLoraCombo = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « _imageLoraStrength » : représente image lora strength et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown _imageLoraStrength = null!;
+    /// <summary>
+    /// Bouton WinForms « _imageLoraAddButton » : représente image lora add button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _imageLoraAddButton = null!;
+    /// <summary>
+    /// Bouton WinForms « _imageLoraDownloadButton » : représente image lora download button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _imageLoraDownloadButton = null!;
+    /// <summary>
+    /// Barre de progression WinForms « _imageCatalogDownloadProgress » : représente image catalog download progress et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ProgressBar _imageCatalogDownloadProgress = null!;
+    /// <summary>
+    /// Libellé WinForms « _imageCatalogDownloadStatus » : représente image catalog download status et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _imageCatalogDownloadStatus = null!;
+    /// <summary>
+    /// Libellé WinForms « _imageCatalogDownloadSize » : représente image catalog download size et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _imageCatalogDownloadSize = null!;
+    /// <summary>
+    /// Bouton WinForms « _imageCatalogDownloadCancelButton » : représente image catalog download cancel button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _imageCatalogDownloadCancelButton = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « _tabVideo » : représente tab video et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage _tabVideo = null!;
+    /// <summary>
+    /// Bouton WinForms « _videoModelDownloadButton » : représente video model download button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _videoModelDownloadButton = null!;
+    /// <summary>
+    /// Vue WebView2 « _videoPreviewWeb » : représente video preview web et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Microsoft.Web.WebView2.WinForms.WebView2 _videoPreviewWeb = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoPromptLabel » : représente video prompt label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoPromptLabel = null!;
+    /// <summary>
+    /// Zone de texte WinForms « _videoPrompt » : représente video prompt et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox _videoPrompt = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoNegativeLabel » : représente video negative label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoNegativeLabel = null!;
+    /// <summary>
+    /// Zone de texte WinForms « _videoNegative » : représente video negative et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox _videoNegative = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « _videoWidth » : représente video width et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown _videoWidth = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « _videoHeight » : représente video height et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown _videoHeight = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « _videoFrames » : représente video frames et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown _videoFrames = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « _videoFps » : représente video fps et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown _videoFps = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoDurationLabel » : représente video duration label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoDurationLabel = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « _videoDurationSeconds » : représente video duration seconds et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown _videoDurationSeconds = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « _videoSteps » : représente video steps et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown _videoSteps = null!;
+    /// <summary>
+    /// Bouton WinForms « _videoGenerateButton » : représente video generate button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _videoGenerateButton = null!;
+    /// <summary>
+    /// Bouton WinForms « _videoCancelButton » : représente video cancel button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _videoCancelButton = null!;
+    /// <summary>
+    /// Bouton WinForms « _videoRefreshButton » : représente video refresh button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _videoRefreshButton = null!;
+    /// <summary>
+    /// Barre de progression WinForms « _videoProgress » : représente video progress et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ProgressBar _videoProgress = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoStatus » : représente video status et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoStatus = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoModelStatus » : représente video model status et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoModelStatus = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoOutputLabel » : représente video output label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoOutputLabel = null!;
+    /// <summary>
+    /// Zone de texte WinForms « _videoOutput » : représente video output et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox _videoOutput = null!;
+    /// <summary>
+    /// Bouton WinForms « _videoOpenButton » : représente video open button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _videoOpenButton = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoStyleTemplateLabel » : représente video style template label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoStyleTemplateLabel = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _videoStyleTemplateCombo » : représente video style template combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox _videoStyleTemplateCombo = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoNegativeTemplateLabel » : représente video negative template label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoNegativeTemplateLabel = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _videoNegativeTemplateCombo » : représente video negative template combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox _videoNegativeTemplateCombo = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoHistoryLabel » : représente video history label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoHistoryLabel = null!;
+    /// <summary>
+    /// Conteneur de disposition fluide WinForms « _videoHistoryPanel » : représente video history panel et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private FlowLayoutPanel _videoHistoryPanel = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « _videoCfg » : représente video cfg et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown _videoCfg = null!;
+    /// <summary>
+    /// Référence l’étiquette du profil complet Vidéo.
+    /// </summary>
+    private Label _videoPipelinePresetLabel = null!;
+    /// <summary>
+    /// Référence le sélecteur de profil complet Vidéo.
+    /// </summary>
+    private ComboBox _videoPipelinePresetCombo = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoMaxQualitySharpnessLabel » : représente video max quality sharpness label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoMaxQualitySharpnessLabel = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « _videoMaxQualitySharpness » : représente video max quality sharpness et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown _videoMaxQualitySharpness = null!;
+    /// <summary>
+    /// Bouton WinForms « _videoSharpnessPreviewButton » : représente video sharpness preview button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _videoSharpnessPreviewButton = null!;
+    /// <summary>
+    /// Conteneur WinForms « _videoSharpnessPreviewPanel » : représente video sharpness preview panel et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Panel _videoSharpnessPreviewPanel = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoSharpnessBeforeLabel » : représente video sharpness before label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoSharpnessBeforeLabel = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoSharpnessAfterLabel » : représente video sharpness after label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoSharpnessAfterLabel = null!;
+    /// <summary>
+    /// Zone d’aperçu graphique WinForms « _videoSharpnessBeforePreview » : représente video sharpness before preview et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private PictureBox _videoSharpnessBeforePreview = null!;
+    /// <summary>
+    /// Zone d’aperçu graphique WinForms « _videoSharpnessAfterPreview » : représente video sharpness after preview et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private PictureBox _videoSharpnessAfterPreview = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « _videoSamplingShift » : représente video sampling shift et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown _videoSamplingShift = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _videoSampler » : représente video sampler et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox _videoSampler = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _videoScheduler » : représente video scheduler et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox _videoScheduler = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « _videoSeed » : représente video seed et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown _videoSeed = null!;
+    /// <summary>
+    /// Case à cocher WinForms « _videoRandomSeed » : représente video random seed et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private CheckBox _videoRandomSeed = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoQualityHint » : représente video quality hint et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoQualityHint = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoModelRuntimeLabel » : représente video model runtime label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoModelRuntimeLabel = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _videoModelRuntimeCombo » : représente video model runtime combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox _videoModelRuntimeCombo = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoTextEncoderRuntimeLabel » : représente video text encoder runtime label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
+    private Label _videoTextEncoderRuntimeLabel = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _videoTextEncoderRuntimeCombo » : représente video text encoder runtime combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
+    private ComboBox _videoTextEncoderRuntimeCombo = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoVaeRuntimeLabel » : représente video vae runtime label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
+    private Label _videoVaeRuntimeLabel = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _videoVaeRuntimeCombo » : représente video vae runtime combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
+    private ComboBox _videoVaeRuntimeCombo = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoClipVisionRuntimeLabel » : représente video clip vision runtime label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
+    private Label _videoClipVisionRuntimeLabel = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _videoClipVisionRuntimeCombo » : représente video clip vision runtime combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
+    private ComboBox _videoClipVisionRuntimeCombo = null!;
+    /// <summary>
+    /// Bouton WinForms « _videoImportModelButton » : représente video import model button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _videoImportModelButton = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoReferenceLabel » : représente video reference label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoReferenceLabel = null!;
+    /// <summary>
+    /// Zone de texte WinForms « _videoReferenceImage » : représente video reference image et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox _videoReferenceImage = null!;
+    /// <summary>
+    /// Bouton WinForms « _videoReferenceBrowseButton » : représente video reference browse button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _videoReferenceBrowseButton = null!;
+    /// <summary>
+    /// Bouton WinForms « _videoReferenceCropButton » : représente video reference crop button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _videoReferenceCropButton = null!;
+    /// <summary>
+    /// Bouton WinForms « _videoExtractPromptButton » : représente video extract prompt button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _videoExtractPromptButton = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoReferenceHint » : représente video reference hint et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoReferenceHint = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoQualityLabel » : représente video quality label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoQualityLabel = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _videoQualityCombo » : représente video quality combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox _videoQualityCombo = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoLoraLabel » : représente video lora label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoLoraLabel = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _videoLoraCombo » : représente video lora combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox _videoLoraCombo = null!;
+    /// <summary>
+    /// Sélecteur numérique WinForms « _videoLoraStrength » : représente video lora strength et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private NumericUpDown _videoLoraStrength = null!;
+    /// <summary>
+    /// Bouton WinForms « _videoLoraAddButton » : représente video lora add button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _videoLoraAddButton = null!;
+    /// <summary>
+    /// Bouton WinForms « _videoLoraDownloadButton » : représente video lora download button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _videoLoraDownloadButton = null!;
+    /// <summary>
+    /// Barre de progression WinForms « _videoCatalogDownloadProgress » : représente video catalog download progress et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ProgressBar _videoCatalogDownloadProgress = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoCatalogDownloadStatus » : représente video catalog download status et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoCatalogDownloadStatus = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoCatalogDownloadSize » : représente video catalog download size et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoCatalogDownloadSize = null!;
+    /// <summary>
+    /// Bouton WinForms « _videoCatalogDownloadCancelButton » : représente video catalog download cancel button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _videoCatalogDownloadCancelButton = null!;
+    /// <summary>
+    /// Bouton WinForms « _videoImprovePromptButton » : représente video improve prompt button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _videoImprovePromptButton = null!;
+    /// <summary>
+    /// Case à cocher WinForms « _videoAutoImprovePrompt » : représente video auto improve prompt et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private CheckBox _videoAutoImprovePrompt = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _vaeCombo » : représente vae combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox _vaeCombo = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _textEncoderCombo » : représente text encoder combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox _textEncoderCombo = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _fluxModelCombo » : représente flux model combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox _fluxModelCombo = null!;
+    /// <summary>
+    /// Liste déroulante WinForms « _visionModelCombo » : représente vision model combo et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private ComboBox _visionModelCombo = null!;
+    /// <summary>
+    /// Libellé WinForms « _cfgVideoModelLabel » : représente cfg video model label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _cfgVideoModelLabel = null!;
+    /// <summary>
+    /// Libellé WinForms « _cfgVideoTextEncoderLabel » : représente cfg video text encoder label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _cfgVideoTextEncoderLabel = null!;
+    /// <summary>
+    /// Libellé WinForms « _cfgVideoVaeLabel » : représente cfg video vae label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _cfgVideoVaeLabel = null!;
+    /// <summary>
+    /// Zone de texte WinForms « _cfgVideoModel » : représente cfg video model et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox _cfgVideoModel = null!;
+    /// <summary>
+    /// Zone de texte WinForms « _cfgVideoTextEncoder » : représente cfg video text encoder et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox _cfgVideoTextEncoder = null!;
+    /// <summary>
+    /// Zone de texte WinForms « _cfgVideoVae » : représente cfg video vae et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox _cfgVideoVae = null!;
+    /// <summary>
+    /// Libellé WinForms « _cfgVideoClipVisionLabel » : représente cfg video clip vision label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _cfgVideoClipVisionLabel = null!;
+    /// <summary>
+    /// Zone de texte WinForms « _cfgVideoClipVision » : représente cfg video clip vision et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox _cfgVideoClipVision = null!;
+    /// <summary>
+    /// Case à cocher WinForms « _autoSaveConfigurationCheck » : représente auto save configuration check et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private CheckBox _autoSaveConfigurationCheck = null!;
+    /// <summary>
+    /// Libellé WinForms « _configurationSaveStatus » : représente configuration save status et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _configurationSaveStatus = null!;
+    /// <summary>
+    /// Bouton WinForms « _installImageModelsButton » : représente install image models button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _installImageModelsButton = null!;
+    /// <summary>
+    /// Bouton WinForms « _installVideoModelsButton » : représente install video models button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _installVideoModelsButton = null!;
+    /// <summary>
+    /// Libellé WinForms « _installVideoModelsStatus » : représente install video models status et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _installVideoModelsStatus = null!;
+    /// <summary>
+    /// Zone de texte WinForms « _installComponentsStatus » : représente install components status et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TextBox _installComponentsStatus = null!;
+    /// <summary>
+    /// Conteneur WinForms « _comfyStatusPanel » : représente comfy status panel et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Panel _comfyStatusPanel = null!;
+    /// <summary>
+    /// Conteneur WinForms « _comfyStatusCard » : représente comfy status card et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Panel _comfyStatusCard = null!;
+    /// <summary>
+    /// Libellé WinForms « _comfyStatusTitle » : représente comfy status title et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _comfyStatusTitle = null!;
+    /// <summary>
+    /// Libellé WinForms « _comfyStatusMessage » : représente comfy status message et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _comfyStatusMessage = null!;
+    /// <summary>
+    /// Bouton WinForms « _comfyStatusRetryButton » : représente comfy status retry button et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Button _comfyStatusRetryButton = null!;
+    /// <summary>
+    /// Libellé WinForms « _comfyStatusPortLabel » : représente comfy status port label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _comfyStatusPortLabel = null!;
+    /// <summary>
+    /// Contrôle d’onglets WinForms « _logTabs » : représente log tabs et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabControl _logTabs = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « _logPageAll » : représente log page all et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage _logPageAll = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « _logPageUi » : représente log page ui et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage _logPageUi = null!;
+    /// <summary>
+    /// Zone de journal WinForms « _logUi » : représente log ui et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private RichTextBox _logUi = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « _logPageOpenCode » : représente log page open code et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage _logPageOpenCode = null!;
+    /// <summary>
+    /// Zone de journal WinForms « _logOpenCode » : représente log open code et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private RichTextBox _logOpenCode = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « _logPageOllama » : représente log page ollama et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage _logPageOllama = null!;
+    /// <summary>
+    /// Zone de journal WinForms « _logOllama » : représente log ollama et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private RichTextBox _logOllama = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « _logPageComfy » : représente log page comfy et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage _logPageComfy = null!;
+    /// <summary>
+    /// Zone de journal WinForms « _logComfy » : représente log comfy et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private RichTextBox _logComfy = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « _logPageFlux » : représente log page flux et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage _logPageFlux = null!;
+    /// <summary>
+    /// Zone de journal WinForms « _logFlux » : représente log flux et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private RichTextBox _logFlux = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « _logPageVideo » : représente log page video et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage _logPageVideo = null!;
+    /// <summary>
+    /// Zone de journal WinForms « _logVideo » : représente log video et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private RichTextBox _logVideo = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « _logPageInstall » : représente log page install et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage _logPageInstall = null!;
+    /// <summary>
+    /// Zone de journal WinForms « _logInstall » : représente log install et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private RichTextBox _logInstall = null!;
+    /// <summary>
+    /// Page d’onglet WinForms « _logPageSystem » : représente log page system et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private TabPage _logPageSystem = null!;
+    /// <summary>
+    /// Zone de journal WinForms « _logSystem » : représente log system et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private RichTextBox _logSystem = null!;
 
+    /// <summary>
+    /// Libellé WinForms « _videoWidthLabel » : représente video width label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoWidthLabel = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoHeightLabel » : représente video height label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoHeightLabel = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoFramesLabel » : représente video frames label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoFramesLabel = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoFpsLabel » : représente video fps label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoFpsLabel = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoStepsLabel » : représente video steps label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoStepsLabel = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoModelTitleLabel » : représente video model title label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoModelTitleLabel = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoNoteLabel » : représente video note label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoNoteLabel = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoCfgLabel » : représente video cfg label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoCfgLabel = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoShiftLabel » : représente video shift label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoShiftLabel = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoSamplerLabel » : représente video sampler label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoSamplerLabel = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoSchedulerLabel » : représente video scheduler label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoSchedulerLabel = null!;
+    /// <summary>
+    /// Libellé WinForms « _videoSeedLabel » : représente video seed label et reste propriétaire de sa création, de son parentage et de ses propriétés statiques dans le Designer.
+    /// </summary>
     private Label _videoSeedLabel = null!;
 
+/// <summary>
+/// Lib?re les composants WinForms d?tenus par le formulaire lorsque celui-ci est d?truit, puis d?l?gue la fin du cycle de vie ? la classe Form.
+/// </summary>
     protected override void Dispose(bool disposing)
     {
         if (disposing)
@@ -301,6 +1180,9 @@ partial class MainForm
         base.Dispose(disposing);
     }
 
+    /// <summary>
+    /// Construit l’arbre de contrôles WinForms, applique leurs propriétés statiques et branche les gestionnaires d’événements Designer.
+    /// </summary>
     private void InitializeComponent()
     {
         components = new System.ComponentModel.Container();
@@ -311,6 +1193,7 @@ partial class MainForm
         tabComfy = new TabPage();
         tabOllama = new TabPage();
         tabGenerate = new TabPage();
+        _tabVideo = new TabPage();
         tabInstallation = new TabPage();
         tabConfiguration = new TabPage();
         tabLogs = new TabPage();
@@ -326,6 +1209,8 @@ partial class MainForm
         _gpu = new Label();
         lblLiveLog = new Label();
         _liveLog = new RichTextBox();
+        _dashboardRuntimeInfoPolish = new Label();
+        _dashboardModelsInfoPolish = new Label();
 
         _web = new Microsoft.Web.WebView2.WinForms.WebView2();
         _comfyWeb = new Microsoft.Web.WebView2.WinForms.WebView2();
@@ -399,6 +1284,11 @@ partial class MainForm
         lblCfgGitHubRepo = new Label();
         txtGitHubRepo = new TextBox();
         chkInstallVisionModel = new CheckBox();
+        _configurationAdvancedPanelPolish = new Panel();
+        _cfgAdvancedInterfaceTitlePolish = new Label();
+        _cfgShowOpenCodeTabPolish = new CheckBox();
+        _cfgShowComfyTabPolish = new CheckBox();
+        _cfgAdvancedInterfaceNotePolish = new Label();
 
         _allLog = new RichTextBox();
 
@@ -448,17 +1338,18 @@ partial class MainForm
         // _tabs
         // 
         _tabs.Controls.Add(tabDashboard);
+        _tabs.Controls.Add(tabGenerate);
+        _tabs.Controls.Add(_tabVideo);
+        _tabs.Controls.Add(tabConfiguration);
+        _tabs.Controls.Add(tabInstallation);
         _tabs.Controls.Add(tabOpenCode);
         _tabs.Controls.Add(tabComfy);
         _tabs.Controls.Add(tabOllama);
-        _tabs.Controls.Add(tabGenerate);
-        _tabs.Controls.Add(tabInstallation);
-        _tabs.Controls.Add(tabConfiguration);
         _tabs.Controls.Add(tabLogs);
         _tabs.Controls.Add(tabAbout);
         _tabs.Dock = DockStyle.Fill;
         _tabs.DrawMode = TabDrawMode.Normal;
-        _tabs.ItemSize = new Size(112, 28);
+        _tabs.ItemSize = new Size(103, 28);
         _tabs.SizeMode = TabSizeMode.Fixed;
         _tabs.DrawItem += Tabs_DrawItem;
         _tabs.Location = new Point(0, 0);
@@ -473,6 +1364,8 @@ partial class MainForm
         // 
         tabDashboard.BackColor = Color.FromArgb(24, 26, 31);
         tabDashboard.Controls.Add(_liveLog);
+        tabDashboard.Controls.Add(_dashboardModelsInfoPolish);
+        tabDashboard.Controls.Add(_dashboardRuntimeInfoPolish);
         tabDashboard.Controls.Add(lblLiveLog);
         tabDashboard.Controls.Add(_gpu);
         tabDashboard.Controls.Add(_status);
@@ -643,6 +1536,36 @@ partial class MainForm
         _liveLog.TabIndex = 8;
         _liveLog.Text = "";
 
+        //
+        // _dashboardRuntimeInfoPolish
+        //
+        _dashboardRuntimeInfoPolish.Name = "dashboardRuntimeInfo";
+        _dashboardRuntimeInfoPolish.Location = new Point(260, 200);
+        _dashboardRuntimeInfoPolish.Size = new Size(776, 36);
+        _dashboardRuntimeInfoPolish.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        _dashboardRuntimeInfoPolish.BackColor = Color.FromArgb(29, 32, 38);
+        _dashboardRuntimeInfoPolish.ForeColor = Color.FromArgb(196, 202, 214);
+        _dashboardRuntimeInfoPolish.BorderStyle = BorderStyle.FixedSingle;
+        _dashboardRuntimeInfoPolish.AutoSize = false;
+        _dashboardRuntimeInfoPolish.AutoEllipsis = true;
+        _dashboardRuntimeInfoPolish.Padding = new Padding(9, 0, 9, 0);
+        _dashboardRuntimeInfoPolish.TextAlign = ContentAlignment.MiddleLeft;
+
+        //
+        // _dashboardModelsInfoPolish
+        //
+        _dashboardModelsInfoPolish.Name = "dashboardModelsInfo";
+        _dashboardModelsInfoPolish.Location = new Point(260, 242);
+        _dashboardModelsInfoPolish.Size = new Size(776, 36);
+        _dashboardModelsInfoPolish.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+        _dashboardModelsInfoPolish.BackColor = Color.FromArgb(29, 32, 38);
+        _dashboardModelsInfoPolish.ForeColor = Color.FromArgb(196, 202, 214);
+        _dashboardModelsInfoPolish.BorderStyle = BorderStyle.FixedSingle;
+        _dashboardModelsInfoPolish.AutoSize = false;
+        _dashboardModelsInfoPolish.AutoEllipsis = true;
+        _dashboardModelsInfoPolish.Padding = new Padding(9, 0, 9, 0);
+        _dashboardModelsInfoPolish.TextAlign = ContentAlignment.MiddleLeft;
+
         // 
         // tabOpenCode
         // 
@@ -741,6 +1664,7 @@ partial class MainForm
         tabGenerate.Controls.Add(lblPrompt);
         tabGenerate.Location = new Point(4, 28);
         tabGenerate.Name = "tabGenerate";
+        tabGenerate.Paint += TabGenerate_PaintV38;
         tabGenerate.Padding = new Padding(12);
         tabGenerate.Size = new Size(1056, 649);
         tabGenerate.TabIndex = 4;
@@ -1106,6 +2030,7 @@ partial class MainForm
         tabConfiguration.Controls.Add(lblConfigTitle);
         tabConfiguration.Location = new Point(4, 28);
         tabConfiguration.Name = "tabConfiguration";
+        tabConfiguration.Paint += TabConfiguration_PaintV38;
         tabConfiguration.Padding = new Padding(12);
         tabConfiguration.Size = new Size(1056, 649);
         tabConfiguration.TabIndex = 6;
@@ -1143,7 +2068,7 @@ partial class MainForm
         txtConfigRoot.ReadOnly = true;
         txtConfigRoot.Size = new Size(882, 23);
 
-        // ports labels + controls
+        // Libellés et contrôles des ports.
         lblCfgOpenCodePort.ForeColor = Color.FromArgb(196, 202, 214);
         lblCfgOpenCodePort.Location = new Point(18, 108);
         lblCfgOpenCodePort.Size = new Size(120, 23);
@@ -1189,7 +2114,7 @@ partial class MainForm
         numApiPort.Minimum = 1024;
         numApiPort.Size = new Size(120, 23);
 
-        // models
+        // Modèles.
         lblCfgVisionModel.ForeColor = Color.FromArgb(196, 202, 214);
         lblCfgVisionModel.Location = new Point(330, 108);
         lblCfgVisionModel.Size = new Size(130, 23);
@@ -1389,6 +2314,55 @@ partial class MainForm
         tabLogs.Text = "Logs";
 
         // 
+        // _configurationAdvancedPanelPolish
+        _configurationAdvancedPanelPolish.Name = "configurationAdvancedPanel";
+        _configurationAdvancedPanelPolish.Location = new Point(534, 432);
+        _configurationAdvancedPanelPolish.Size = new Size(504, 130);
+        _configurationAdvancedPanelPolish.BackColor = Color.FromArgb(24, 26, 31);
+        _configurationAdvancedPanelPolish.ForeColor = Color.FromArgb(242, 244, 248);
+        _configurationAdvancedPanelPolish.BorderStyle = BorderStyle.None;
+        _configurationAdvancedPanelPolish.AutoScroll = false;
+        _configurationAdvancedPanelPolish.TabStop = false;
+        _configurationAdvancedPanelPolish.Visible = false;
+        _configurationAdvancedPanelPolish.Paint += ConfigurationAdvancedPanelPolish_Paint;
+
+        // _cfgAdvancedInterfaceTitlePolish
+        _cfgAdvancedInterfaceTitlePolish.Name = "cfgAdvancedInterfaceTitlePolish";
+        _cfgAdvancedInterfaceTitlePolish.Location = new Point(12, 8);
+        _cfgAdvancedInterfaceTitlePolish.Size = new Size(480, 22);
+        _cfgAdvancedInterfaceTitlePolish.BackColor = Color.FromArgb(24, 26, 31);
+        _cfgAdvancedInterfaceTitlePolish.ForeColor = Color.FromArgb(242, 244, 248);
+        _cfgAdvancedInterfaceTitlePolish.Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold);
+        _cfgAdvancedInterfaceTitlePolish.Text = "Interfaces techniques";
+        _cfgAdvancedInterfaceTitlePolish.TextAlign = ContentAlignment.MiddleLeft;
+
+        // _cfgShowOpenCodeTabPolish
+        _cfgShowOpenCodeTabPolish.Name = "cfgShowOpenCodeTabPolish";
+        _cfgShowOpenCodeTabPolish.Location = new Point(12, 36);
+        _cfgShowOpenCodeTabPolish.Size = new Size(234, 24);
+        _cfgShowOpenCodeTabPolish.BackColor = Color.FromArgb(24, 26, 31);
+        _cfgShowOpenCodeTabPolish.ForeColor = Color.FromArgb(242, 244, 248);
+        _cfgShowOpenCodeTabPolish.Text = "Afficher l'onglet OpenCode";
+        _cfgShowOpenCodeTabPolish.CheckedChanged += CfgShowOpenCodeTabPolish_CheckedChanged;
+
+        // _cfgShowComfyTabPolish
+        _cfgShowComfyTabPolish.Name = "cfgShowComfyTabPolish";
+        _cfgShowComfyTabPolish.Location = new Point(252, 36);
+        _cfgShowComfyTabPolish.Size = new Size(234, 24);
+        _cfgShowComfyTabPolish.BackColor = Color.FromArgb(24, 26, 31);
+        _cfgShowComfyTabPolish.ForeColor = Color.FromArgb(242, 244, 248);
+        _cfgShowComfyTabPolish.Text = "Afficher l'onglet ComfyUI";
+        _cfgShowComfyTabPolish.CheckedChanged += CfgShowComfyTabPolish_CheckedChanged;
+
+        // _cfgAdvancedInterfaceNotePolish
+        _cfgAdvancedInterfaceNotePolish.Name = "cfgAdvancedInterfaceNotePolish";
+        _cfgAdvancedInterfaceNotePolish.Location = new Point(12, 66);
+        _cfgAdvancedInterfaceNotePolish.Size = new Size(480, 50);
+        _cfgAdvancedInterfaceNotePolish.BackColor = Color.FromArgb(24, 26, 31);
+        _cfgAdvancedInterfaceNotePolish.ForeColor = Color.FromArgb(196, 202, 214);
+        _cfgAdvancedInterfaceNotePolish.Font = new Font("Segoe UI", 9F, FontStyle.Regular);
+        _cfgAdvancedInterfaceNotePolish.TextAlign = ContentAlignment.MiddleLeft;
+
         // _allLog
         // 
         _allLog.BackColor = Color.FromArgb(18, 20, 24);
@@ -1539,7 +2513,7 @@ partial class MainForm
         btnOpenGitHub.Click += btnOpenGitHub_Click;
 
         // ------------------------------------------------------------
-        // Designer-owned runtime experience controls
+        // Contrôles d’expérience d’exécution appartenant au Designer.
         // ------------------------------------------------------------
         _imageModelDownloadButton = new Button();
         _benchmarkButton = new Button();
@@ -1560,6 +2534,8 @@ partial class MainForm
         _imageHistoryPanel = new FlowLayoutPanel();
         _imageCfgLabel = new Label();
         _imageCfg = new NumericUpDown();
+        _imagePipelinePresetLabel = new Label();
+        _imagePipelinePresetCombo = new ComboBox();
         _imageMaxQualitySharpnessLabel = new Label();
         _imageMaxQualitySharpness = new NumericUpDown();
         _imageSharpnessPreviewButton = new Button();
@@ -1572,6 +2548,10 @@ partial class MainForm
         _imagePreviewViewport = new FocusPanel();
         _imageModelRuntimeLabel = new Label();
         _imageModelRuntimeCombo = new ComboBox();
+        _imageTextEncoderRuntimeLabel = new Label();
+        _imageTextEncoderRuntimeCombo = new ComboBox();
+        _imageVaeRuntimeLabel = new Label();
+        _imageVaeRuntimeCombo = new ComboBox();
         _imageImportModelButton = new Button();
         _imageExtractPromptButton = new Button();
         _imageLoraLabel = new Label();
@@ -1583,7 +2563,6 @@ partial class MainForm
         _imageCatalogDownloadStatus = new Label();
         _imageCatalogDownloadSize = new Label();
         _imageCatalogDownloadCancelButton = new Button();
-        _tabVideo = new TabPage();
         _videoModelDownloadButton = new Button();
         _videoPreviewWeb = new Microsoft.Web.WebView2.WinForms.WebView2();
         _videoPromptLabel = new Label();
@@ -1613,6 +2592,8 @@ partial class MainForm
         _videoHistoryLabel = new Label();
         _videoHistoryPanel = new FlowLayoutPanel();
         _videoCfg = new NumericUpDown();
+        _videoPipelinePresetLabel = new Label();
+        _videoPipelinePresetCombo = new ComboBox();
         _videoMaxQualitySharpnessLabel = new Label();
         _videoMaxQualitySharpness = new NumericUpDown();
         _videoSharpnessPreviewButton = new Button();
@@ -1629,6 +2610,12 @@ partial class MainForm
         _videoQualityHint = new Label();
         _videoModelRuntimeLabel = new Label();
         _videoModelRuntimeCombo = new ComboBox();
+        _videoTextEncoderRuntimeLabel = new Label();
+        _videoTextEncoderRuntimeCombo = new ComboBox();
+        _videoVaeRuntimeLabel = new Label();
+        _videoVaeRuntimeCombo = new ComboBox();
+        _videoClipVisionRuntimeLabel = new Label();
+        _videoClipVisionRuntimeCombo = new ComboBox();
         _videoImportModelButton = new Button();
         _videoReferenceLabel = new Label();
         _videoReferenceImage = new TextBox();
@@ -1705,7 +2692,7 @@ partial class MainForm
         _videoSchedulerLabel = new Label();
         _videoSeedLabel = new Label();
 
-        // Canonical properties captured from the validated runtime layout
+        // Propriétés canoniques reprises de la disposition d’exécution validée.
         // _imageModelDownloadButton
         _imageModelDownloadButton.Name = "_imageModelDownloadButton";
         _imageModelDownloadButton.Location = new Point(578, 17);
@@ -2025,6 +3012,27 @@ partial class MainForm
         _imageCfg.Increment = 0.1M;
         _imageCfg.DecimalPlaces = 1;
 
+        // _imagePipelinePresetLabel
+        _imagePipelinePresetLabel.Name = "_imagePipelinePresetLabel";
+        _imagePipelinePresetLabel.Location = new Point(370, 145);
+        _imagePipelinePresetLabel.Size = new Size(48, 23);
+        _imagePipelinePresetLabel.BackColor = Color.FromArgb(255, 24, 26, 31);
+        _imagePipelinePresetLabel.ForeColor = Color.FromArgb(255, 196, 202, 214);
+        _imagePipelinePresetLabel.Text = "Profil";
+        _imagePipelinePresetLabel.TabIndex = 88;
+        _imagePipelinePresetLabel.AutoSize = false;
+        _imagePipelinePresetLabel.TextAlign = ContentAlignment.MiddleLeft;
+
+        // _imagePipelinePresetCombo
+        _imagePipelinePresetCombo.Name = "_imagePipelinePresetCombo";
+        _imagePipelinePresetCombo.Location = new Point(418, 145);
+        _imagePipelinePresetCombo.Size = new Size(190, 23);
+        _imagePipelinePresetCombo.BackColor = Color.FromArgb(255, 18, 20, 24);
+        _imagePipelinePresetCombo.ForeColor = Color.FromArgb(255, 242, 244, 248);
+        _imagePipelinePresetCombo.DropDownStyle = ComboBoxStyle.DropDownList;
+        _imagePipelinePresetCombo.FlatStyle = FlatStyle.Flat;
+        _imagePipelinePresetCombo.TabIndex = 89;
+
         // _imageMaxQualitySharpnessLabel
         _imageMaxQualitySharpnessLabel.Name = "_imageMaxQualitySharpnessLabel";
         _imageMaxQualitySharpnessLabel.Location = new Point(700, 82);
@@ -2164,6 +3172,7 @@ partial class MainForm
         _imageModelRuntimeCombo.DropDownStyle = ComboBoxStyle.DropDownList;
         _imageModelRuntimeCombo.FlatStyle = FlatStyle.Flat;
         _imageModelRuntimeCombo.DropDownWidth = 620;
+        _imageModelRuntimeCombo.SelectedIndexChanged += ImageModelRuntimeCombo_SelectedIndexChanged;
 
         // _imageImportModelButton
         _imageImportModelButton.Name = "_imageImportModelButton";
@@ -2176,6 +3185,7 @@ partial class MainForm
         _imageImportModelButton.Enabled = false;
         _imageImportModelButton.Visible = true;
         _imageImportModelButton.FlatStyle = FlatStyle.Flat;
+        _imageImportModelButton.Click += ImageImportModelButton_Click;
 
         // _imageExtractPromptButton
         _imageExtractPromptButton.Name = "_imageExtractPromptButton";
@@ -2310,6 +3320,7 @@ partial class MainForm
 
         // _tabVideo
         _tabVideo.Name = "tabVideo";
+        _tabVideo.Paint += TabVideo_PaintV38;
         _tabVideo.Location = new Point(4, 32);
         _tabVideo.Size = new Size(1056, 645);
         _tabVideo.BackColor = Color.FromArgb(255, 24, 26, 31);
@@ -2553,7 +3564,7 @@ partial class MainForm
         _videoModelStatus.Text = "[X] Wan T2V — non installé\r\n    wan2.1_t2v_1.3B_fp16.safetensors\r\n\r\n[X] UMT5 XXL — non installé\r\n    umt5_xxl_fp8_e4m3fn_scaled.safetensors\r\n\r\n[X] Wan VAE — non installé\r\n    wan_2.1_vae.safetensors";
         _videoModelStatus.TabIndex = 22;
         _videoModelStatus.Enabled = false;
-        _videoModelStatus.Visible = true;
+        _videoModelStatus.Visible = false;
         _videoModelStatus.AutoSize = false;
 
         // _videoOutputLabel
@@ -2688,6 +3699,27 @@ partial class MainForm
         _videoCfg.Maximum = 20M;
         _videoCfg.Increment = 0.5M;
         _videoCfg.DecimalPlaces = 1;
+
+        // _videoPipelinePresetLabel
+        _videoPipelinePresetLabel.Name = "_videoPipelinePresetLabel";
+        _videoPipelinePresetLabel.Location = new Point(370, 145);
+        _videoPipelinePresetLabel.Size = new Size(48, 23);
+        _videoPipelinePresetLabel.BackColor = Color.FromArgb(255, 24, 26, 31);
+        _videoPipelinePresetLabel.ForeColor = Color.FromArgb(255, 196, 202, 214);
+        _videoPipelinePresetLabel.Text = "Profil";
+        _videoPipelinePresetLabel.TabIndex = 90;
+        _videoPipelinePresetLabel.AutoSize = false;
+        _videoPipelinePresetLabel.TextAlign = ContentAlignment.MiddleLeft;
+
+        // _videoPipelinePresetCombo
+        _videoPipelinePresetCombo.Name = "_videoPipelinePresetCombo";
+        _videoPipelinePresetCombo.Location = new Point(418, 145);
+        _videoPipelinePresetCombo.Size = new Size(190, 23);
+        _videoPipelinePresetCombo.BackColor = Color.FromArgb(255, 18, 20, 24);
+        _videoPipelinePresetCombo.ForeColor = Color.FromArgb(255, 242, 244, 248);
+        _videoPipelinePresetCombo.DropDownStyle = ComboBoxStyle.DropDownList;
+        _videoPipelinePresetCombo.FlatStyle = FlatStyle.Flat;
+        _videoPipelinePresetCombo.TabIndex = 91;
 
         // _videoMaxQualitySharpnessLabel
         _videoMaxQualitySharpnessLabel.Name = "_videoMaxQualitySharpnessLabel";
@@ -2867,6 +3899,7 @@ partial class MainForm
         _videoModelRuntimeCombo.DropDownStyle = ComboBoxStyle.DropDownList;
         _videoModelRuntimeCombo.FlatStyle = FlatStyle.Flat;
         _videoModelRuntimeCombo.DropDownWidth = 620;
+        _videoModelRuntimeCombo.SelectedIndexChanged += VideoModelRuntimeCombo_SelectedIndexChanged;
 
         // _videoImportModelButton
         _videoImportModelButton.Name = "_videoImportModelButton";
@@ -2879,6 +3912,7 @@ partial class MainForm
         _videoImportModelButton.Enabled = false;
         _videoImportModelButton.Visible = true;
         _videoImportModelButton.FlatStyle = FlatStyle.Flat;
+        _videoImportModelButton.Click += VideoImportModelButton_Click;
 
         // _videoReferenceLabel
         _videoReferenceLabel.Name = "videoReferenceLabel";
@@ -2946,7 +3980,8 @@ partial class MainForm
         _videoReferenceHint.Size = new Size(174, 30);
         _videoReferenceHint.BackColor = Color.FromArgb(255, 24, 26, 31);
         _videoReferenceHint.ForeColor = Color.FromArgb(255, 145, 153, 169);
-        _videoReferenceHint.Text = "La référence/zone est utilisée avec un modèle I2V. Un modèle T2V l'ignore.";
+        _videoReferenceHint.Font = new Font("Segoe UI", 7.5F, FontStyle.Regular);
+        _videoReferenceHint.Text = "Référence/zone utilisée uniquement avec un modèle I2V.";
         _videoReferenceHint.TabIndex = 54;
         _videoReferenceHint.Enabled = false;
         _videoReferenceHint.Visible = true;
@@ -3637,7 +4672,7 @@ partial class MainForm
         _logSystem.DetectUrls = false;
         _logSystem.BorderStyle = BorderStyle.FixedSingle;
 
-        // _videoWidthLabel (designer-owned caption)
+        // _videoWidthLabel : libellé appartenant au Designer.
         _videoWidthLabel.Name = "_videoWidthLabel";
         _videoWidthLabel.Location = new Point(18, 307);
         _videoWidthLabel.Size = new Size(64, 23);
@@ -3646,7 +4681,7 @@ partial class MainForm
         _videoWidthLabel.Text = "Largeur";
         _videoWidthLabel.AutoSize = false;
 
-        // _videoHeightLabel (designer-owned caption)
+        // _videoHeightLabel : libellé appartenant au Designer.
         _videoHeightLabel.Name = "_videoHeightLabel";
         _videoHeightLabel.Location = new Point(174, 307);
         _videoHeightLabel.Size = new Size(70, 23);
@@ -3655,7 +4690,7 @@ partial class MainForm
         _videoHeightLabel.Text = "Hauteur";
         _videoHeightLabel.AutoSize = false;
 
-        // _videoFramesLabel (designer-owned caption)
+        // _videoFramesLabel : libellé appartenant au Designer.
         _videoFramesLabel.Name = "_videoFramesLabel";
         _videoFramesLabel.Location = new Point(142, 342);
         _videoFramesLabel.Size = new Size(48, 23);
@@ -3664,7 +4699,7 @@ partial class MainForm
         _videoFramesLabel.Text = "Frames";
         _videoFramesLabel.AutoSize = false;
 
-        // _videoFpsLabel (designer-owned caption)
+        // _videoFpsLabel : libellé appartenant au Designer.
         _videoFpsLabel.Name = "_videoFpsLabel";
         _videoFpsLabel.Location = new Point(248, 342);
         _videoFpsLabel.Size = new Size(30, 23);
@@ -3673,7 +4708,7 @@ partial class MainForm
         _videoFpsLabel.Text = "FPS";
         _videoFpsLabel.AutoSize = false;
 
-        // _videoStepsLabel (designer-owned caption)
+        // _videoStepsLabel : libellé appartenant au Designer.
         _videoStepsLabel.Name = "_videoStepsLabel";
         _videoStepsLabel.Location = new Point(18, 377);
         _videoStepsLabel.Size = new Size(64, 23);
@@ -3682,7 +4717,7 @@ partial class MainForm
         _videoStepsLabel.Text = "Steps";
         _videoStepsLabel.AutoSize = false;
 
-        // _videoModelTitleLabel (designer-owned caption)
+        // _videoModelTitleLabel : libellé appartenant au Designer.
         _videoModelTitleLabel.Name = "_videoModelTitleLabel";
         _videoModelTitleLabel.Location = new Point(448, 18);
         _videoModelTitleLabel.Size = new Size(570, 23);
@@ -3690,8 +4725,9 @@ partial class MainForm
         _videoModelTitleLabel.ForeColor = Color.FromArgb(255, 255, 255, 255);
         _videoModelTitleLabel.Text = "Modèles vidéo Wan 2.1";
         _videoModelTitleLabel.AutoSize = false;
+        _videoModelTitleLabel.Visible = false;
 
-        // _videoNoteLabel (designer-owned caption)
+        // _videoNoteLabel : libellé appartenant au Designer.
         _videoNoteLabel.Name = "_videoNoteLabel";
         _videoNoteLabel.Location = new Point(448, 410);
         _videoNoteLabel.Size = new Size(570, 70);
@@ -3699,8 +4735,9 @@ partial class MainForm
         _videoNoteLabel.ForeColor = Color.FromArgb(255, 255, 255, 255);
         _videoNoteLabel.Text = "Moteur local prévu : Wan 2.1 T2V 1.3B via ComfyUI. Aucun téléchargement de plusieurs Go n'est lancé automatiquement.";
         _videoNoteLabel.AutoSize = false;
+        _videoNoteLabel.Visible = false;
 
-        // _videoCfgLabel (designer-owned caption)
+        // _videoCfgLabel : libellé appartenant au Designer.
         _videoCfgLabel.Name = "_videoCfgLabel";
         _videoCfgLabel.Location = new Point(174, 377);
         _videoCfgLabel.Size = new Size(70, 23);
@@ -3709,7 +4746,7 @@ partial class MainForm
         _videoCfgLabel.Text = "CFG vidéo";
         _videoCfgLabel.AutoSize = false;
 
-        // _videoShiftLabel (designer-owned caption)
+        // _videoShiftLabel : libellé appartenant au Designer.
         _videoShiftLabel.Name = "_videoShiftLabel";
         _videoShiftLabel.Location = new Point(18, 412);
         _videoShiftLabel.Size = new Size(64, 23);
@@ -3718,7 +4755,7 @@ partial class MainForm
         _videoShiftLabel.Text = "Shift";
         _videoShiftLabel.AutoSize = false;
 
-        // _videoSamplerLabel (designer-owned caption)
+        // _videoSamplerLabel : libellé appartenant au Designer.
         _videoSamplerLabel.Name = "_videoSamplerLabel";
         _videoSamplerLabel.Location = new Point(174, 412);
         _videoSamplerLabel.Size = new Size(70, 23);
@@ -3727,7 +4764,7 @@ partial class MainForm
         _videoSamplerLabel.Text = "Sampler";
         _videoSamplerLabel.AutoSize = false;
 
-        // _videoSchedulerLabel (designer-owned caption)
+        // _videoSchedulerLabel : libellé appartenant au Designer.
         _videoSchedulerLabel.Name = "_videoSchedulerLabel";
         _videoSchedulerLabel.Location = new Point(18, 447);
         _videoSchedulerLabel.Size = new Size(64, 23);
@@ -3736,7 +4773,7 @@ partial class MainForm
         _videoSchedulerLabel.Text = "Scheduler";
         _videoSchedulerLabel.AutoSize = false;
 
-        // _videoSeedLabel (designer-owned caption)
+        // _videoSeedLabel : libellé appartenant au Designer.
         _videoSeedLabel.Name = "_videoSeedLabel";
         _videoSeedLabel.Location = new Point(174, 447);
         _videoSeedLabel.Size = new Size(70, 23);
@@ -3745,7 +4782,7 @@ partial class MainForm
         _videoSeedLabel.Text = "Seed vidéo";
         _videoSeedLabel.AutoSize = false;
 
-        // Canonical parent hierarchy
+        // Hiérarchie canonique des contrôles parents.
         _tabVideo.Controls.Add(_videoWidthLabel);
         _tabVideo.Controls.Add(_videoHeightLabel);
         _tabVideo.Controls.Add(_videoFramesLabel);
@@ -3784,6 +4821,8 @@ partial class MainForm
         tabGenerate.Controls.Add(numDefaultSteps);
         tabGenerate.Controls.Add(_imageCfgLabel);
         tabGenerate.Controls.Add(_imageCfg);
+        tabGenerate.Controls.Add(_imagePipelinePresetLabel);
+        tabGenerate.Controls.Add(_imagePipelinePresetCombo);
         tabGenerate.Controls.Add(_imageMaxQualitySharpnessLabel);
         tabGenerate.Controls.Add(_imageMaxQualitySharpness);
         tabGenerate.Controls.Add(_imageSharpnessPreviewButton);
@@ -3797,6 +4836,10 @@ partial class MainForm
         _imagePreviewViewport.Controls.Add(_imageSharpnessComparisonSlider);
         tabGenerate.Controls.Add(_imageModelRuntimeLabel);
         tabGenerate.Controls.Add(_imageModelRuntimeCombo);
+        tabGenerate.Controls.Add(_imageTextEncoderRuntimeLabel);
+        tabGenerate.Controls.Add(_imageTextEncoderRuntimeCombo);
+        tabGenerate.Controls.Add(_imageVaeRuntimeLabel);
+        tabGenerate.Controls.Add(_imageVaeRuntimeCombo);
         tabGenerate.Controls.Add(_imageImportModelButton);
         tabGenerate.Controls.Add(_imageExtractPromptButton);
         tabGenerate.Controls.Add(_imageLoraLabel);
@@ -3837,6 +4880,8 @@ partial class MainForm
         _tabVideo.Controls.Add(_videoHistoryLabel);
         _tabVideo.Controls.Add(_videoHistoryPanel);
         _tabVideo.Controls.Add(_videoCfg);
+        _tabVideo.Controls.Add(_videoPipelinePresetLabel);
+        _tabVideo.Controls.Add(_videoPipelinePresetCombo);
         _tabVideo.Controls.Add(_videoMaxQualitySharpnessLabel);
         _tabVideo.Controls.Add(_videoMaxQualitySharpness);
         _tabVideo.Controls.Add(_videoSharpnessPreviewButton);
@@ -3853,6 +4898,12 @@ partial class MainForm
         _tabVideo.Controls.Add(_videoQualityHint);
         _tabVideo.Controls.Add(_videoModelRuntimeLabel);
         _tabVideo.Controls.Add(_videoModelRuntimeCombo);
+        _tabVideo.Controls.Add(_videoTextEncoderRuntimeLabel);
+        _tabVideo.Controls.Add(_videoTextEncoderRuntimeCombo);
+        _tabVideo.Controls.Add(_videoVaeRuntimeLabel);
+        _tabVideo.Controls.Add(_videoVaeRuntimeCombo);
+        _tabVideo.Controls.Add(_videoClipVisionRuntimeLabel);
+        _tabVideo.Controls.Add(_videoClipVisionRuntimeCombo);
         _tabVideo.Controls.Add(_videoImportModelButton);
         _tabVideo.Controls.Add(_videoReferenceLabel);
         _tabVideo.Controls.Add(_videoReferenceImage);
@@ -3887,11 +4938,16 @@ partial class MainForm
         tabConfiguration.Controls.Add(_cfgVideoClipVision);
         tabConfiguration.Controls.Add(_autoSaveConfigurationCheck);
         tabConfiguration.Controls.Add(_configurationSaveStatus);
+        tabConfiguration.Controls.Add(_configurationAdvancedPanelPolish);
         tabInstallation.Controls.Add(_installImageModelsButton);
         tabInstallation.Controls.Add(_installVideoModelsButton);
         tabInstallation.Controls.Add(_installVideoModelsStatus);
         tabInstallation.Controls.Add(_installComponentsStatus);
         tabComfy.Controls.Add(_comfyStatusPanel);
+        _configurationAdvancedPanelPolish.Controls.Add(_cfgAdvancedInterfaceTitlePolish);
+        _configurationAdvancedPanelPolish.Controls.Add(_cfgShowOpenCodeTabPolish);
+        _configurationAdvancedPanelPolish.Controls.Add(_cfgShowComfyTabPolish);
+        _configurationAdvancedPanelPolish.Controls.Add(_cfgAdvancedInterfaceNotePolish);
         _comfyStatusPanel.Controls.Add(_comfyStatusCard);
         _comfyStatusCard.Controls.Add(_comfyStatusTitle);
         _comfyStatusCard.Controls.Add(_comfyStatusMessage);

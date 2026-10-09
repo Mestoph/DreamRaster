@@ -1,15 +1,11 @@
-﻿/*
+/*
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
 
-FR : Proxy local et API locale de génération.
-EN: Local proxy and local generation API.
-
-FR : Les commentaires structurants sont bilingues. Les noms d'API, classes et protocoles
+Proxy local et API locale de génération.
+Les commentaires structurants sont r?dig?s en fran?ais. Les noms d'API, classes et protocoles
      restent dans leur forme technique afin de garder le code lisible et compatible.
-EN: Structural comments are bilingual. API, class and protocol names remain in their
-    technical form to keep the code readable and compatible.
 */
 
 using System.ComponentModel;
@@ -21,19 +17,56 @@ using System.Text.Json;
 
 namespace OpenCodeLocalAI;
 
+/// <summary>
+
+/// Définit class « LocalProxyServer », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 public sealed class LocalProxyServer : IAsyncDisposable
 {
+    /// <summary>
+    /// Stocke « _listenPort », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly int _listenPort;
+    /// <summary>
+    /// Stocke « _targetPort », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly int _targetPort;
+    /// <summary>
+    /// Stocke « _imagesDir », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly string _imagesDir;
+    /// <summary>
+    /// Stocke « _log », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly Action<string,string> _log;
+    /// <summary>
+    /// Stocke « _http », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly HttpClient _http = new() { Timeout = Timeout.InfiniteTimeSpan };
+    /// <summary>
+    /// Stocke « _listener », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private HttpListener? _listener;
+    /// <summary>
+    /// Stocke « _cts », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private CancellationTokenSource? _cts;
+    /// <summary>
+    /// Stocke « _loop », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private Task? _loop;
 
+    /// <summary>
+
+    /// Exécute Running en coordonnant les ressources et les mécanismes d’annulation nécessaires.
+
+    /// </summary>
     public bool Running => _listener?.IsListening == true;
 
+/// <summary>
+/// Configure le proxy HTTP local avec son port d??coute, la cible interne autoris?e, le dossier d?images expos? et le canal de journalisation.
+/// </summary>
     public LocalProxyServer(int listenPort, int targetPort, string imagesDir, Action<string,string> log)
     {
         _listenPort = listenPort;
@@ -42,6 +75,11 @@ public sealed class LocalProxyServer : IAsyncDisposable
         _log = log;
     }
 
+    /// <summary>
+
+    /// Démarre l’opération gérée par <c>StartAsync</c> et prépare ses ressources.
+
+    /// </summary>
     public Task StartAsync()
     {
         if (Running) return Task.CompletedTask;
@@ -55,6 +93,11 @@ public sealed class LocalProxyServer : IAsyncDisposable
         return Task.CompletedTask;
     }
 
+    /// <summary>
+
+    /// Arrête proprement l’opération gérée par <c>StopAsync</c> et libère ses ressources.
+
+    /// </summary>
     public async Task StopAsync()
     {
         try { _cts?.Cancel(); } catch { }
@@ -69,6 +112,11 @@ public sealed class LocalProxyServer : IAsyncDisposable
         _cts = null;
     }
 
+    /// <summary>
+
+    /// Exécute le traitement <c>LoopAsync</c> et conserve un état cohérent en cas de succès comme d’erreur.
+
+    /// </summary>
     private async Task LoopAsync(CancellationToken ct)
     {
         while (!ct.IsCancellationRequested && _listener?.IsListening == true)
@@ -97,6 +145,11 @@ public sealed class LocalProxyServer : IAsyncDisposable
         }
     }
 
+    /// <summary>
+
+    /// Traite HandleAsync et synchronise l’interface avec le résultat de l’opération.
+
+    /// </summary>
     private async Task HandleAsync(HttpListenerContext ctx, CancellationToken ct)
     {
         try
@@ -161,6 +214,11 @@ public sealed class LocalProxyServer : IAsyncDisposable
         }
     }
 
+    /// <summary>
+
+    /// Indique si la condition représentée par IsExpectedDisconnect est satisfaite dans l’état courant.
+
+    /// </summary>
     private static bool IsExpectedDisconnect(
         Exception ex,
         CancellationToken ct)
@@ -198,6 +256,11 @@ public sealed class LocalProxyServer : IAsyncDisposable
                IsExpectedDisconnect(ex.InnerException, ct);
     }
 
+    /// <summary>
+
+    /// Transmet la requête gérée par <c>ProxyHttpAsync</c> vers le service portable cible puis relaie sa réponse.
+
+    /// </summary>
     private async Task ProxyHttpAsync(HttpListenerContext ctx, CancellationToken ct)
     {
         var target = new Uri($"http://127.0.0.1:{_targetPort}{ctx.Request.RawUrl}");
@@ -240,6 +303,11 @@ public sealed class LocalProxyServer : IAsyncDisposable
         ctx.Response.Close();
     }
 
+    /// <summary>
+
+    /// Transmet la requête gérée par <c>ProxyWebSocketAsync</c> vers le service portable cible puis relaie sa réponse.
+
+    /// </summary>
     private async Task ProxyWebSocketAsync(HttpListenerContext ctx, CancellationToken ct)
     {
         var target = new Uri($"ws://127.0.0.1:{_targetPort}{ctx.Request.RawUrl}");
@@ -256,6 +324,11 @@ public sealed class LocalProxyServer : IAsyncDisposable
         try { await Task.WhenAll(a, b); } catch { }
     }
 
+    /// <summary>
+
+    /// Relaie les données gérées par <c>RelayAsync</c> entre les deux extrémités de la connexion.
+
+    /// </summary>
     private static async Task RelayAsync(WebSocket source, WebSocket target, CancellationToken ct)
     {
         var buffer = new byte[64 * 1024];
@@ -273,6 +346,11 @@ public sealed class LocalProxyServer : IAsyncDisposable
         }
     }
 
+    /// <summary>
+
+    /// Exécute le traitement <c>Mime</c> et conserve un état cohérent en cas de succès comme d’erreur.
+
+    /// </summary>
     private static string Mime(string file) => Path.GetExtension(file).ToLowerInvariant() switch
     {
         ".png" => "image/png",
@@ -282,6 +360,11 @@ public sealed class LocalProxyServer : IAsyncDisposable
         _ => "application/octet-stream"
     };
 
+    /// <summary>
+
+    /// Écrit les données gérées par <c>WriteTextAsync</c> vers leur destination.
+
+    /// </summary>
     private static async Task WriteTextAsync(
         HttpListenerResponse response, string text, string contentType, CancellationToken ct)
     {
@@ -293,6 +376,11 @@ public sealed class LocalProxyServer : IAsyncDisposable
         response.Close();
     }
 
+    /// <summary>
+
+    /// Libère de manière asynchrone les ressources détenues par cette instance et arrête les traitements associés.
+
+    /// </summary>
     public async ValueTask DisposeAsync()
     {
         await StopAsync();
@@ -300,17 +388,48 @@ public sealed class LocalProxyServer : IAsyncDisposable
     }
 }
 
+/// <summary>
+
+/// Définit class « GenerationApiServer », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 public sealed class GenerationApiServer : IAsyncDisposable
 {
+    /// <summary>
+    /// Stocke « _port », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly int _port;
+    /// <summary>
+    /// Stocke « _generate », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly Func<string,int,int,CancellationToken,Task<ImageGenerationResult>> _generate;
+    /// <summary>
+    /// Stocke « _log », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly Action<string,string> _log;
+    /// <summary>
+    /// Stocke « _listener », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private HttpListener? _listener;
+    /// <summary>
+    /// Stocke « _cts », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private CancellationTokenSource? _cts;
+    /// <summary>
+    /// Stocke « _loop », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private Task? _loop;
 
+    /// <summary>
+
+    /// Exécute Running en coordonnant les ressources et les mécanismes d’annulation nécessaires.
+
+    /// </summary>
     public bool Running => _listener?.IsListening == true;
 
+/// <summary>
+/// Initialise l?API locale de g?n?ration avec les ports, la configuration et les callbacks qui d?l?guent r?ellement les requ?tes aux pipelines DreamRaster.
+/// </summary>
     public GenerationApiServer(
         int port,
         Func<string,int,int,CancellationToken,Task<ImageGenerationResult>> generate,
@@ -321,6 +440,11 @@ public sealed class GenerationApiServer : IAsyncDisposable
         _log = log;
     }
 
+    /// <summary>
+
+    /// Démarre l’opération gérée par <c>StartAsync</c> et prépare ses ressources.
+
+    /// </summary>
     public Task StartAsync()
     {
         if (Running) return Task.CompletedTask;
@@ -333,6 +457,11 @@ public sealed class GenerationApiServer : IAsyncDisposable
         return Task.CompletedTask;
     }
 
+    /// <summary>
+
+    /// Arrête proprement l’opération gérée par <c>StopAsync</c> et libère ses ressources.
+
+    /// </summary>
     public async Task StopAsync()
     {
         try { _cts?.Cancel(); } catch { }
@@ -347,6 +476,11 @@ public sealed class GenerationApiServer : IAsyncDisposable
         _cts = null;
     }
 
+    /// <summary>
+
+    /// Exécute le traitement <c>LoopAsync</c> et conserve un état cohérent en cas de succès comme d’erreur.
+
+    /// </summary>
     private async Task LoopAsync(CancellationToken ct)
     {
         while (!ct.IsCancellationRequested && _listener?.IsListening == true)
@@ -359,6 +493,11 @@ public sealed class GenerationApiServer : IAsyncDisposable
         }
     }
 
+    /// <summary>
+
+    /// Traite HandleAsync et synchronise l’interface avec le résultat de l’opération.
+
+    /// </summary>
     private async Task HandleAsync(HttpListenerContext ctx, CancellationToken ct)
     {
         try
@@ -401,6 +540,11 @@ public sealed class GenerationApiServer : IAsyncDisposable
         }
     }
 
+    /// <summary>
+
+    /// Exécute le traitement <c>JsonAsync</c> et conserve un état cohérent en cas de succès comme d’erreur.
+
+    /// </summary>
     private static async Task JsonAsync(HttpListenerContext ctx, object value, int status, CancellationToken ct)
     {
         var bytes = JsonSerializer.SerializeToUtf8Bytes(value);
@@ -412,5 +556,10 @@ public sealed class GenerationApiServer : IAsyncDisposable
         ctx.Response.Close();
     }
 
+    /// <summary>
+
+    /// Libère de manière asynchrone les ressources détenues par cette instance et arrête les traitements associés.
+
+    /// </summary>
     public async ValueTask DisposeAsync() => await StopAsync();
 }

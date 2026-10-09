@@ -1,9 +1,8 @@
-﻿/*
+/*
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
-FR : Génération vidéo locale Wan 2.1 via le ComfyUI portable.
-EN: Local Wan 2.1 video generation through portable ComfyUI.
+Génération vidéo locale Wan 2.1 via le ComfyUI portable.
 */
 
 using System.Text;
@@ -12,28 +11,73 @@ using System.Text.Json.Nodes;
 
 namespace OpenCodeLocalAI;
 
+/// <summary>
+
+/// Définit record « VideoGenerationResult », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 public sealed record VideoGenerationResult(
     bool Ok,
     string? Path,
     string? Error = null);
 
+/// <summary>
+
+/// Définit class « VideoGenerator », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 public sealed class VideoGenerator
 {
+    /// <summary>
+    /// Stocke « _s », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly AppSettings _s;
+    /// <summary>
+    /// Stocke « _ensureComfy », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly Func<Task> _ensureComfy;
+    /// <summary>
+    /// Stocke « _stopComfy », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly Func<Task> _stopComfy;
+    /// <summary>
+    /// Stocke « _log », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly Action<string, string> _log;
+    /// <summary>
+    /// Stocke « _http », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly HttpClient _http = new()
     {
         Timeout = TimeSpan.FromSeconds(30)
     };
+    /// <summary>
+    /// Stocke « _gate », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly SemaphoreSlim _gate = new(1, 1);
+    /// <summary>
+    /// Stocke « _promptCancelGate », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly SemaphoreSlim _promptCancelGate = new(1, 1);
+    /// <summary>
+    /// Stocke « _promptSync », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly object _promptSync = new();
+    /// <summary>
+    /// Stocke « _activePromptId », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private string? _activePromptId;
 
+    /// <summary>
+
+    /// Expose l’événement « string » utilisé pour notifier les composants abonnés d’un changement d’état.
+
+    /// </summary>
     public event Action<int, string>? ProgressChanged;
 
+/// <summary>
+/// Initialise le g?n?rateur Wan avec la configuration portable, les callbacks ComfyUI et le journal utilis?s pour piloter T2V, I2V, progression et annulation.
+/// </summary>
     public VideoGenerator(
         AppSettings settings,
         Func<Task> ensureComfy,
@@ -46,6 +90,9 @@ public sealed class VideoGenerator
         _log = log;
     }
 
+    /// <summary>
+    /// Retourne la liste détaillée des modèles et dépendances Wan manquants pour le workflow vidéo courant.
+    /// </summary>
     public IReadOnlyList<(string Label, string Path)> GetMissingModels()
     {
         var root = PortablePreflight.GetComfyRoot(_s);
@@ -62,10 +109,8 @@ public sealed class VideoGenerator
                     _s.VideoModel)),
             (
                 "UMT5 XXL",
-                Path.Combine(
-                    root,
-                    "models",
-                    "text_encoders",
+                PortablePreflight.GetComfyTextEncoderPath(
+                    _s,
                     _s.VideoTextEncoderModel)),
             (
                 "Wan VAE",
@@ -93,10 +138,20 @@ public sealed class VideoGenerator
             .ToArray();
     }
 
+    /// <summary>
+
+    /// Indique si la condition représentée par IsImageToVideoModel est satisfaite dans l’état courant.
+
+    /// </summary>
     public static bool IsImageToVideoModel(string modelName) =>
         !string.IsNullOrWhiteSpace(modelName) &&
         modelName.Contains("i2v", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+
+    /// Lance la génération gérée par <c>GenerateAsync</c>, valide les prérequis et retourne le résultat.
+
+    /// </summary>
     public async Task<VideoGenerationResult> GenerateAsync(
         string prompt,
         string negativePrompt,
@@ -409,7 +464,13 @@ public sealed class VideoGenerator
                     workflow,
                     prefix,
                     fps,
+                    GetLatentGenerationTimeout(width, height, frames, steps),
+                    GetVideoDecodeTimeout(width, height, frames),
                     ct);
+
+            if (!HasValidVideoFileHeader(source))
+                throw new InvalidDataException(
+                    "La sortie Wan n'est pas un fichier vidéo valide ou est vide.");
 
             var videos = Path.Combine(
                 PortablePaths.Root,
@@ -468,10 +529,38 @@ public sealed class VideoGenerator
         }
     }
 
+    /// <summary>
+
+    /// Calcule un délai plus généreux pour les générations vidéo coûteuses.
+    /// </summary>
+    private static TimeSpan GetLatentGenerationTimeout(
+        int width, int height, int frames, int steps)
+    {
+        // Les profils longs à haute résolution peuvent dépasser le délai
+        // adapté aux essais courts ; le bouton Annuler reste opérationnel.
+        var work = (long)width * height * frames * steps;
+        return work > 256L * 256 * 17 * 30
+            ? TimeSpan.FromMinutes(60)
+            : TimeSpan.FromMinutes(20);
+    }
+
+    /// <summary>
+    /// Conserve un délai court pour les essais et protège le décodage des vidéos longues.
+    /// </summary>
+    private static TimeSpan GetVideoDecodeTimeout(int width, int height, int frames)
+        => (long)width * height * frames > 256L * 256 * 17
+            ? TimeSpan.FromMinutes(20)
+            : TimeSpan.FromMinutes(8);
+
+    /// <summary>
+    /// Exécute le calcul latent puis le décodage dans deux processus ComfyUI.
+    /// </summary>
     private async Task<string> RunSplitDecodeWorkflowAsync(
         JsonObject configuredWorkflow,
         string videoPrefix,
         double fps,
+        TimeSpan latentTimeout,
+        TimeSpan decodeTimeout,
         CancellationToken ct)
     {
         var comfyRoot =
@@ -558,7 +647,7 @@ public sealed class VideoGenerator
             var phase1Job =
                 await QueueWorkflowAndWaitAsync(
                     phase1,
-                    TimeSpan.FromMinutes(20),
+                    latentTimeout,
                     16,
                     68,
                     "Wan génère le latent vidéo…",
@@ -707,7 +796,7 @@ public sealed class VideoGenerator
             var phase2Job =
                 await QueueWorkflowAndWaitAsync(
                     phase2,
-                    TimeSpan.FromMinutes(8),
+                    decodeTimeout,
                     82,
                     96,
                     "Décodage et encodage MP4…",
@@ -770,6 +859,11 @@ public sealed class VideoGenerator
         }
     }
 
+    /// <summary>
+
+    /// Indique si la condition représentée par CancelActivePromptAsync est satisfaite dans l’état courant.
+
+    /// </summary>
     public async Task CancelActivePromptAsync()
     {
         string? promptId;
@@ -785,6 +879,11 @@ public sealed class VideoGenerator
             "annulation utilisateur");
     }
 
+    /// <summary>
+
+    /// Soumet le workflow géré par <c>QueueWorkflowAndWaitAsync</c> à ComfyUI puis attend sa fin ou son annulation.
+
+    /// </summary>
     private async Task<JsonElement> QueueWorkflowAndWaitAsync(
         JsonObject workflow,
         TimeSpan timeout,
@@ -928,12 +1027,22 @@ public sealed class VideoGenerator
         }
     }
 
+    /// <summary>
+
+    /// Définit SetActivePromptId et applique immédiatement les effets associés sur l’état de l’application.
+
+    /// </summary>
     private void SetActivePromptId(string promptId)
     {
         lock (_promptSync)
             _activePromptId = promptId;
     }
 
+    /// <summary>
+
+    /// Indique si la condition représentée par IsActivePrompt est satisfaite dans l’état courant.
+
+    /// </summary>
     private bool IsActivePrompt(string promptId)
     {
         lock (_promptSync)
@@ -945,6 +1054,11 @@ public sealed class VideoGenerator
         }
     }
 
+    /// <summary>
+
+    /// Efface l’état temporaire géré par <c>ClearActivePromptId</c> sans perturber les autres opérations.
+
+    /// </summary>
     private void ClearActivePromptId(string promptId)
     {
         lock (_promptSync)
@@ -959,6 +1073,11 @@ public sealed class VideoGenerator
         }
     }
 
+    /// <summary>
+
+    /// Indique si la condition représentée par CancelComfyPromptAsync est satisfaite dans l’état courant.
+
+    /// </summary>
     private async Task<bool> CancelComfyPromptAsync(
         string promptId,
         string reason)
@@ -1015,6 +1134,11 @@ public sealed class VideoGenerator
         }
     }
 
+    /// <summary>
+
+    /// Envoie la commande gérée par <c>PostComfyCancellationCommandAsync</c> au service cible et traite la réponse.
+
+    /// </summary>
     private async Task<bool> PostComfyCancellationCommandAsync(
         string route,
         string body)
@@ -1042,6 +1166,11 @@ public sealed class VideoGenerator
         }
     }
 
+    /// <summary>
+
+    /// Libère les ressources ou modèles gérés par <c>FreeComfyModelsAsync</c> afin de réduire l’occupation mémoire.
+
+    /// </summary>
     private async Task FreeComfyModelsAsync(
         CancellationToken ct)
     {
@@ -1076,6 +1205,11 @@ public sealed class VideoGenerator
             ct);
     }
 
+    /// <summary>
+
+    /// Recherche la ressource ou valeur demandée par <c>FindComfyOutput</c> dans les données disponibles.
+
+    /// </summary>
     private string? FindComfyOutput(
         JsonElement job,
         string collectionName,
@@ -1160,6 +1294,11 @@ public sealed class VideoGenerator
         return null;
     }
 
+    /// <summary>
+
+    /// Recherche la ressource ou valeur demandée par <c>FindNodeId</c> dans les données disponibles.
+
+    /// </summary>
     private static string? FindNodeId(
         JsonObject workflow,
         string classType)
@@ -1181,6 +1320,11 @@ public sealed class VideoGenerator
         return null;
     }
 
+    /// <summary>
+
+    /// Recherche la valeur exigée par <c>RequireNodeId</c> et signale explicitement son absence.
+
+    /// </summary>
     private static string RequireNodeId(
         JsonObject workflow,
         string classType)
@@ -1204,6 +1348,11 @@ public sealed class VideoGenerator
             $"Workflow Wan incompatible : nœud {classType} absent.");
     }
 
+    /// <summary>
+
+    /// Calcule le prochain identifiant disponible utilisé par <c>NextNumericNodeId</c>.
+
+    /// </summary>
     private static string NextNumericNodeId(
         JsonObject workflow)
     {
@@ -1224,6 +1373,11 @@ public sealed class VideoGenerator
                 System.Globalization.CultureInfo.InvariantCulture);
     }
 
+    /// <summary>
+
+    /// Supprime les éléments ciblés par <c>RemoveNodesByClassType</c> sans modifier les éléments non concernés.
+
+    /// </summary>
     private static void RemoveNodesByClassType(
         JsonObject workflow,
         params string[] classTypes)
@@ -1243,6 +1397,11 @@ public sealed class VideoGenerator
             workflow.Remove(key);
     }
 
+    /// <summary>
+
+    /// Applique ApplyConfiguredLora aux réglages ou contrôles concernés en respectant les contraintes de DreamRaster.
+
+    /// </summary>
     private void ApplyConfiguredLora(
         JsonObject workflow,
         string loraFile,
@@ -1305,6 +1464,11 @@ public sealed class VideoGenerator
             $"LoRA Vidéo · {fileName} · force={Math.Clamp(strength, -2.0, 2.0):0.00}.");
     }
 
+    /// <summary>
+
+    /// Définit SetInput et applique immédiatement les effets associés sur l’état de l’application.
+
+    /// </summary>
     private static void SetInput(
         JsonObject workflow,
         string classType,
@@ -1336,6 +1500,11 @@ public sealed class VideoGenerator
         }
     }
 
+    /// <summary>
+
+    /// Définit SetInputById et applique immédiatement les effets associés sur l’état de l’application.
+
+    /// </summary>
     private static void SetInputById(
         JsonObject workflow,
         string nodeId,
@@ -1352,6 +1521,11 @@ public sealed class VideoGenerator
         inputs[input] = value?.DeepClone();
     }
 
+    /// <summary>
+
+    /// Tente d’obtenir la valeur gérée par <c>TryGetFailure</c> sans lever d’exception en cas d’absence.
+
+    /// </summary>
     private static bool TryGetFailure(
         JsonElement job,
         out string error)
@@ -1416,6 +1590,38 @@ public sealed class VideoGenerator
         return false;
     }
 
+    /// <summary>
+    /// Vérifie la signature du conteneur vidéo avant de déclarer l'export réussi.
+    /// </summary>
+    private static bool HasValidVideoFileHeader(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return false;
+
+        using var stream = File.OpenRead(path);
+        if (stream.Length < 12)
+            return false;
+
+        Span<byte> header = stackalloc byte[12];
+        if (stream.Read(header) != header.Length)
+            return false;
+
+        var ext = Path.GetExtension(path);
+        if (ext.Equals(".mp4", StringComparison.OrdinalIgnoreCase))
+            return header[4] == (byte)'f' && header[5] == (byte)'t' &&
+                   header[6] == (byte)'y' && header[7] == (byte)'p';
+
+        if (ext.Equals(".webm", StringComparison.OrdinalIgnoreCase) ||
+            ext.Equals(".mkv", StringComparison.OrdinalIgnoreCase))
+            return header[0] == 0x1A && header[1] == 0x45 &&
+                   header[2] == 0xDF && header[3] == 0xA3;
+
+        return false;
+    }
+
+    /// <summary>
+    /// Recherche la vidéo produite dans les résultats du workflow.
+    /// </summary>
     private string? FindVideoOutput(JsonElement job)
     {
         if (!job.TryGetProperty(
@@ -1481,6 +1687,11 @@ public sealed class VideoGenerator
         return null;
     }
 
+    /// <summary>
+
+    /// Transmet l’avancement courant au callback de progression associé au traitement.
+
+    /// </summary>
     private void Progress(int value, string text)
     {
         try

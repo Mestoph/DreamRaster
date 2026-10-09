@@ -27,6 +27,14 @@ DreamRaster is a portable Windows studio for local AI image and video generation
 - Windows multi-curl downloader for large files;
 - models, settings, logs and caches confined to the portable folder.
 
+## Wan 2.1 I2V 14B — local validation
+
+On a **16 GB RTX 4060 Ti** with **32 GB RAM**, the Wan I2V 14B pipeline has been tested at **832 × 480, 33 frames, 16 FPS, and 50 steps**: latent sampling completed, ComfyUI restarted for VAE decoding, H.264 MP4 exported, and **all 33 frames fully decoded with FFmpeg**. The latent job took approximately **24 min 31 sec**.
+
+DreamRaster automatically launches ComfyUI with `--lowvram` for this model. The Video tab accepts a reference-image path; I2V generation requires at least 12 steps. The MP4 container header is checked before export; a full FFmpeg decode is a separate manual validation.
+
+Built-in quality levels: **Fast 20**, **Standard 30**, **Quality 40**, and **Best 50** steps. Settings at 20/30/40 steps are recommendations, not comparative quality tests. See the [Wan video validation guide](docs/VIDEO_VALIDATION.en.md).
+
 ## Repository layout
 
 ```text

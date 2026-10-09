@@ -1,4 +1,17 @@
 ﻿# Changelog — DreamRaster
+## Unreleased — stabilization and validated Wan I2V 14B workflow (2026-10-09)
+
+- Consolidated Designer-owned WinForms layout: the former `MainForm.UiPolish.cs` responsibilities are integrated into `MainForm.cs`, and the obsolete file is removed.
+- Strengthened Image/Video interactions, configuration persistence, integrated preview/history, runtime model handling, installer safety and diagnostics.
+- Enabled editable paths for Wan I2V reference images while validating that the selected file exists before generation.
+- Automatically use ComfyUI `--lowvram` for the large Wan I2V 14B model and switch process memory profiles when appropriate.
+- Preserved two-phase Wan latent sampling and VAE decoding in a fresh ComfyUI process, with clean intermediate-file handling and cancellation support.
+- Adapted generation timeouts to workload: latent sampling 20/60 minutes, VAE decode/encode 8/20 minutes (short/heavy jobs).
+- Checked the MP4/WebM/MKV output header before reporting a successful Wan I2V export; this is not a full container integrity check.
+- Added focused WinForms/pipeline regression tests; **82/82** automated tests passed with a warning-free Release build.
+- Verified local Wan I2V 14B end to end at 832 × 480, 16 FPS, 5/9/17/33 frames at 12 steps and **33 frames at 50 steps**. The full 50-step latent job took about **24 min 31 sec**; the H.264 MP4 decoded successfully in FFmpeg with 33/33 distinct decoded frame hashes.
+- Documented tested settings and manual FFprobe/FFmpeg checks in [French](docs/VIDEO_VALIDATION.fr.md) and [English](docs/VIDEO_VALIDATION.en.md).
+
 ## 38.0.0 - UI polish, categorized configuration and optional technical tabs
 
 - Promoted DreamRaster application, assembly, file and release-tag version to 38.0.0.

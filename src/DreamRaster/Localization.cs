@@ -1,15 +1,22 @@
-﻿/*
+/*
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
 
-FR : Catalogue de traduction de l'interface. Les clés restent stables dans le code.
-EN: UI translation catalog. Keys remain stable throughout the codebase.
+Catalogue de traduction de l'interface. Les clés restent stables dans le code.
 */
 namespace OpenCodeLocalAI;
 
+/// <summary>
+
+/// Définit class « L10n », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 internal static class L10n
 {
+    /// <summary>
+    /// Stocke « Strings », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private static readonly IReadOnlyDictionary<string, (string Fr, string En)> Strings =
         new Dictionary<string, (string Fr, string En)>(StringComparer.OrdinalIgnoreCase)
         {
@@ -86,17 +93,37 @@ internal static class L10n
             ["msg.update"] = ("Mise à jour", "Update"),
         };
 
+    /// <summary>
+
+    /// Normalise l’identifiant de langue afin de le ramener à une valeur prise en charge par DreamRaster.
+
+    /// </summary>
     public static string NormalizeLanguage(string? language)
         => string.Equals(language, "en", StringComparison.OrdinalIgnoreCase) ? "en" : "fr";
 
+    /// <summary>
+
+    /// Indique si la condition représentée par IsEnglish est satisfaite dans l’état courant.
+
+    /// </summary>
     public static bool IsEnglish(string? language)
         => NormalizeLanguage(language) == "en";
 
+    /// <summary>
+
+    /// Retourne la traduction correspondant à la clé demandée et à la langue active.
+
+    /// </summary>
     public static string T(string? language, string key)
         => Strings.TryGetValue(key, out var value)
             ? (IsEnglish(language) ? value.En : value.Fr)
             : key;
 
+    /// <summary>
+
+    /// Choisit la chaîne française ou anglaise selon la langue demandée.
+
+    /// </summary>
     public static string Pick(string? language, string fr, string en)
         => IsEnglish(language) ? en : fr;
 }

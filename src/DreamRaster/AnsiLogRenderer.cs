@@ -1,15 +1,11 @@
-﻿/*
+/*
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
 
-FR : Rendu des logs ANSI et choix des couleurs par source.
-EN: ANSI log rendering and per-source color selection.
-
-FR : Les commentaires structurants sont bilingues. Les noms d'API, classes et protocoles
+Rendu des logs ANSI et choix des couleurs par source.
+Les commentaires structurants sont r?dig?s en fran?ais. Les noms d'API, classes et protocoles
      restent dans leur forme technique afin de garder le code lisible et compatible.
-EN: Structural comments are bilingual. API, class and protocol names remain in their
-    technical form to keep the code readable and compatible.
 */
 
 using System.Drawing;
@@ -18,12 +14,31 @@ using System.Windows.Forms;
 
 namespace OpenCodeLocalAI;
 
+/// <summary>
+
+/// Définit class « AnsiLogRenderer », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 public static class AnsiLogRenderer
 {
+    /// <summary>
+    /// Définit la constante « MaxLogChars » utilisée comme valeur de référence stable par ce composant.
+    /// </summary>
     private const int MaxLogChars = 500_000;
+    /// <summary>
+    /// Stocke « Ansi », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private static readonly Regex Ansi = new(@"\x1B\[(?<codes>[0-9;]*)m", RegexOptions.Compiled);
+    /// <summary>
+    /// Stocke « SourceFont », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private static readonly Font SourceFont = new("Consolas", 9F, FontStyle.Bold);
 
+    /// <summary>
+
+    /// Référence le contrôle WinForms « Append » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+
+    /// </summary>
     public static void Append(RichTextBox box, string source, string message)
     {
         TrimIfNeeded(box);
@@ -44,6 +59,11 @@ public static class AnsiLogRenderer
         box.ScrollToCaret();
     }
 
+    /// <summary>
+
+    /// Détermine la couleur source à appliquer à une entrée de journal selon son origine et sa gravité.
+
+    /// </summary>
     private static Color SourceColor(string source)
     {
         if (source.Contains("!", StringComparison.OrdinalIgnoreCase) ||
@@ -82,6 +102,11 @@ public static class AnsiLogRenderer
         return AppTheme.Text;
     }
 
+    /// <summary>
+
+    /// Référence le contrôle WinForms « AppendAnsi » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+
+    /// </summary>
     private static void AppendAnsi(RichTextBox box, string text)
     {
         var pos = 0;
@@ -133,6 +158,11 @@ public static class AnsiLogRenderer
         }
     }
 
+    /// <summary>
+
+    /// Convertit un code ANSI de couleur de base vers la couleur WinForms correspondante.
+
+    /// </summary>
     private static Color Basic(int i, bool bright)
     {
         // Même les codes ANSI "normaux" sont volontairement clairs,
@@ -164,6 +194,11 @@ public static class AnsiLogRenderer
         return (bright ? hi : normal)[Math.Clamp(i, 0, 7)];
     }
 
+    /// <summary>
+
+    /// Référence le contrôle WinForms « TrimIfNeeded » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+
+    /// </summary>
     private static void TrimIfNeeded(RichTextBox box)
     {
         if (box.TextLength <= MaxLogChars)
@@ -178,6 +213,11 @@ public static class AnsiLogRenderer
         box.SelectionStart = box.TextLength;
     }
 
+    /// <summary>
+
+    /// Convertit un index de palette ANSI 256 couleurs vers sa couleur WinForms correspondante.
+
+    /// </summary>
     private static Color Color256(int n)
     {
         n = Math.Clamp(n, 0, 255);

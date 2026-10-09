@@ -2,8 +2,7 @@
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
-FR : Déclaration Designer WinForms générée.
-EN: Generated WinForms Designer declaration.
+Déclaration Designer WinForms générée.
 */
 
 #nullable enable
@@ -12,14 +11,38 @@ namespace OpenCodeLocalAI;
 
 partial class ImageRegionSelectorForm
 {
+    /// <summary>
+    /// Stocke « components », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private System.ComponentModel.IContainer? components = null;
 
+    /// <summary>
+
+    /// Référence le contrôle WinForms « _info » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+
+    /// </summary>
     private Label _info = null!;
+    /// <summary>
+    /// Référence le contrôle WinForms « _footer » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+    /// </summary>
     private Panel _footer = null!;
+    /// <summary>
+    /// Référence le contrôle WinForms « _okButton » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+    /// </summary>
     private Button _okButton = null!;
+    /// <summary>
+    /// Référence le contrôle WinForms « _cancelButton » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+    /// </summary>
     private Button _cancelButton = null!;
+    /// <summary>
+    /// Référence le contrôle WinForms « _picture » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+    /// </summary>
     private PictureBox _picture = null!;
 
+    /// <summary>
+    /// Construit les contrôles WinForms du sélecteur de région, configure leur
+    /// géométrie et raccorde les événements utilisés pour valider ou annuler la sélection.
+    /// </summary>
     private void InitializeComponent()
     {
         _info = new Label();

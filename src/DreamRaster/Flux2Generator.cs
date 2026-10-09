@@ -1,15 +1,11 @@
-﻿/*
+/*
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
 
-FR : Orchestration de génération FLUX.2 via l'API locale ComfyUI.
-EN: FLUX.2 generation orchestration through the local ComfyUI API.
-
-FR : Les commentaires structurants sont bilingues. Les noms d'API, classes et protocoles
+Orchestration de génération FLUX.2 via l'API locale ComfyUI.
+Les commentaires structurants sont r?dig?s en fran?ais. Les noms d'API, classes et protocoles
      restent dans leur forme technique afin de garder le code lisible et compatible.
-EN: Structural comments are bilingual. API, class and protocol names remain in their
-    technical form to keep the code readable and compatible.
 */
 
 using System.Diagnostics;
@@ -20,23 +16,109 @@ using System.Text.Json.Nodes;
 
 namespace OpenCodeLocalAI;
 
+/// <summary>
+
+/// Définit record « ImageGenerationResult », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 public sealed record ImageGenerationResult(bool Ok, string? Path, string? Url, string? Error = null);
 
+/// <summary>
+
+/// Définit class « Flux2Generator », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 public sealed class Flux2Generator
 {
+    /// <summary>
+    /// Stocke « _s », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly AppSettings _s;
+    /// <summary>
+    /// Stocke « _ensureComfy », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly Func<Task> _ensureComfy;
+    /// <summary>
+    /// Stocke « _stopComfy », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly Func<Task> _stopComfy;
+    /// <summary>
+    /// Stocke « _stopVision », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly Func<Task> _stopVision;
+    /// <summary>
+    /// Stocke « _log », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly Action<string,string> _log;
+    /// <summary>
+    /// Stocke « _http », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly HttpClient _http = new() { Timeout = Timeout.InfiniteTimeSpan };
+    /// <summary>
+    /// Stocke « _gate », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly SemaphoreSlim _gate = new(1,1);
 
+    /// <summary>
+
+    /// Expose l’événement « ProgressChanged » utilisé pour notifier les composants abonnés d’un changement d’état.
+
+    /// </summary>
     public event Action<int,string>? ProgressChanged;
 
+    /// <summary>
+
+    /// Indique si la condition représentée par IsBusy est satisfaite dans l’état courant.
+
+    /// </summary>
     public bool IsBusy => _gate.CurrentCount == 0;
 
+    /// <summary>
+    /// Retourne la liste des dépendances FLUX.2 absentes pour les réglages actuellement chargés.
+    /// </summary>
+    public IReadOnlyList<(string Label, string Path)> GetMissingModels() =>
+        GetMissingModels(_s);
 
+    /// <summary>
+    /// Calcule les dépendances FLUX.2 manquantes pour un jeu de réglages donné, sans modifier l’installation.
+    /// </summary>
+    public static IReadOnlyList<(string Label, string Path)> GetMissingModels(
+        AppSettings settings)
+    {
+        var root = PortablePreflight.GetComfyRoot(settings);
+        var checks = new[]
+        {
+            (
+                "FLUX.2",
+                Path.Combine(
+                    root,
+                    "models",
+                    "diffusion_models",
+                    settings.FluxModel)),
+            (
+                "Text encoder",
+                PortablePreflight.GetComfyTextEncoderPath(
+                    settings,
+                    settings.TextEncoderModel)),
+            (
+                "VAE FLUX.2",
+                Path.Combine(
+                    root,
+                    "models",
+                    "vae",
+                    settings.VaeModel))
+        };
+
+        return checks
+            .Where(x => !File.Exists(x.Item2))
+            .Select(x => (x.Item1, x.Item2))
+            .ToArray();
+    }
+
+
+/// <summary>
+/// Initialise le g?n?rateur FLUX.2 avec la configuration portable, les callbacks de cycle de vie ComfyUI et le canal de journalisation utilis? pendant chaque g?n?ration.
+/// </summary>
     public Flux2Generator(
         AppSettings settings,
         Func<Task> ensureComfy,
@@ -51,6 +133,11 @@ public sealed class Flux2Generator
         _log = log;
     }
 
+    /// <summary>
+
+    /// Lance la génération gérée par <c>GenerateAsync</c>, valide les prérequis et retourne le résultat.
+
+    /// </summary>
     public Task<ImageGenerationResult> GenerateAsync(
         string prompt, int width, int height, CancellationToken ct)
         => GenerateAsync(
@@ -64,11 +151,12 @@ public sealed class Flux2Generator
             seed: null);
 
     /*
-    FR : Génère une image FLUX.2 en mode texte→image ou image→image selon la présence
+    Génère une image FLUX.2 en mode texte→image ou image→image selon la présence
          d'une image source.
-    EN: Generates a FLUX.2 image in text-to-image or image-to-image mode depending
-        on whether a source image is provided.
     */
+    /// <summary>
+    /// Lance la génération gérée par <c>GenerateAsync</c>, valide les prérequis et retourne le résultat.
+    /// </summary>
     public async Task<ImageGenerationResult> GenerateAsync(
         string prompt,
         string? negativePrompt,
@@ -245,6 +333,19 @@ public sealed class Flux2Generator
                     dest,
                     $"http://127.0.0.1:{_s.ImageProxyPort}/local-images/{Uri.EscapeDataString(Path.GetFileName(dest))}");
             }
+            catch (OperationCanceledException)
+                when (ct.IsCancellationRequested)
+            {
+                _log("FLUX", "Génération image annulée.");
+                try
+                {
+                    if (_s.HardStopComfyAfterGeneration)
+                        await _stopComfy();
+                }
+                catch { }
+
+                throw;
+            }
             catch (Exception ex)
             {
                 _log("FLUX !", ex.Message);
@@ -268,6 +369,11 @@ public sealed class Flux2Generator
         }
     }
 
+    /// <summary>
+
+    /// Exécute RunSplitDecodeWorkflowAsync en coordonnant les ressources et les mécanismes d’annulation nécessaires.
+
+    /// </summary>
     private async Task<string> RunSplitDecodeWorkflowAsync(
         JsonObject configuredWorkflow,
         string imagePrefix,
@@ -470,6 +576,11 @@ public sealed class Flux2Generator
         }
     }
 
+    /// <summary>
+
+    /// Soumet le workflow géré par <c>QueueWorkflowAndWaitAsync</c> à ComfyUI puis attend sa fin ou son annulation.
+
+    /// </summary>
     private async Task<JsonElement> QueueWorkflowAndWaitAsync(
         JsonObject workflow,
         TimeSpan timeout,
@@ -571,6 +682,11 @@ public sealed class Flux2Generator
             "Timeout ComfyUI.");
     }
 
+    /// <summary>
+
+    /// Libère les ressources ou modèles gérés par <c>FreeComfyModelsAsync</c> afin de réduire l’occupation mémoire.
+
+    /// </summary>
     private async Task FreeComfyModelsAsync(
         CancellationToken ct)
     {
@@ -604,6 +720,11 @@ public sealed class Flux2Generator
             ct);
     }
 
+    /// <summary>
+
+    /// Recherche la ressource ou valeur demandée par <c>FindComfyOutput</c> dans les données disponibles.
+
+    /// </summary>
     private string? FindComfyOutput(
         JsonElement job,
         string collectionName,
@@ -683,6 +804,11 @@ public sealed class Flux2Generator
         return null;
     }
 
+    /// <summary>
+
+    /// Recherche la valeur exigée par <c>RequireNodeId</c> et signale explicitement son absence.
+
+    /// </summary>
     private static string RequireNodeId(
         JsonObject workflow,
         string classType)
@@ -705,6 +831,11 @@ public sealed class Flux2Generator
             $"Workflow FLUX.2 Klein incompatible : nœud {classType} absent.");
     }
 
+    /// <summary>
+
+    /// Calcule le prochain identifiant disponible utilisé par <c>NextNumericNodeId</c>.
+
+    /// </summary>
     private static string NextNumericNodeId(
         JsonObject workflow)
     {
@@ -725,6 +856,11 @@ public sealed class Flux2Generator
                 System.Globalization.CultureInfo.InvariantCulture);
     }
 
+    /// <summary>
+
+    /// Supprime les éléments ciblés par <c>RemoveNodesByClassType</c> sans modifier les éléments non concernés.
+
+    /// </summary>
     private static void RemoveNodesByClassType(
         JsonObject workflow,
         params string[] classTypes)
@@ -743,6 +879,11 @@ public sealed class Flux2Generator
             workflow.Remove(key);
     }
 
+    /// <summary>
+
+    /// Configure les données ou le workflow géré par <c>ConfigureOfficialKleinWorkflow</c> selon les réglages actifs.
+
+    /// </summary>
     private void ConfigureOfficialKleinWorkflow(
         JsonObject workflow,
         string prompt,
@@ -769,7 +910,7 @@ public sealed class Flux2Generator
             "clip_name",
             JsonValue.Create(_s.TextEncoderModel));
 
-        // FLUX.2 Klein uses the Qwen3 FLUX.2 conditioning path.
+        // FLUX.2 Klein utilise le chemin de conditionnement Qwen3 prévu pour FLUX.2.
         SetRequiredInput(
             workflow,
             "CLIPLoader",
@@ -804,7 +945,7 @@ public sealed class Flux2Generator
             else
             {
                 // Klein Distilled has no separate negative-conditioning input.
-                // Qwen receives the exclusions as explicit natural-language instructions.
+                // Qwen reçoit les exclusions sous forme d’instructions explicites en langage naturel.
                 positivePrompt =
                     prompt + Environment.NewLine + Environment.NewLine +
                     "Avoid: " + negativePrompt.Trim();
@@ -907,6 +1048,11 @@ public sealed class Flux2Generator
         RequireNodeInputs(workflow, "SamplerCustomAdvanced");
     }
 
+    /// <summary>
+
+    /// Recherche la ressource ou valeur demandée par <c>FindNodeInputs</c> dans les données disponibles.
+
+    /// </summary>
     private static List<JsonObject> FindNodeInputs(
         JsonObject workflow,
         string classType)
@@ -936,6 +1082,11 @@ public sealed class Flux2Generator
         return result;
     }
 
+    /// <summary>
+
+    /// Recherche la valeur exigée par <c>RequireNodeInputs</c> et signale explicitement son absence.
+
+    /// </summary>
     private static JsonObject RequireNodeInputs(
         JsonObject workflow,
         string classType)
@@ -952,6 +1103,11 @@ public sealed class Flux2Generator
         return nodes[0];
     }
 
+    /// <summary>
+
+    /// Définit SetRequiredInput et applique immédiatement les effets associés sur l’état de l’application.
+
+    /// </summary>
     private static void SetRequiredInput(
         JsonObject workflow,
         string classType,
@@ -971,6 +1127,11 @@ public sealed class Flux2Generator
             inputs[inputName] = value?.DeepClone();
     }
 
+    /// <summary>
+
+    /// Applique ApplyConfiguredLora aux réglages ou contrôles concernés en respectant les contraintes de DreamRaster.
+
+    /// </summary>
     private void ApplyConfiguredLora(
         JsonObject workflow,
         string loraFile,
@@ -1033,6 +1194,11 @@ public sealed class Flux2Generator
             $"LoRA Image · {fileName} · force={Math.Clamp(strength, -2.0, 2.0):0.00}.");
     }
 
+    /// <summary>
+
+    /// Tente d’obtenir la valeur gérée par <c>TryGetComfyFailure</c> sans lever d’exception en cas d’absence.
+
+    /// </summary>
     private static bool TryGetComfyFailure(
         JsonElement job,
         out string error)
@@ -1122,6 +1288,11 @@ public sealed class Flux2Generator
         return false;
     }
 
+    /// <summary>
+
+    /// Recherche la ressource ou valeur demandée par <c>FindOutput</c> dans les données disponibles.
+
+    /// </summary>
     private string? FindOutput(JsonElement job)
     {
         if (!job.TryGetProperty("outputs", out var outputs)) return null;
@@ -1140,11 +1311,21 @@ public sealed class Flux2Generator
         return null;
     }
 
+    /// <summary>
+
+    /// Transmet l’avancement courant au callback de progression associé au traitement.
+
+    /// </summary>
     private void Progress(int p, string t)
     {
         try { ProgressChanged?.Invoke(Math.Clamp(p, 0, 100), t); } catch { }
     }
 
+    /// <summary>
+
+    /// Exécute le traitement <c>WaitForSafeMemoryAsync</c> et conserve un état cohérent en cas de succès comme d’erreur.
+
+    /// </summary>
     private async Task WaitForSafeMemoryAsync(CancellationToken ct)
     {
         var until = DateTime.UtcNow.AddSeconds(45);
@@ -1199,6 +1380,13 @@ public sealed class Flux2Generator
             "Fermez les applications lourdes ou augmentez le fichier de pagination Windows.");
     }
 
+    /// <summary>
+    /// Lit l'état mémoire global de Windows et retourne la RAM physique libre
+    /// ainsi que la réserve de commit encore disponible, exprimées en MiB.
+    /// Ces valeurs servent à décider si un nouveau workflow GPU peut démarrer
+    /// sans risquer une pression mémoire excessive.
+    /// </summary>
+    /// <returns>Un instantané contenant la RAM libre et le commit disponible.</returns>
     private static (long FreeRamMiB, long AvailableCommitMiB)
         GetMemorySnapshot()
     {
@@ -1216,20 +1404,55 @@ public sealed class Flux2Generator
             (long)(m.AvailPageFile / 1048576UL));
     }
 
+    /// <summary>
+
+    /// Définit struct « MemoryStatusEx », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct MemoryStatusEx
     {
+        /// <summary>
+        /// Stocke « Length », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+        /// </summary>
         public uint Length;
+        /// <summary>
+        /// Stocke « MemoryLoad », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+        /// </summary>
         public uint MemoryLoad;
+        /// <summary>
+        /// Stocke « TotalPhys », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+        /// </summary>
         public ulong TotalPhys;
+        /// <summary>
+        /// Stocke « AvailPhys », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+        /// </summary>
         public ulong AvailPhys;
+        /// <summary>
+        /// Stocke « TotalPageFile », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+        /// </summary>
         public ulong TotalPageFile;
+        /// <summary>
+        /// Stocke « AvailPageFile », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+        /// </summary>
         public ulong AvailPageFile;
+        /// <summary>
+        /// Stocke « TotalVirtual », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+        /// </summary>
         public ulong TotalVirtual;
+        /// <summary>
+        /// Stocke « AvailVirtual », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+        /// </summary>
         public ulong AvailVirtual;
+        /// <summary>
+        /// Stocke « AvailExtendedVirtual », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+        /// </summary>
         public ulong AvailExtendedVirtual;
     }
 
+    /// <summary>
+    /// Interroge l’API Win32 GlobalMemoryStatusEx afin d’obtenir l’état mémoire physique et virtuelle du système.
+    /// </summary>
     [DllImport("kernel32.dll", SetLastError = true)]
     private static extern bool GlobalMemoryStatusEx(ref MemoryStatusEx buffer);
 }

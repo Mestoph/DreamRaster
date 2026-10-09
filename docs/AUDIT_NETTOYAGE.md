@@ -1,0 +1,154 @@
+# Audit de nettoyage DreamRaster
+
+Ce document recense les éléments réellement nécessaires, régénérables ou supprimables dans le dépôt de développement et dans l'installation portable DreamRaster_FreshTest.
+
+## Règle absolue pour le déploiement
+
+Le déploiement final met l'exécutable ici :
+
+D:\AI\DreamRaster_FreshTest\DreamRaster.exe
+
+Le dossier DreamRaster_FreshTest ne doit jamais être vidé ni remplacé intégralement.
+
+Ne jamais supprimer, déplacer, renommer ou écraser automatiquement :
+
+- models\
+- les modèles présents sous bin\comfyui\...\models\
+- config\settings.json
+- images\
+- videos\
+- workspace\
+- les données téléchargées par l'utilisateur
+
+Le déploiement doit être construit dans un dossier de staging séparé, puis copier uniquement les fichiers applicatifs explicitement autorisés.
+
+## Dépôt de développement
+
+### Régénérable et supprimable
+
+Ces éléments sont produits par Visual Studio, MSBuild ou les tests et n'ont aucune valeur source :
+
+- .vs\
+- src\DreamRaster\bin\
+- src\DreamRaster\obj\
+- tests\DreamRaster.Tests\bin\
+- tests\DreamRaster.Tests\obj\
+- tests\DreamRaster.Tests\TestResults\
+- src\DreamRaster\DreamRaster.csproj.user
+
+Ils peuvent être recréés automatiquement par une compilation ou Visual Studio.
+
+### Cache NuGet
+
+.nuget\packages\ est régénérable, mais il reste utile pour compiler sans retélécharger toutes les dépendances. Il ne doit donc pas être supprimé automatiquement lors d'un nettoyage courant.
+
+### Fichiers et dossiers temporaires de travail
+
+Les dossiers de staging ou de sauvegarde créés pour une intervention ponctuelle doivent être supprimés après validation, par exemple :
+
+- D:\AI\DreamRaster_DeployStage
+- D:\AI\DreamRaster_MainFormMergeBackup
+
+Ils ne font pas partie du produit.
+
+## Installation portable DreamRaster_FreshTest
+
+### Indispensable au fonctionnement
+
+À conserver :
+
+- DreamRaster.exe
+- config\
+- workflows\
+- bin\comfyui\
+- bin\ollama\
+- bin\opencode\
+- bin\webview2-fixed\
+- runtime\native\
+- runtime\tools\
+
+### Données utilisateur
+
+À conserver sauf demande explicite de l'utilisateur :
+
+- models\
+- modèles ComfyUI sous bin\comfyui\...\models\
+- images\
+- videos\
+- workspace\
+- config\settings.json
+
+### Archives d'installation régénérables
+
+Après installation réussie des composants, les archives du dossier downloads\ ne sont plus nécessaires à l'exécution :
+
+- ComfyUI.7z
+- ollama.zip
+- Microsoft.WebView2.FixedVersionRuntime.*.cab
+- opencode.zip
+
+Lors du dernier audit elles représentaient environ 3,84 Go. Elles peuvent être retéléchargées par l'installateur si une réparation est nécessaire.
+
+Elles ne sont pas supprimées automatiquement afin de ne pas modifier l'installation portable sans décision explicite.
+
+### Caches régénérables
+
+Ces éléments peuvent être reconstruits par les composants concernés :
+
+- dossiers Python __pycache__
+- runtime\webview2-* et leurs caches WebView2
+- caches CUDA de runtime\comfyui\cuda-cache
+- caches CUDA de runtime\ollama\cuda-cache
+- dossiers temp vides ou temporaires
+- journaux anciens dans logs\ lorsque leur conservation n'est plus utile
+
+Lors du dernier audit, les __pycache__ hors modèles représentaient environ 229 Mo.
+
+### Métadonnées ComfyUI
+
+bin\comfyui\...\ComfyUI\.github\ n'est pas requis pour exécuter ComfyUI.
+
+bin\comfyui\...\ComfyUI\.git\ n'est pas requis pour générer des images ou des vidéos, mais peut être utile pour identifier la révision ou effectuer certaines mises à jour. Il ne doit donc pas être supprimé automatiquement sans fixer d'abord la stratégie de mise à jour de ComfyUI.
+
+## Code mort
+
+La passe de nettoyage a supprimé les méthodes privées sans aucune référence confirmée :
+
+- AdvancedControlPolish
+- CopyComboItemsPolish
+- HasFluxModels
+- LayoutVideoLeftColumnV36
+- SelectedLoraFileV37
+- WireCheckMirrorPolish
+- WireNumericMirrorPolish
+
+Les analyseurs IDE0051, IDE0052, IDE0060 et IDE0079 n'ont ensuite signalé aucun autre membre privé mort évident. La structure mémoire Win32 du tableau de bord a également été fusionnée avec la structure MEMORYSTATUSEX déjà utilisée par MainForm afin de supprimer un doublon historique.
+
+## Structure MainForm
+
+La structure volontaire est limitée à deux fichiers :
+
+- MainForm.cs
+- MainForm.Designer.cs
+
+Le fichier historique MainForm.UiPolish.cs a été absorbé dans MainForm.cs puis supprimé.
+
+## Documentation du code
+
+La passe finale de documentation a vérifié 1273 déclarations de types et membres dans les sources maintenues :
+
+- documentation XML présente : 1273/1273
+- déclarations sans documentation XML : 0
+- commentaires génériques détectés : 0
+- marqueurs historiques FR:/EN: : 0
+
+Les commentaires structurants du code sont désormais rédigés uniquement en français. Les textes anglais conservés dans les données ou appels de traduction servent uniquement à l'interface bilingue et ne sont pas des commentaires de code.
+
+## Validation de référence
+
+La dernière validation complète a donné :
+
+- build Release : 0 erreur
+- avertissements : 0
+- tests : 82/82 (validation Release du 9 octobre 2026)
+- git diff --check : propre

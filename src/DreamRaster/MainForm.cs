@@ -3,13 +3,9 @@ Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
 
-FR : Logique principale de l'interface, services, traduction et mise à jour.
-EN: Main UI logic, services, localization and updating.
-
-FR : Les commentaires structurants sont bilingues. Les noms d'API, classes et protocoles
+Logique principale de l'interface, services, traduction et mise à jour.
+Les commentaires structurants sont r?dig?s en fran?ais. Les noms d'API, classes et protocoles
      restent dans leur forme technique afin de garder le code lisible et compatible.
-EN: Structural comments are bilingual. API, class and protocol names remain in their
-    technical form to keep the code readable and compatible.
 */
 
 using System.Collections.Concurrent;
@@ -30,32 +26,133 @@ using Microsoft.Web.WebView2.WinForms;
 using Microsoft.Win32;
 namespace OpenCodeLocalAI;
 
+/// <summary>
+/// Fen?tre principale de DreamRaster. Elle orchestre les services portables, les pipelines Image/Vid?o, l?installation, la configuration, les journaux et la pr?sentation WinForms.
+/// </summary>
 public partial class MainForm : Form
 {
+    /// <summary>
+    /// Contient la configuration persistante de DreamRaster chargée depuis
+    /// <c>config/settings.json</c>. Toutes les sélections de modèles, paramètres
+    /// Image/Vidéo et préférences de l’interface sont synchronisées avec cet objet.
+    /// </summary>
     private readonly AppSettings _s = null!;
+    /// <summary>
+    /// Gère le processus portable OpenCode : démarrage, arrêt, redirection des
+    /// sorties console et suivi de son état depuis l’interface.
+    /// </summary>
     private readonly ManagedProcess _openCode = null!;
+    /// <summary>
+    /// Gère le serveur Ollama portable utilisé pour l’amélioration de prompts,
+    /// l’analyse Vision et les fonctions locales de langage.
+    /// </summary>
     private readonly ManagedProcess _ollama = null!;
+    /// <summary>
+    /// Gère le processus ComfyUI portable chargé d’exécuter les workflows
+    /// FLUX.2 et Wan utilisés par les onglets Image et Vidéo.
+    /// </summary>
     private readonly ManagedProcess _comfy = null!;
+    /// <summary>
+    /// Orchestre l’installation et la réparation des composants portables,
+    /// modèles et dépendances nécessaires au fonctionnement hors installation système.
+    /// </summary>
     private readonly PortableInstaller _installer = null!;
+    /// <summary>
+    /// Héberge le proxy HTTP local utilisé pour exposer de façon contrôlée
+    /// certains services embarqués à l’interface WebView.
+    /// </summary>
     private readonly LocalProxyServer _proxy = null!;
+    /// <summary>
+    /// Héberge l’API locale de génération qui permet de piloter DreamRaster
+    /// depuis les surfaces intégrées sans dupliquer la logique de génération.
+    /// </summary>
     private readonly GenerationApiServer _api = null!;
+    /// <summary>
+    /// Exécute les workflows FLUX.2 de génération et d’édition d’images en
+    /// appliquant les modèles, encodeurs, VAE, LoRA et réglages actifs.
+    /// </summary>
     private readonly Flux2Generator _generator = null!;
+    /// <summary>
+    /// Réalise la seconde passe facultative de netteté/qualité et produit les
+    /// aperçus comparatifs avant/après affichés dans les onglets Image et Vidéo.
+    /// </summary>
     private readonly QualityPostProcessor _qualityPostProcessor = null!;
+    /// <summary>
+    /// Mémorise last maximum quality image first pass path afin de conserver le chemin utilisé entre les interactions de l’interface.
+    /// </summary>
     private string? _lastMaximumQualityImageFirstPassPath;
+    /// <summary>
+    /// Mémorise last maximum quality video first pass path afin de conserver le chemin utilisé entre les interactions de l’interface.
+    /// </summary>
     private string? _lastMaximumQualityVideoFirstPassPath;
+    /// <summary>
+    /// Conserve dragging image sharpness divider, état interne nécessaire pour synchroniser la logique métier et l’interface sans ambiguïté.
+    /// </summary>
     private bool _draggingImageSharpnessDivider;
+    /// <summary>
+    /// Vérifie les versions publiées sur GitHub et pilote la logique de mise à jour
+    /// de DreamRaster sans mélanger cette responsabilité avec le formulaire.
+    /// </summary>
     private readonly GitHubUpdater _updater = null!;
 
+    /// <summary>
+    /// Conserve la source d’annulation « _installCts » afin d’interrompre proprement l’opération associée.
+    /// </summary>
     private CancellationTokenSource? _installCts;
+    /// <summary>
+    /// Conserve la source d’annulation « _imageCts » afin d’interrompre proprement l’opération associée.
+    /// </summary>
+    private CancellationTokenSource? _imageCts;
+    /// <summary>
+    /// Référence la tâche d’installation actuellement en cours afin d’empêcher
+    /// deux installations concurrentes et de permettre une annulation cohérente.
+    /// </summary>
     private Task? _installTask;
+    /// <summary>
+    /// Sérialise l’écriture du fichier de log afin que plusieurs sources asynchrones
+    /// ne puissent jamais écrire simultanément dans le même flux.
+    /// </summary>
     private readonly SemaphoreSlim _logFileGate = new(1, 1);
+    /// <summary>
+    /// File thread-safe des messages de journal produits par les services en arrière-plan
+    /// avant leur transfert groupé vers les contrôles de logs WinForms.
+    /// </summary>
     private readonly ConcurrentQueue<(string Source, string Message)> _pendingLogs = new();
+    /// <summary>
+    /// Déclenche périodiquement le transfert des messages accumulés dans la file
+    /// de logs vers les contrôles WinForms sans bloquer les producteurs.
+    /// </summary>
     private readonly System.Windows.Forms.Timer _logFlushTimer = new();
+    /// <summary>
+    /// Garantit qu’un seul workflow GPU lourd, Image ou Vidéo, s’exécute à la fois
+    /// afin d’éviter la concurrence VRAM et les conflits ComfyUI.
+    /// </summary>
     private readonly SemaphoreSlim _gpuWorkflowGate = new(1, 1);
+    /// <summary>
+    /// Indique l’état interne « _logFlushBusy » utilisé pour empêcher les mises à jour réentrantes ou incohérentes.
+    /// </summary>
     private int _logFlushBusy;
+    /// <summary>
+    /// Compteur de génération du cycle de vie des services. Toute opération asynchrone
+    /// capture sa valeur puis abandonne ses mises à jour si un arrêt/redémarrage l’a invalidée.
+    /// </summary>
     private int _serviceLifecycleEpoch;
+    /// <summary>
+    /// Indique l’état interne « _closing » utilisé pour empêcher les mises à jour réentrantes ou incohérentes.
+    /// </summary>
     private bool _closing;
+    /// <summary>
+    /// Suspend les écritures de settings.json depuis le début de la construction
+    /// runtime jusqu’à la fin de l’initialisation asynchrone <c>Shown</c>, afin
+    /// qu’un simple lancement ne modifie jamais la configuration utilisateur.
+    /// </summary>
+    private bool _suppressSettingsPersistence;
 
+    /// <summary>
+    /// Initialise la fenêtre principale, charge la configuration persistante,
+    /// prépare les services portables, raccorde les interactions Image/Vidéo et
+    /// applique l’état initial de l’interface.
+    /// </summary>
     public MainForm()
     {
         InitializeComponent();
@@ -66,8 +163,14 @@ public partial class MainForm : Form
             return;
         }
 
-        // The Designer uses standard tabs so all pages remain readable/selectable.
-        // Runtime restores DreamRaster's custom owner-drawn tab appearance.
+        // Les contrôles WinForms peuvent déclencher SelectedIndexChanged,
+        // ValueChanged ou CheckedChanged dès leur initialisation. La persistance
+        // reste donc bloquée pendant tout le constructeur et jusqu'à la fin de
+        // MainForm_Shown.
+        _suppressSettingsPersistence = true;
+
+        // Le Designer utilise des onglets standard afin que toutes les pages restent lisibles et sélectionnables.
+        // À l’exécution, DreamRaster restaure son rendu personnalisé des onglets.
         _tabs.DrawMode = TabDrawMode.OwnerDrawFixed;
 
         AppTheme.ApplyDark(this);
@@ -136,6 +239,9 @@ public partial class MainForm : Form
         Log("UI", "Configuration : " + Path.Combine(PortablePaths.ConfigDir, "settings.json"));
     }
 
+    /// <summary>
+    /// Détermine la condition représentée par <c>IsWinFormsDesigner</c> à partir de l’état courant.
+    /// </summary>
     private static bool IsWinFormsDesigner()
     {
         if (LicenseManager.UsageMode == LicenseUsageMode.Designtime)
@@ -150,84 +256,152 @@ public partial class MainForm : Form
                    StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Effectue les vérifications de démarrage et actualise les données dépendant de l’installation portable locale.
+    /// La création des contrôles statiques et leur disposition restent volontairement gérées par MainForm.Designer.cs.
+    /// </summary>
     private async void MainForm_Shown(object? sender, EventArgs e)
     {
         if (IsWinFormsDesigner())
             return;
 
-        await SafeUiAsync(
-            L10n.Pick(_s.Language, "Vérification portable", "Portable check"),
-            StartupPreflightAsync);
-
-        FixV36Layout();
-        ApplyV37SharedLayout();
-        RefreshFeatureAvailability();
-        RefreshImageHistory();
-        RefreshVideoHistory();
-        LogVirtualMemoryWarningIfNeeded();
-
-        await RefreshModelChoicesAsync();
-
-        if (_s.AutoCheckUpdates && !_closing)
+        _suppressSettingsPersistence = true;
+        try
         {
             await SafeUiAsync(
-                L10n.T(_s.Language, "msg.update"),
-                () => CheckForUpdatesAsync(interactive: false));
+                L10n.Pick(
+                    _s.Language,
+                    "Initialisation DreamRaster",
+                    "DreamRaster initialization"),
+                async () =>
+                {
+                    await StartupPreflightAsync();
+
+                    RefreshFeatureAvailability();
+                    RefreshImageHistory();
+                    RefreshVideoHistory();
+                    LogVirtualMemoryWarningIfNeeded();
+
+                    await RefreshModelChoicesAsync();
+
+                    if (_s.AutoCheckUpdates && !_closing)
+                        await CheckForUpdatesAsync(interactive: false);
+                });
+        }
+        finally
+        {
+            _suppressSettingsPersistence = false;
         }
     }
 
+    /// <summary>
+    /// Traite le clic utilisateur associé à « btnStart_Click » et déclenche l’action correspondante de l’interface.
+    /// </summary>
     private async void btnStart_Click(object? sender, EventArgs e)
         => await SafeUiAsync("Démarrage", StartCoreAsync);
 
+    /// <summary>
+    /// Traite le clic utilisateur associé à « btnStop_Click » et déclenche l’action correspondante de l’interface.
+    /// </summary>
     private async void btnStop_Click(object? sender, EventArgs e)
         => await SafeUiAsync("Arrêt", StopAllAsync);
 
+    /// <summary>
+    /// Traite le clic utilisateur associé à « btnOpenCode_Click » et déclenche l’action correspondante de l’interface.
+    /// </summary>
     private async void btnOpenCode_Click(object? sender, EventArgs e)
         => await SafeUiAsync("OpenCode", OpenEmbeddedAsync);
 
+    /// <summary>
+    /// Traite le clic utilisateur associé à « btnComfy_Click » et déclenche l’action correspondante de l’interface.
+    /// </summary>
     private async void btnComfy_Click(object? sender, EventArgs e)
         => await SafeUiAsync("ComfyUI", OpenComfyEmbeddedAsync);
 
+    /// <summary>
+    /// Traite le clic utilisateur associé à « btnDiagnostic_Click » et déclenche l’action correspondante de l’interface.
+    /// </summary>
     private async void btnDiagnostic_Click(object? sender, EventArgs e)
         => await SafeUiAsync("Diagnostic", ExportDiagnosticAsync);
 
+    /// <summary>
+    /// Traite le clic utilisateur associé à « btnGenerate_Click » et déclenche l’action correspondante de l’interface.
+    /// </summary>
     private async void btnGenerate_Click(object? sender, EventArgs e)
-        => await SafeUiAsync(
+    {
+        if (_imageCts is { IsCancellationRequested: false })
+        {
+            _genText.Text =
+                L10n.Pick(
+                    _s.Language,
+                    "Annulation de la génération FLUX.2…",
+                    "Cancelling FLUX.2 generation…");
+            _imageCts.Cancel();
+            return;
+        }
+
+        await SafeUiAsync(
             "Génération FLUX.2",
             () => RunGpuExclusiveAsync("Image", GenerateFromUiAsync));
+    }
 
+    /// <summary>
+    /// Traite le changement de sélection « cmbGenerationMode_SelectedIndexChanged » et synchronise l’état applicatif correspondant.
+    /// </summary>
     private void cmbGenerationMode_SelectedIndexChanged(object? sender, EventArgs e)
         => UpdateGenerationModeUi();
 
+    /// <summary>
+    /// Traite le clic utilisateur associé à « btnBrowseInputImage_Click » et déclenche l’action correspondante de l’interface.
+    /// </summary>
     private void btnBrowseInputImage_Click(object? sender, EventArgs e)
-    {
-        using var ofd = new OpenFileDialog
-        {
-            Title = L10n.IsEnglish(_s.Language)
-                ? "Select a source image"
-                : "Sélectionner une image source",
-            Filter = "Image files|*.png;*.jpg;*.jpeg;*.webp;*.bmp|All files|*.*",
-            Multiselect = false
-        };
+        => SafeUiAction(
+            L10n.Pick(
+                _s.Language,
+                "Sélectionner une image source",
+                "Select a source image"),
+            () =>
+            {
+                using var ofd = new OpenFileDialog
+                {
+                    Title = L10n.IsEnglish(_s.Language)
+                        ? "Select a source image"
+                        : "Sélectionner une image source",
+                    Filter =
+                        "Image files|*.png;*.jpg;*.jpeg;*.webp;*.bmp|All files|*.*",
+                    Multiselect = false
+                };
 
-        if (ofd.ShowDialog(this) != DialogResult.OK)
-            return;
+                if (ofd.ShowDialog(this) != DialogResult.OK)
+                    return;
 
-        txtInputImage.Text = ofd.FileName;
-        ShowPreviewImage(ofd.FileName);
-    }
+                txtInputImage.Text = ofd.FileName;
+                ShowPreviewImage(ofd.FileName);
+            });
 
+    /// <summary>
+    /// Traite le clic utilisateur associé à « btnClearInputImage_Click » et déclenche l’action correspondante de l’interface.
+    /// </summary>
     private void btnClearInputImage_Click(object? sender, EventArgs e)
         => txtInputImage.Clear();
 
+    /// <summary>
+    /// Traite le clic utilisateur associé à « btnInstallAll_Click » et déclenche l’action correspondante de l’interface.
+    /// </summary>
     private async void btnInstallAll_Click(object? sender, EventArgs e)
         => await SafeUiAsync("Installation", InstallAllAsync);
 
+    /// <summary>
+    /// Traite le clic utilisateur associé à « btnCheckUpdates_Click » et déclenche l’action correspondante de l’interface.
+    /// </summary>
     private async void btnCheckUpdates_Click(object? sender, EventArgs e)
         => await SafeUiAsync(
             L10n.T(_s.Language, "msg.update"),
             () => CheckForUpdatesAsync(interactive: true));
 
+    /// <summary>
+    /// Traite le clic utilisateur associé à « btnOpenGitHub_Click » et déclenche l’action correspondante de l’interface.
+    /// </summary>
     private void btnOpenGitHub_Click(object? sender, EventArgs e)
     {
         try
@@ -248,20 +422,37 @@ public partial class MainForm : Form
         }
     }
 
-    private void cmbLanguage_SelectedIndexChanged(object? sender, EventArgs e)
+    /// <summary>
+    /// Traite le changement de sélection « cmbLanguage_SelectedIndexChanged » et synchronise l’état applicatif correspondant.
+    /// </summary>
+    private async void cmbLanguage_SelectedIndexChanged(
+        object? sender,
+        EventArgs e)
     {
-        _s.Language = cmbLanguage.SelectedIndex == 1 ? "en" : "fr";
-        ApplyTranslations();
-        _ = RefreshModelChoicesAsync();
+        await SafeUiAsync(
+            L10n.Pick(
+                _s.Language,
+                "Changement de langue",
+                "Language change"),
+            async () =>
+            {
+                _s.Language =
+                    cmbLanguage.SelectedIndex == 1 ? "en" : "fr";
+                ApplyTranslations();
+                await RefreshModelChoicesAsync();
+            });
     }
 
+    /// <summary>
+    /// Traite le clic utilisateur associé à « btnSettingsSave_Click » et déclenche l’action correspondante de l’interface.
+    /// </summary>
     private void btnSettingsSave_Click(object? sender, EventArgs e)
     {
         try
         {
             ValidateConfigurationUi();
             SaveSettingsFromUi();
-            SettingsStore.Save(_s);
+            PersistSettingsIfAllowed();
             SynchronizeWorkflowDefaults();
 
             Log("UI", "Configuration enregistrée : " +
@@ -284,6 +475,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Traite le clic utilisateur associé à « btnOpenConfigFolder_Click » et déclenche l’action correspondante de l’interface.
+    /// </summary>
     private void btnOpenConfigFolder_Click(object? sender, EventArgs e)
     {
         try
@@ -307,6 +501,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Charge les données nécessaires à <c>LoadSettingsToUi</c> et les projette dans l’état ou l’interface correspondante.
+    /// </summary>
     private void LoadSettingsToUi()
     {
         _loadingSettingsExperience = true;
@@ -349,6 +546,9 @@ public partial class MainForm : Form
         _loadingSettingsExperience = false;
     }
 
+    /// <summary>
+    /// Collecte et enregistre les valeurs gérées par <c>SaveSettingsFromUi</c> en préservant la cohérence de la configuration.
+    /// </summary>
     private void SaveSettingsFromUi()
     {
         _s.OpenCodePort = Decimal.ToInt32(numOpenCodePort.Value);
@@ -439,9 +639,11 @@ public partial class MainForm : Form
     }
 
     /*
-    FR : Applique les libellés statiques de la langue sélectionnée.
-    EN: Applies all static labels for the selected UI language.
+    Applique les libellés statiques de la langue sélectionnée.
     */
+    /// <summary>
+    /// Applique les règles de <c>ApplyTranslations</c> à l’état courant puis synchronise les contrôles affectés.
+    /// </summary>
     private void ApplyTranslations()
     {
         var lang = _s.Language;
@@ -479,6 +681,10 @@ public partial class MainForm : Form
         lblGenerationMode.Text = L10n.T(lang, "label.mode");
         lblInputImage.Text = L10n.T(lang, "label.input_image");
         lblImg2ImgStrength.Text = L10n.T(lang, "label.img2img_strength");
+        _videoReferenceHint.Text = L10n.Pick(
+            lang,
+            "Référence/zone utilisée uniquement avec un modèle I2V.",
+            "Reference/crop used only with an I2V model.");
         lblInstallTitle.Text = L10n.T(lang, "install.title");
         lblInstallInfo.Text = L10n.T(lang, "install.info");
 
@@ -543,14 +749,17 @@ public partial class MainForm : Form
 
         ApplyEnhancedTranslations();
         ApplySettingsExperienceTranslations();
+        RefreshPipelinePresetTranslations();
         _tabs.Invalidate(true);
         _tabs.Refresh();
     }
 
     /*
-    FR : Active ou désactive les contrôles propres au mode image→image.
-    EN: Enables or disables controls that are specific to image-to-image mode.
+    Active ou désactive les contrôles propres au mode image→image.
     */
+    /// <summary>
+    /// Met à jour l’état géré par <c>UpdateGenerationModeUi</c> et propage la nouvelle valeur aux éléments concernés.
+    /// </summary>
     private void UpdateGenerationModeUi()
     {
         var isImgToImg = cmbGenerationMode.SelectedIndex == 1;
@@ -569,31 +778,43 @@ public partial class MainForm : Form
     }
 
     /*
-    FR : Affiche une image dans le panneau de prévisualisation.
-    EN: Displays an image in the preview area.
+    Affiche une image dans le panneau de prévisualisation.
     */
+    /// <summary>
+    /// Affiche le contenu géré par <c>ShowPreviewImage</c> et synchronise son état visuel.
+    /// </summary>
     private void ShowPreviewImage(string path)
     {
         if (!File.Exists(path))
             return;
 
-        using var fs = new FileStream(
-            path,
-            FileMode.Open,
-            FileAccess.Read,
-            FileShare.ReadWrite);
+        try
+        {
+            using var fs = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite);
 
-        using var temp = Image.FromStream(fs);
-        var old = _preview.Image;
-        _preview.Image = new Bitmap(temp);
-        old?.Dispose();
-        ResetImagePreviewView();
+            using var temp = Image.FromStream(fs);
+            var old = _preview.Image;
+            _preview.Image = new Bitmap(temp);
+            old?.Dispose();
+            ResetImagePreviewView();
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Write("Image preview", ex);
+            Log("Image !", "Prévisualisation impossible : " + ex.Message);
+        }
     }
 
     /*
-    FR : Charge l'icône de l'exécutable et initialise l'onglet À propos.
-    EN: Loads the executable icon and initializes the About tab.
+    Charge l'icône de l'exécutable et initialise l'onglet À propos.
     */
+    /// <summary>
+    /// Initialise <c>InitializeAbout</c>, prépare l’état et les contrôles nécessaires puis branche les comportements associés.
+    /// </summary>
     private void InitializeAbout()
     {
         try
@@ -642,9 +863,11 @@ public partial class MainForm : Form
     }
 
     /*
-    FR : Vérifie la dernière release GitHub et propose une mise à jour sûre du seul EXE.
-    EN: Checks the latest GitHub release and offers a safe single-EXE update.
+    Vérifie la dernière release GitHub et propose une mise à jour sûre du seul EXE.
     */
+    /// <summary>
+    /// Vérifie l’état géré par <c>CheckForUpdatesAsync</c> et applique le résultat aux contrôles ou services concernés.
+    /// </summary>
     private async Task CheckForUpdatesAsync(bool interactive)
     {
         btnCheckUpdates.Enabled = false;
@@ -739,21 +962,40 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Limite une valeur entière à la plage autorisée par le NumericUpDown cible avant de l’affecter.
+    /// </summary>
     private static decimal ClampNumeric(NumericUpDown control, int value)
         => Math.Clamp((decimal)value, control.Minimum, control.Maximum);
 
+    /// <summary>
+    /// Traite le clic utilisateur associé à « btnInstallCancel_Click » et déclenche l’action correspondante de l’interface.
+    /// </summary>
     private void btnInstallCancel_Click(object? sender, EventArgs e)
-    {
-        var cts = _installCts;
-        if (cts is null || cts.IsCancellationRequested)
-            return;
+        => SafeUiAction(
+            L10n.Pick(
+                _s.Language,
+                "Annulation installation",
+                "Cancel installation"),
+            () =>
+            {
+                var cts = _installCts;
+                if (cts is null || cts.IsCancellationRequested)
+                    return;
 
-        _installText.Text = "Annulation demandée… arrêt propre en cours.";
-        btnInstallCancel.Enabled = false;
-        Log("Install", "Annulation demandée par l'utilisateur.");
-        cts.Cancel();
-    }
+                _installText.Text =
+                    L10n.Pick(
+                        _s.Language,
+                        "Annulation demandée… arrêt propre en cours.",
+                        "Cancellation requested… stopping cleanly.");
+                btnInstallCancel.Enabled = false;
+                Log("Install", "Annulation demandée par l'utilisateur.");
+                cts.Cancel();
+            });
 
+    /// <summary>
+    /// Démarre l’opération gérée par <c>StartupPreflightAsync</c> et prépare les ressources dont elle dépend.
+    /// </summary>
     private async Task StartupPreflightAsync()
     {
         UpdateGpu();
@@ -782,6 +1024,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Installe les composants gérés par <c>InstallAllAsync</c> puis actualise l’état de disponibilité correspondant.
+    /// </summary>
     private async Task InstallAllAsync()
     {
         if (_installTask is not null)
@@ -806,6 +1051,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Installe les composants gérés par <c>InstallAllCoreAsync</c> puis actualise l’état de disponibilité correspondant.
+    /// </summary>
     private async Task InstallAllCoreAsync()
     {
         _installCts = new CancellationTokenSource();
@@ -864,12 +1112,21 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Capture l’état ou la valeur gérée par <c>CaptureServiceLifecycleEpoch</c> afin de la réutiliser dans le traitement suivant.
+    /// </summary>
     private int CaptureServiceLifecycleEpoch() =>
         Volatile.Read(ref _serviceLifecycleEpoch);
 
+    /// <summary>
+    /// Détermine la condition représentée par <c>IsServiceLifecycleCurrent</c> à partir de l’état courant.
+    /// </summary>
     private bool IsServiceLifecycleCurrent(int epoch) =>
         epoch == Volatile.Read(ref _serviceLifecycleEpoch);
 
+    /// <summary>
+    /// Démarre l’opération gérée par <c>StartCoreAsync</c> et prépare les ressources dont elle dépend.
+    /// </summary>
     private async Task StartCoreAsync()
     {
         var epoch = CaptureServiceLifecycleEpoch();
@@ -934,6 +1191,9 @@ public partial class MainForm : Form
             _status.Text = "OpenCode + Ollama portables démarrés.";
     }
 
+    /// <summary>
+    /// Vérifie puis garantit la condition requise par <c>EnsurePortableServicePortFreeAsync</c> avant de poursuivre le traitement.
+    /// </summary>
     private async Task EnsurePortableServicePortFreeAsync(
         int port,
         string label,
@@ -982,7 +1242,7 @@ public partial class MainForm : Form
         }
         catch (ArgumentException)
         {
-            // Process already exited.
+            // Le processus est déjà terminé.
         }
 
         var deadline = DateTime.UtcNow.AddSeconds(10);
@@ -999,6 +1259,9 @@ public partial class MainForm : Form
             $"{label} : le port {port} n'a pas été libéré après l'arrêt de l'ancien service portable.");
     }
 
+    /// <summary>
+    /// Détermine la condition représentée par <c>IsPortableServiceListeningAsync</c> à partir de l’état courant.
+    /// </summary>
     private async Task<bool> IsPortableServiceListeningAsync(
         int port,
         string expectedRelativeExe)
@@ -1036,6 +1299,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Démarre l’opération gérée par <c>StartOllamaAsync</c> et prépare les ressources dont elle dépend.
+    /// </summary>
     private async Task StartOllamaAsync()
     {
         var epoch = CaptureServiceLifecycleEpoch();
@@ -1107,9 +1373,9 @@ public partial class MainForm : Form
         env["OLLAMA_NO_CLOUD"] = "true";
         env["OLLAMA_NOHISTORY"] = "true";
 
-        // One local model/request at a time is intentional on the
-        // 16-GB GPU target: it avoids a second runner consuming commit
-        // while ComfyUI is about to claim the GPU.
+        // Un seul modèle ou une seule requête locale à la fois est volontaire
+        // sur la cible GPU 16 Go : cela évite qu’un second moteur consomme
+        // de la mémoire engagée pendant que ComfyUI s’apprête à utiliser le GPU.
         env["OLLAMA_MAX_LOADED_MODELS"] = "1";
         env["OLLAMA_NUM_PARALLEL"] = "1";
 
@@ -1156,6 +1422,9 @@ public partial class MainForm : Form
             await _ollama.StopAsync(TimeSpan.FromSeconds(1));
     }
 
+    /// <summary>
+    /// Attend la condition gérée par <c>WaitForOllamaReadyAsync</c> tout en respectant les délais et mécanismes d’annulation prévus.
+    /// </summary>
     private async Task WaitForOllamaReadyAsync(TimeSpan timeout)
     {
         var deadline = DateTime.UtcNow + timeout;
@@ -1189,6 +1458,9 @@ public partial class MainForm : Form
             (lastError is null ? string.Empty : " " + lastError.Message));
     }
 
+    /// <summary>
+    /// Démarre l’opération gérée par <c>StartOpenCodeAsync</c> et prépare les ressources dont elle dépend.
+    /// </summary>
     private async Task StartOpenCodeAsync()
     {
         var epoch = CaptureServiceLifecycleEpoch();
@@ -1233,9 +1505,52 @@ public partial class MainForm : Form
             await _openCode.StopAsync(TimeSpan.FromSeconds(1));
     }
 
+    /// <summary>
+    /// Mémorise le mode mémoire du processus ComfyUI démarré par DreamRaster.
+    /// </summary>
+    private bool? _comfyStartedWithLowVram;
+
+    private static bool IsHeavyWanI2vWorkload(int width, int height, int frames)
+        => (long)width * height * frames > 256L * 256 * 17;
+
+    private static bool RequiresLowVramForVideoModel(string? modelName)
+        => !string.IsNullOrWhiteSpace(modelName) &&
+           modelName.Contains("i2v", StringComparison.OrdinalIgnoreCase) &&
+           modelName.Contains("14B", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Évite les redémarrages inutiles tout en corrigeant un changement de mode mémoire.
+    /// </summary>
+    private static bool ShouldRestartComfyForMemoryMode(
+        bool running, bool? startedWithLowVram, bool requiresLowVram)
+        => running && startedWithLowVram.HasValue &&
+           startedWithLowVram.Value != requiresLowVram;
+
+    /// <summary>
+    /// Construit les options du moteur sans confondre mode normal et mémoire réduite.
+    /// </summary>
+    private static string BuildComfyArgumentsForMemoryMode(
+        string main, int port, bool lowVram)
+        => $"\"{main}\" --listen 127.0.0.1 --port {port} --disable-auto-launch --disable-pinned-memory --disable-async-offload --disable-fast-disk" +
+           (lowVram ? " --lowvram" : string.Empty);
+
+    /// <summary>
+    /// Démarre ComfyUI et adapte sa configuration mémoire au modèle vidéo actif.
+    /// </summary>
     private async Task StartComfyAsync()
     {
         var epoch = CaptureServiceLifecycleEpoch();
+
+        var requiresLowVram = RequiresLowVramForVideoModel(_s.VideoModel);
+        if (ShouldRestartComfyForMemoryMode(
+                _comfy.Running, _comfyStartedWithLowVram, requiresLowVram))
+        {
+            // Les options mémoire de ComfyUI ne changent pas à chaud :
+            // redémarrer notre propre processus lors du prochain lancement.
+            Log("ComfyUI", "Changement de modèle : adaptation du mode mémoire.");
+            await _comfy.StopAsync();
+            _comfyStartedWithLowVram = null;
+        }
 
         if (_comfy.Running)
         {
@@ -1293,11 +1608,14 @@ public partial class MainForm : Form
             _s,
             Log);
 
+        // Le modèle Wan I2V 14B a été validé en mode LOW_VRAM sur GPU 16 Go.
+        // Conserver cette option au démarrage évite une pression RAM excessive.
         await _comfy.StartAsync(
             relPy,
-            $"\"{main}\" --listen 127.0.0.1 --port {_s.ComfyPort} --disable-auto-launch --disable-pinned-memory --disable-async-offload --disable-fast-disk",
+            BuildComfyArgumentsForMemoryMode(main, _s.ComfyPort, requiresLowVram),
             Path.GetDirectoryName(main)!,
             env);
+        _comfyStartedWithLowVram = requiresLowVram;
 
         if (!IsServiceLifecycleCurrent(epoch))
         {
@@ -1315,6 +1633,9 @@ public partial class MainForm : Form
             await _comfy.StopAsync(TimeSpan.FromSeconds(1));
     }
 
+    /// <summary>
+    /// Ouvre la ressource gérée par <c>OpenEmbeddedAsync</c> en appliquant les vérifications nécessaires.
+    /// </summary>
     private async Task OpenEmbeddedAsync()
     {
         var epoch = CaptureServiceLifecycleEpoch();
@@ -1413,6 +1734,9 @@ public partial class MainForm : Form
         _tabs.SelectedTab = tabOpenCode;
     }
 
+    /// <summary>
+    /// Ouvre la ressource gérée par <c>OpenComfyEmbeddedAsync</c> en appliquant les vérifications nécessaires.
+    /// </summary>
     private async Task OpenComfyEmbeddedAsync()
     {
         var epoch = CaptureServiceLifecycleEpoch();
@@ -1484,6 +1808,9 @@ public partial class MainForm : Form
         _tabs.SelectedTab = tabComfy;
     }
 
+    /// <summary>
+    /// Détermine la condition représentée par <c>IsLocalUri</c> à partir de l’état courant.
+    /// </summary>
     private static bool IsLocalUri(Uri uri)
         => uri.Scheme.Equals("about", StringComparison.OrdinalIgnoreCase)
            // NavigateToString utilise une URL data: interne. Elle doit rester
@@ -1494,6 +1821,9 @@ public partial class MainForm : Form
            || uri.Host.Equals("images.local", StringComparison.OrdinalIgnoreCase)
            || uri.Host.Equals("videos.local", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Exporte les données gérées par <c>ExportDiagnosticAsync</c> vers la destination prévue après validation des prérequis.
+    /// </summary>
     private async Task ExportDiagnosticAsync()
     {
         var paths = await DiagnosticExporter.ExportAsync(_s);
@@ -1505,6 +1835,9 @@ public partial class MainForm : Form
             MessageBoxIcon.Information);
     }
 
+    /// <summary>
+    /// Arrête proprement l’opération gérée par <c>StopVisionModelAsync</c> et libère les ressources associées lorsque nécessaire.
+    /// </summary>
     private async Task StopVisionModelAsync()
     {
         try
@@ -1530,12 +1863,12 @@ public partial class MainForm : Form
                 StringComparer.OrdinalIgnoreCase);
             var runningModelsKnown = false;
 
-            // The benchmark can temporarily use a model different from
-            // PromptModel (for example qwen3:4b). Ask Ollama what is
-            // actually resident so every loaded model is released before
-            // ComfyUI/FLUX claims the GPU. Do not send keep_alive=0 to a
-            // non-resident configured model because Ollama can load it
-            // first, which defeats the purpose of freeing VRAM.
+            // Le benchmark peut temporairement utiliser un modèle différent de
+            // PromptModel (par exemple qwen3:4b). On demande à Ollama quels modèles
+            // sont réellement résidents afin de tous les libérer avant que
+            // ComfyUI/FLUX utilise le GPU. Il ne faut pas envoyer keep_alive=0
+            // à un modèle configuré mais non résident, car Ollama pourrait le
+            // charger d’abord et annuler le gain de VRAM recherché.
             try
             {
                 using var psResponse = await http.GetAsync(
@@ -1573,9 +1906,10 @@ public partial class MainForm : Form
                     ex.Message);
             }
 
-            // Never guess a configured model when /api/ps failed: sending
-            // keep_alive=0 to a non-resident model can make Ollama load it,
-            // exactly when ComfyUI needs the GPU. Stop the server instead.
+            // Ne jamais deviner le modèle configuré lorsque /api/ps échoue :
+            // envoyer keep_alive=0 à un modèle non résident peut forcer Ollama
+            // À le charger au moment précis où ComfyUI a besoin du GPU.
+            // Dans ce cas, on arrête plutôt le serveur.
             if (!runningModelsKnown)
                 models.Clear();
 
@@ -1629,6 +1963,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Arrête proprement l’opération gérée par <c>StopPortableOllamaForFluxAsync</c> et libère les ressources associées lorsque nécessaire.
+    /// </summary>
     private async Task StopPortableOllamaForFluxAsync()
     {
         try
@@ -1685,7 +2022,7 @@ public partial class MainForm : Form
         }
         catch (ArgumentException)
         {
-            // Process already exited.
+            // Le processus est déjà terminé.
         }
         catch (Exception ex)
         {
@@ -1742,11 +2079,11 @@ public partial class MainForm : Form
             catch (Win32Exception ex)
                 when (ex.NativeErrorCode == 299)
             {
-                // ERROR_PARTIAL_COPY: the runner is already disappearing.
+                // ERROR_PARTIAL_COPY : le moteur est déjà en cours de terminaison.
             }
             catch (InvalidOperationException)
             {
-                // The process exited between enumeration and inspection.
+                // Le processus s’est terminé entre l’énumération et l’inspection.
             }
             catch (Exception ex)
             {
@@ -1764,9 +2101,112 @@ public partial class MainForm : Form
         await Task.Delay(500);
     }
 
+    /// <summary>
+    /// Lance la génération gérée par <c>GenerateFromUiAsync</c>, valide les prérequis et synchronise progression, résultat et erreurs.
+    /// </summary>
     private async Task GenerateFromUiAsync()
     {
-        var text = _prompt.Text.Trim();
+        if (!TryPrepareImageGenerationInputs(
+                out var text,
+                out var isImgToImg,
+                out var inputImagePath))
+        {
+            return;
+        }
+
+        _imageCts?.Dispose();
+        _imageCts = new CancellationTokenSource();
+        var imageCt = _imageCts.Token;
+
+        btnGenerate.Text =
+            L10n.Pick(
+                _s.Language,
+                "Annuler",
+                "Cancel");
+        btnGenerate.Enabled = true;
+
+        try
+        {
+            var totalWatch = Stopwatch.StartNew();
+
+            var promptPreparation =
+                await PrepareImagePromptForGenerationAsync(
+                    text,
+                    imageCt);
+            text = promptPreparation.Prompt;
+
+            var seed = GetCurrentImageGenerationSeed();
+            var firstPass =
+                await RunImageFirstPassAsync(
+                    text,
+                    isImgToImg,
+                    inputImagePath,
+                    seed,
+                    imageCt);
+
+            var qualityPass =
+                await ApplyImageMaximumQualityPassAsync(
+                    firstPass.Result,
+                    firstPass.StyleId,
+                    imageCt);
+
+            totalWatch.Stop();
+
+            UpdateImageGenerationCompletionStatus(
+                promptPreparation.Elapsed,
+                firstPass.Elapsed,
+                qualityPass.Elapsed,
+                qualityPass.Applied,
+                totalWatch.Elapsed,
+                seed);
+
+            if (!qualityPass.Result.Ok)
+            {
+                MessageBox.Show(
+                    qualityPass.Result.Error ?? "Génération échouée.",
+                    "FLUX.2",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Error);
+                return;
+            }
+
+            ShowCompletedImageGeneration(
+                qualityPass.Result,
+                qualityPass.Applied);
+        }
+        catch (OperationCanceledException)
+            when (imageCt.IsCancellationRequested)
+        {
+            _genText.Text =
+                L10n.Pick(
+                    _s.Language,
+                    "Génération image annulée.",
+                    "Image generation cancelled.");
+            throw;
+        }
+        finally
+        {
+            _imageCts?.Dispose();
+            _imageCts = null;
+            btnGenerate.Text =
+                L10n.Pick(
+                    _s.Language,
+                    "Générer",
+                    "Generate");
+        }
+    }
+
+    /// <summary>
+    /// Lit et valide les entrées nécessaires à une génération Image avant d’allouer les ressources du pipeline.
+    /// </summary>
+    private bool TryPrepareImageGenerationInputs(
+        out string text,
+        out bool isImgToImg,
+        out string inputImagePath)
+    {
+        text = _prompt.Text.Trim();
+        isImgToImg = cmbGenerationMode.SelectedIndex == 1;
+        inputImagePath = txtInputImage.Text.Trim();
 
         if (text.Length == 0)
         {
@@ -1777,15 +2217,13 @@ public partial class MainForm : Form
                 "FLUX.2",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
-            return;
+            return false;
         }
-
-        var isImgToImg = cmbGenerationMode.SelectedIndex == 1;
-        var inputImagePath = txtInputImage.Text.Trim();
 
         if (isImgToImg)
         {
-            if (inputImagePath.Length == 0 || !File.Exists(inputImagePath))
+            if (inputImagePath.Length == 0 ||
+                !File.Exists(inputImagePath))
             {
                 MessageBox.Show(
                     L10n.IsEnglish(_s.Language)
@@ -1794,44 +2232,90 @@ public partial class MainForm : Form
                     "FLUX.2",
                     MessageBoxButtons.OK,
                     MessageBoxIcon.Information);
-                return;
+                return false;
             }
 
             ShowPreviewImage(inputImagePath);
         }
 
-        var totalWatch = Stopwatch.StartNew();
+        var missingImageModels =
+            Flux2Generator.GetMissingModels(_s);
+        if (missingImageModels.Count == 0)
+            return true;
+
+        _genText.Text =
+            L10n.Pick(
+                _s.Language,
+                "Dépendances Image manquantes : ",
+                "Missing Image dependencies: ") +
+            string.Join(
+                ", ",
+                missingImageModels.Select(x => x.Label));
+        return false;
+    }
+
+    /// <summary>
+    /// Applique l’amélioration locale du prompt lorsqu’elle est active et retourne le texte final ainsi que le temps consacré à cette étape.
+    /// </summary>
+    private async Task<(string Prompt, TimeSpan Elapsed)>
+        PrepareImagePromptForGenerationAsync(
+            string text,
+            CancellationToken ct)
+    {
         var promptElapsed = TimeSpan.Zero;
 
-        if (_autoImprovePrompt.Checked)
-        {
-            if (IsPromptAlreadyImproved(text))
-            {
-                Log("UI", "Amélioration automatique ignorée : ce prompt a déjà été amélioré.");
-            }
-            else
-            {
-                _genText.Text = L10n.Pick(
-                    _s.Language,
-                    "Amélioration locale du prompt…",
-                    "Improving prompt locally…");
+        if (!_autoImprovePrompt.Checked)
+            return (text, promptElapsed);
 
-                var promptWatch = Stopwatch.StartNew();
-                text = await ImprovePromptTextAsync(text, CancellationToken.None);
-                promptWatch.Stop();
-                promptElapsed = promptWatch.Elapsed;
-                _prompt.Text = text;
-                _s.LastImprovedPromptHash = PromptFingerprint(text);
-                SettingsStore.Save(_s);
-                UpdatePromptEnhancementState();
-            }
+        if (IsPromptAlreadyImproved(text))
+        {
+            Log(
+                "UI",
+                "Amélioration automatique ignorée : ce prompt a déjà été amélioré.");
+            return (text, promptElapsed);
         }
 
-        var seed =
-            _randomSeedCheck.Checked
-                ? (long?)null
-                : Decimal.ToInt64(_seedInput.Value);
+        _genText.Text = L10n.Pick(
+            _s.Language,
+            "Amélioration locale du prompt…",
+            "Improving prompt locally?");
 
+        var promptWatch = Stopwatch.StartNew();
+        text = await ImprovePromptTextAsync(
+            text,
+            ct);
+        promptWatch.Stop();
+        promptElapsed = promptWatch.Elapsed;
+
+        _prompt.Text = text;
+        _s.LastImprovedPromptHash = PromptFingerprint(text);
+        PersistSettingsIfAllowed();
+        UpdatePromptEnhancementState();
+
+        return (text, promptElapsed);
+    }
+
+    /// <summary>
+    /// Retourne le seed Image choisi par l’utilisateur ou <see langword="null"/> lorsque le mode aléatoire est actif.
+    /// </summary>
+    private long? GetCurrentImageGenerationSeed() =>
+        _randomSeedCheck.Checked
+            ? null
+            : Decimal.ToInt64(_seedInput.Value);
+
+    /// <summary>
+    /// Construit les prompts finaux, applique les templates Image et exécute la première passe FLUX.2.
+    /// </summary>
+    private async Task<(
+        ImageGenerationResult Result,
+        TimeSpan Elapsed,
+        string StyleId)> RunImageFirstPassAsync(
+            string text,
+            bool isImgToImg,
+            string inputImagePath,
+            long? seed,
+            CancellationToken ct)
+    {
         var imageStyleId = SelectedTemplateId(
             _imageStyleTemplateCombo,
             _s.ImageStyleTemplate);
@@ -1839,8 +2323,11 @@ public partial class MainForm : Form
             _imageNegativeTemplateCombo,
             _s.ImageNegativeTemplate);
 
-        var generationPrompt = ApplyImageStyleTemplate(text);
-        var generationNegative = ApplyImageNegativeTemplate(_negativePrompt.Text.Trim());
+        var generationPrompt =
+            ApplyImageStyleTemplate(text);
+        var generationNegative =
+            ApplyImageNegativeTemplate(
+                _negativePrompt.Text.Trim());
 
         Log(
             "FLUX",
@@ -1854,94 +2341,146 @@ public partial class MainForm : Form
             _s.DefaultHeight,
             isImgToImg ? inputImagePath : null,
             Decimal.ToDouble(numImg2ImgStrength.Value),
-            CancellationToken.None,
+            ct,
             seed);
         fluxWatch.Stop();
 
-        var secondPassElapsed = TimeSpan.Zero;
-        var secondPassApplied = false;
+        return (
+            result,
+            fluxWatch.Elapsed,
+            imageStyleId);
+    }
 
-        if (result.Ok &&
-            GenerationTemplates.UsesTwoPassMaximumQuality(imageStyleId) &&
-            !string.IsNullOrWhiteSpace(result.Path) &&
-            File.Exists(result.Path))
+    /// <summary>
+    /// Exécute la seconde passe du profil qualité maximale lorsqu’elle est applicable et conserve la première passe en cas d’échec non fatal.
+    /// </summary>
+    private async Task<(
+        ImageGenerationResult Result,
+        TimeSpan Elapsed,
+        bool Applied)> ApplyImageMaximumQualityPassAsync(
+            ImageGenerationResult result,
+            string imageStyleId,
+            CancellationToken ct)
+    {
+        if (!result.Ok ||
+            !GenerationTemplates.UsesTwoPassMaximumQuality(
+                imageStyleId) ||
+            string.IsNullOrWhiteSpace(result.Path) ||
+            !File.Exists(result.Path))
         {
-            _lastMaximumQualityImageFirstPassPath = result.Path;
-            UpdateMaximumQualitySharpnessUi();
-            await RefreshImageSharpnessPreviewAsync(CancellationToken.None);
-
-            try
-            {
-                _genProgress.Value = 95;
-                _genText.Text =
-                    L10n.Pick(
-                        _s.Language,
-                        "Passe 2/2 · upscale et amélioration…",
-                        "Pass 2/2 · upscaling and enhancement…");
-
-                var secondPassWatch = Stopwatch.StartNew();
-                var enhancedPath =
-                    await _qualityPostProcessor.EnhanceImageAsync(
-                        result.Path,
-                        CancellationToken.None);
-                secondPassWatch.Stop();
-
-                secondPassElapsed = secondPassWatch.Elapsed;
-                secondPassApplied = true;
-
-                result = result with
-                {
-                    Path = enhancedPath,
-                    Url =
-                        $"http://127.0.0.1:{_s.ImageProxyPort}/local-images/" +
-                        Uri.EscapeDataString(Path.GetFileName(enhancedPath))
-                };
-
-                _genProgress.Value = 100;
-            }
-            catch (Exception ex)
-            {
-                Log(
-                    "Qualité max !",
-                    "Passe 2 image échouée, passe 1 conservée : " +
-                    ex.Message);
-            }
+            return (
+                result,
+                TimeSpan.Zero,
+                false);
         }
 
-        totalWatch.Stop();
+        _lastMaximumQualityImageFirstPassPath = result.Path;
+        UpdateMaximumQualitySharpnessUi();
+        await RefreshImageSharpnessPreviewAsync(ct);
 
-        _genText.Text =
-            L10n.Pick(_s.Language, "Terminé", "Done") +
-            $" · Prompt {promptElapsed.TotalSeconds:0.00}s" +
-            $" · FLUX {fluxWatch.Elapsed.TotalSeconds:0.00}s" +
-            (secondPassApplied
-                ? $" · Passe 2 {secondPassElapsed.TotalSeconds:0.00}s"
-                : string.Empty) +
-            $" · Total {totalWatch.Elapsed.TotalSeconds:0.00}s" +
-            $" · Seed {(seed?.ToString() ?? "auto")}";
-
-        if (!result.Ok)
+        try
         {
-            MessageBox.Show(
-                result.Error ?? "Génération échouée.",
-                "FLUX.2",
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Error);
-            return;
-        }
+            _genProgress.Value = 95;
+            _genText.Text =
+                L10n.Pick(
+                    _s.Language,
+                    "Passe 2/2 · upscale et amélioration…",
+                    "Pass 2/2 ? upscaling and enhancement?");
 
-        if (result.Path is not null && File.Exists(result.Path))
-        {
-            ShowPreviewImage(result.Path);
-            if (secondPassApplied &&
-                _imageSharpnessBeforePreview.Image is not null)
+            var secondPassWatch = Stopwatch.StartNew();
+            var enhancedPath =
+                await _qualityPostProcessor.EnhanceImageAsync(
+                    result.Path,
+                    ct);
+            secondPassWatch.Stop();
+
+            result = result with
             {
-                SetImageSharpnessComparisonVisible(true);
-            }
-            RefreshImageHistory();
+                Path = enhancedPath,
+                Url =
+                    $"http://127.0.0.1:{_s.ImageProxyPort}/local-images/" +
+                    Uri.EscapeDataString(
+                        Path.GetFileName(enhancedPath))
+            };
+
+            _genProgress.Value = 100;
+
+            return (
+                result,
+                secondPassWatch.Elapsed,
+                true);
+        }
+        catch (OperationCanceledException)
+            when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            Log(
+                "Qualit? max !",
+                "Passe 2 image échouée, passe 1 conservée : " +
+                ex.Message);
+
+            return (
+                result,
+                TimeSpan.Zero,
+                false);
         }
     }
 
+    /// <summary>
+    /// Met à jour le statut final de génération avec les durées mesurées et le seed réellement utilisé.
+    /// </summary>
+    private void UpdateImageGenerationCompletionStatus(
+        TimeSpan promptElapsed,
+        TimeSpan fluxElapsed,
+        TimeSpan secondPassElapsed,
+        bool secondPassApplied,
+        TimeSpan totalElapsed,
+        long? seed)
+    {
+        _genText.Text =
+            L10n.Pick(
+                _s.Language,
+                "Termin?",
+                "Done") +
+            $" ? Prompt {promptElapsed.TotalSeconds:0.00}s" +
+            $" ? FLUX {fluxElapsed.TotalSeconds:0.00}s" +
+            (secondPassApplied
+                ? $" ? Passe 2 {secondPassElapsed.TotalSeconds:0.00}s"
+                : string.Empty) +
+            $" ? Total {totalElapsed.TotalSeconds:0.00}s" +
+            $" ? Seed {(seed?.ToString() ?? "auto")}";
+    }
+
+    /// <summary>
+    /// Affiche l’image terminée, active la comparaison de netteté si nécessaire et actualise l’historique.
+    /// </summary>
+    private void ShowCompletedImageGeneration(
+        ImageGenerationResult result,
+        bool secondPassApplied)
+    {
+        if (result.Path is null ||
+            !File.Exists(result.Path))
+        {
+            return;
+        }
+
+        ShowPreviewImage(result.Path);
+
+        if (secondPassApplied &&
+            _imageSharpnessBeforePreview.Image is not null)
+        {
+            SetImageSharpnessComparisonVisible(true);
+        }
+
+        RefreshImageHistory();
+    }
+
+    /// <summary>
+    /// Arrête proprement l’opération gérée par <c>StopAllAsync</c> et libère les ressources associées lorsque nécessaire.
+    /// </summary>
     private async Task StopAllAsync()
     {
         // Invalide toute ouverture/démarrage asynchrone lancé avant cet arrêt.
@@ -1964,6 +2503,9 @@ public partial class MainForm : Form
         _status.Text = "Tous les services portables sont arrêtés.";
     }
 
+    /// <summary>
+    /// Exécute le traitement géré par <c>RunGpuExclusiveAsync</c> en assurant la préparation et la restauration de l’état associé.
+    /// </summary>
     private async Task RunGpuExclusiveAsync(
         string operation,
         Func<Task> action)
@@ -1989,6 +2531,16 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Exécute une opération asynchrone retournant une valeur sous verrou GPU
+    /// exclusif. La méthode empêche deux workflows lourds de s'exécuter en
+    /// parallèle, verrouille temporairement les contrôles concernés puis
+    /// restaure toujours l'interface dans le bloc <c>finally</c>.
+    /// </summary>
+    /// <typeparam name="T">Type de la valeur produite par l'opération GPU.</typeparam>
+    /// <param name="operation">Nom lisible de l'opération affiché dans les messages d'état.</param>
+    /// <param name="action">Fonction asynchrone à exécuter pendant la possession exclusive du GPU.</param>
+    /// <returns>La valeur calculée par <paramref name="action"/>.</returns>
     private async Task<T> RunGpuExclusiveAsync<T>(
         string operation,
         Func<Task<T>> action)
@@ -2014,6 +2566,23 @@ public partial class MainForm : Form
         }
     }
 
+/// <summary>
+/// Exception r?serv?e aux erreurs de saisie ou de configuration attendues de l?utilisateur ; elle permet d?afficher un message clair sans enregistrer un faux crash applicatif.
+/// </summary>
+    private sealed class UserValidationException : Exception
+    {
+        /// <summary>
+        /// Représente une erreur de saisie ou de configuration utilisateur attendue, affichable sans l’enregistrer comme crash applicatif.
+        /// </summary>
+        public UserValidationException(string message)
+            : base(message)
+        {
+        }
+    }
+
+    /// <summary>
+    /// Exécute une action UI asynchrone en centralisant les erreurs utilisateur, composants manquants, annulations et exceptions inattendues.
+    /// </summary>
     private async Task SafeUiAsync(string operation, Func<Task> action)
     {
         try
@@ -2025,6 +2594,15 @@ public partial class MainForm : Form
         catch (OperationCanceledException)
         {
             Log("UI", operation + " annulée.");
+        }
+        catch (UserValidationException ex)
+        {
+            Log("UI", ex.Message);
+            MessageBox.Show(
+                ex.Message,
+                operation,
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
         }
         catch (PortableComponentMissingException ex)
         {
@@ -2052,6 +2630,32 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Exécute une action UI synchrone en empêchant toute exception de sortir
+    /// du gestionnaire d’événement WinForms et de terminer l’application.
+    /// </summary>
+    private void SafeUiAction(string operation, Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Write(operation, ex);
+            Log("ERREUR", ex.Message);
+
+            MessageBox.Show(
+                ex.Message,
+                operation,
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
+    /// <summary>
+    /// Ajoute un message horodaté à la file de journalisation sans bloquer le thread appelant.
+    /// </summary>
     private void Log(string source, string message)
     {
         if (string.IsNullOrWhiteSpace(message))
@@ -2060,6 +2664,9 @@ public partial class MainForm : Form
         _pendingLogs.Enqueue((source, message));
     }
 
+    /// <summary>
+    /// Transfère les messages en attente vers les journaux visuels et le fichier de log tout en évitant les rafraîchissements réentrants.
+    /// </summary>
     private void FlushPendingLogs()
     {
         if (Interlocked.Exchange(ref _logFlushBusy, 1) != 0)
@@ -2105,6 +2712,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Ajoute les données gérées par <c>AppendLogFileBatchAsync</c> à la collection ou au journal cible.
+    /// </summary>
     private async Task AppendLogFileBatchAsync(IReadOnlyCollection<string> lines)
     {
         if (lines.Count == 0)
@@ -2133,6 +2743,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Dessine un onglet principal avec le rendu sombre personnalisé de DreamRaster en tenant compte de l’état sélectionné.
+    /// </summary>
     private void Tabs_DrawItem(object? sender, DrawItemEventArgs e)
     {
         if (e.Index < 0 || e.Index >= _tabs.TabCount)
@@ -2186,6 +2799,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Met à jour l’état géré par <c>UpdateGpu</c> et propage la nouvelle valeur aux éléments concernés.
+    /// </summary>
     private void UpdateGpu()
     {
         try
@@ -2213,6 +2829,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Attend la condition gérée par <c>WaitForPortAsync</c> tout en respectant les délais et mécanismes d’annulation prévus.
+    /// </summary>
     private static async Task WaitForPortAsync(
         int port,
         TimeSpan timeout,
@@ -2240,6 +2859,9 @@ public partial class MainForm : Form
             $"Le port {port} ne s'est pas ouvert après {timeout.TotalSeconds:0} secondes.");
     }
 
+    /// <summary>
+    /// Coordonne la fermeture de DreamRaster, annule les opérations actives et arrête proprement les services portables avant destruction de la fenêtre.
+    /// </summary>
     private async void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
     {
         if (_closing) return;
@@ -2280,6 +2902,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Exécute une action sur le thread WinForms approprié et utilise Invoke lorsque l’appel provient d’un autre thread.
+    /// </summary>
     private void Ui(Action action)
     {
         if (IsDisposed) return;
@@ -2290,11 +2915,16 @@ public partial class MainForm : Form
             action();
     }
 
-    // =====================================================================
-    // Shared designer control
-    // =====================================================================
+    #region Contrôles partagés et utilitaires WinForms
+
+/// <summary>
+/// Panneau WinForms pouvant recevoir explicitement le focus afin de centraliser les interactions clavier et souris des surfaces d?aper?u personnalis?es.
+/// </summary>
     internal sealed class FocusPanel : Panel
     {
+        /// <summary>
+        /// Donne le focus au panneau ciblé afin d’activer les interactions clavier, zoom ou navigation associées.
+        /// </summary>
         public FocusPanel()
         {
             SetStyle(ControlStyles.Selectable, true);
@@ -2302,16 +2932,32 @@ public partial class MainForm : Form
         }
     }
 
-    // =====================================================================
-    // MainForm.Enhancements
-    // =====================================================================
+    #endregion
+
+    #region Services UI, journaux, modèles et amélioration de prompts
+
+    /// <summary>
+    /// Conserve l’instantané log views utilisé pour restaurer exactement l’état des contrôles après une opération GPU.
+    /// </summary>
     private readonly Dictionary<string, RichTextBox> _logViews =
         new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Conserve la source d’annulation « _benchmarkCts » afin d’interrompre proprement l’opération associée.
+    /// </summary>
     private CancellationTokenSource? _benchmarkCts;
+    /// <summary>
+    /// Indique l’état interne « _tabActivationBusy » utilisé pour empêcher les mises à jour réentrantes ou incohérentes.
+    /// </summary>
     private int _tabActivationBusy;
+    /// <summary>
+    /// Conserve virtual memory warning logged, état interne nécessaire pour synchroniser la logique métier et l’interface sans ambiguïté.
+    /// </summary>
     private bool _virtualMemoryWarningLogged;
 
+    /// <summary>
+    /// Initialise <c>InitializeEnhancedUi</c>, prépare l’état et les contrôles nécessaires puis branche les comportements associés.
+    /// </summary>
     private void InitializeEnhancedUi()
     {
         InitializeLogTabs();
@@ -2323,6 +2969,7 @@ public partial class MainForm : Form
         InitializeSettingsExperienceUi();
         InitializeV36Ui();
         InitializeV37Ui();
+        InitializePipelinePresetUi();
         ForceWhiteButtonText(this);
         EnableSmoothTabPainting();
 
@@ -2334,6 +2981,9 @@ public partial class MainForm : Form
             "Console Ollama prête. Sélectionnez cet onglet pour démarrer/afficher Ollama.");
     }
 
+    /// <summary>
+    /// Initialise <c>InitializeLogTabs</c>, prépare l’état et les contrôles nécessaires puis branche les comportements associés.
+    /// </summary>
     private void InitializeLogTabs()
     {
         _logViews.Clear();
@@ -2351,6 +3001,9 @@ public partial class MainForm : Form
 
 
 
+    /// <summary>
+    /// Ajoute les données gérées par <c>AppendCategorizedLog</c> à la collection ou au journal cible.
+    /// </summary>
     private void AppendCategorizedLog(string source, string message)
     {
         var key =
@@ -2380,6 +3033,9 @@ public partial class MainForm : Form
             AnsiLogRenderer.Append(box, source, message);
     }
 
+    /// <summary>
+    /// Initialise <c>InitializeModelSelectors</c>, prépare l’état et les contrôles nécessaires puis branche les comportements associés.
+    /// </summary>
     private void InitializeModelSelectors()
     {
         ConfigureDesignerModelCombo(
@@ -2407,6 +3063,9 @@ public partial class MainForm : Form
             new[] { "flux2-vae.safetensors" });
     }
 
+    /// <summary>
+    /// Configure un sélecteur de modèles créé par le Designer et lui applique le style, le mode de saisie et la largeur de liste appropriés.
+    /// </summary>
     private static void ConfigureDesignerModelCombo(
         ComboBox combo,
         TextBox placeholder,
@@ -2432,6 +3091,9 @@ public partial class MainForm : Form
     }
 
 
+    /// <summary>
+    /// Ajoute les éléments gérés par <c>AddUniqueItems</c> tout en évitant les incohérences de collection.
+    /// </summary>
     private static void AddUniqueItems(ComboBox combo, IEnumerable<string> values)
     {
         foreach (var value in values.Where(x => !string.IsNullOrWhiteSpace(x)))
@@ -2447,20 +3109,18 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Charge le prompt négatif persistant dans l’éditeur créé par le Designer.
+    /// </summary>
     private void InitializeNegativePromptEditor()
     {
         _negativePrompt.Text = _s.NegativePrompt;
-
-        _prompt.Height = 178;
-
-
-
-        tabGenerate.Controls.Add(_negativePromptLabel);
-        tabGenerate.Controls.Add(_negativePrompt);
-        _negativePromptLabel.BringToFront();
-        _negativePrompt.BringToFront();
     }
 
+    /// <summary>
+    /// Charge l’état d’amélioration du prompt et branche les comportements d’exécution.
+    /// La géométrie et le style statiques restent définis dans MainForm.Designer.cs.
+    /// </summary>
     private void InitializePromptEnhancerUi()
     {
         _autoImprovePrompt.Checked = _s.AutoImprovePrompt;
@@ -2471,33 +3131,19 @@ public partial class MainForm : Form
             _seedInput.Maximum);
         _randomSeedCheck.Checked = _s.UseRandomSeed;
 
-        _improvePromptButton.FlatAppearance.BorderColor = AppTheme.Border;
-        _improvePromptButton.Click += async (_, _) =>
-            await SafeUiAsync(
-                L10n.Pick(_s.Language, "Amélioration du prompt", "Prompt enhancement"),
-                () => RunGpuExclusiveAsync("Amélioration du prompt", ImprovePromptFromUiAsync));
-
-
-
         AddUniqueItems(
             _promptModelCombo,
             new[] { _s.PromptModel, "qwen3:1.7b", "qwen3:4b" });
-
-        // Make room for the dedicated prompt-model selector.
-        _prompt.Location = new Point(18, 78);
-        _prompt.Size = new Size(330, 130);
-
-        _negativePromptLabel.Location = new Point(18, 215);
-        _negativePrompt.Location = new Point(18, 238);
-        _negativePrompt.Size = new Size(330, 63);
-
-
 
         _seedInput.Enabled = !_randomSeedCheck.Checked;
         _randomSeedCheck.CheckedChanged += (_, _) =>
             _seedInput.Enabled = !_randomSeedCheck.Checked;
 
-        _benchmarkButton.FlatAppearance.BorderColor = AppTheme.Border;
+        _improvePromptButton.Click += async (_, _) =>
+            await SafeUiAsync(
+                L10n.Pick(_s.Language, "Amélioration du prompt", "Prompt enhancement"),
+                () => RunGpuExclusiveAsync("Amélioration du prompt", ImprovePromptFromUiAsync));
+
         _benchmarkButton.Click += async (_, _) =>
         {
             if (_benchmarkCts is not null)
@@ -2511,28 +3157,13 @@ public partial class MainForm : Form
                 () => RunGpuExclusiveAsync("Benchmark prompts", RunPromptBenchmarkAsync));
         };
 
-        tabGenerate.Controls.Add(_improvePromptButton);
-        tabGenerate.Controls.Add(_autoImprovePrompt);
-        tabGenerate.Controls.Add(_promptModelLabel);
-        tabGenerate.Controls.Add(_promptModelCombo);
-        tabGenerate.Controls.Add(_seedLabel);
-        tabGenerate.Controls.Add(_seedInput);
-        tabGenerate.Controls.Add(_randomSeedCheck);
-        tabGenerate.Controls.Add(_benchmarkButton);
-
-        _improvePromptButton.BringToFront();
-        _autoImprovePrompt.BringToFront();
-        _promptModelLabel.BringToFront();
-        _promptModelCombo.BringToFront();
-        _seedLabel.BringToFront();
-        _seedInput.BringToFront();
-        _randomSeedCheck.BringToFront();
-        _benchmarkButton.BringToFront();
-
         _prompt.TextChanged += (_, _) => UpdatePromptEnhancementState();
         UpdatePromptEnhancementState();
     }
 
+    /// <summary>
+    /// Améliore le prompt Image courant depuis l’interface, met à jour le texte affiché et mémorise son empreinte pour éviter les traitements redondants.
+    /// </summary>
     private async Task ImprovePromptFromUiAsync()
     {
         var source = _prompt.Text.Trim();
@@ -2559,7 +3190,7 @@ public partial class MainForm : Form
 
             _prompt.Text = improved;
             _s.LastImprovedPromptHash = PromptFingerprint(improved);
-            SettingsStore.Save(_s);
+            PersistSettingsIfAllowed();
             _prompt.Focus();
             _prompt.SelectionStart = _prompt.TextLength;
 
@@ -2571,6 +3202,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Détermine la condition représentée par <c>IsPromptAlreadyImproved</c> à partir de l’état courant.
+    /// </summary>
     private bool IsPromptAlreadyImproved(string text) =>
         !string.IsNullOrWhiteSpace(_s.LastImprovedPromptHash) &&
         string.Equals(
@@ -2578,6 +3212,9 @@ public partial class MainForm : Form
             PromptFingerprint(text),
             StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Met à jour l’état géré par <c>UpdatePromptEnhancementState</c> et propage la nouvelle valeur aux éléments concernés.
+    /// </summary>
     private void UpdatePromptEnhancementState()
     {
         if (_improvePromptButton is null || _prompt is null)
@@ -2597,6 +3234,9 @@ public partial class MainForm : Form
             : L10n.Pick(_s.Language, "✨ Améliorer", "✨ Enhance");
     }
 
+    /// <summary>
+    /// Calcule une empreinte stable d’un prompt normalisé afin de détecter si le texte a déjà été amélioré.
+    /// </summary>
     private static string PromptFingerprint(string text)
     {
         var normalized = string.Join(
@@ -2609,6 +3249,9 @@ public partial class MainForm : Form
             SHA256.HashData(Encoding.UTF8.GetBytes(normalized)));
     }
 
+    /// <summary>
+    /// Envoie le prompt au modèle Ollama configuré, prépare la mémoire GPU si nécessaire puis retourne une version enrichie et nettoyée du texte.
+    /// </summary>
     private async Task<string> ImprovePromptTextAsync(
         string source,
         CancellationToken ct,
@@ -2771,7 +3414,7 @@ public partial class MainForm : Form
         }
         catch (JsonException)
         {
-            // Fall through to the guarded plain-text fallback below.
+            // Continue vers le repli texte brut protégé ci-dessous.
         }
 
         var looksLikeReasoning =
@@ -2790,6 +3433,9 @@ public partial class MainForm : Form
         return content.Trim().Trim('"');
     }
 
+    /// <summary>
+    /// Libère les ressources GPU incompatibles avant une amélioration de prompt afin qu’Ollama puisse charger son modèle sans entrer en concurrence avec ComfyUI.
+    /// </summary>
     private async Task PrepareGpuForPromptEnhancementAsync(
         CancellationToken ct)
     {
@@ -2811,6 +3457,9 @@ public partial class MainForm : Form
         await Task.Delay(1000, ct);
     }
 
+    /// <summary>
+    /// Calcule et retourne la valeur produite par <c>GetInstalledOllamaModelsAsync</c> à partir de l’état courant.
+    /// </summary>
     private async Task<HashSet<string>> GetInstalledOllamaModelsAsync(
         CancellationToken ct)
     {
@@ -2845,6 +3494,9 @@ public partial class MainForm : Form
         return result;
     }
 
+/// <summary>
+/// Repr?sente une ligne de benchmark de prompt avec le mod?le test?, la dur?e, le r?sultat, la consommation observ?e et le texte produit.
+/// </summary>
     private sealed record PromptBenchmarkRow(
         string Category,
         string Model,
@@ -2856,25 +3508,69 @@ public partial class MainForm : Form
         double TotalSeconds,
         string ImagePath);
 
+    /// <summary>
+    /// Décrit un scénario stable du benchmark de prompts avec sa catégorie, son seed et son prompt source.
+    /// </summary>
+    private sealed record PromptBenchmarkCase(
+        string Category,
+        long Seed,
+        string Prompt);
+
+        /// <summary>
+    /// Repr?sente la structure native Windows MEMORYSTATUSEX utilis?e pour lire RAM physique, m?moire engag?e et espace virtuel avant les op?rations lourdes.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
     private sealed class MemoryStatusEx
     {
+        /// <summary>
+    /// Taille native de la structure MEMORYSTATUSEX transmise ? l?API Windows ; elle doit ?tre initialis?e avant l?appel.
+    /// </summary>
         public uint Length = (uint)Marshal.SizeOf<MemoryStatusEx>();
+        /// <summary>
+    /// Pourcentage approximatif de m?moire physique actuellement utilis?e selon GlobalMemoryStatusEx.
+    /// </summary>
         public uint MemoryLoad;
+        /// <summary>
+    /// Quantit? totale de m?moire physique install?e, exprim?e en octets par l?API Windows.
+    /// </summary>
         public ulong TotalPhys;
+        /// <summary>
+    /// Quantit? de m?moire physique imm?diatement disponible, exprim?e en octets.
+    /// </summary>
         public ulong AvailPhys;
+        /// <summary>
+    /// Limite totale de m?moire engag?e disponible pour le syst?me, RAM et fichier de pagination compris.
+    /// </summary>
         public ulong TotalPageFile;
+        /// <summary>
+    /// R?serve de m?moire engag?e encore disponible avant d?atteindre la limite syst?me.
+    /// </summary>
         public ulong AvailPageFile;
+        /// <summary>
+    /// Taille totale de l?espace d?adressage virtuel utilisable par le processus.
+    /// </summary>
         public ulong TotalVirtual;
+        /// <summary>
+    /// Part de l?espace d?adressage virtuel encore disponible pour de nouvelles allocations.
+    /// </summary>
         public ulong AvailVirtual;
+        /// <summary>
+    /// Valeur ?tendue r?serv?e par MEMORYSTATUSEX ; conserv?e pour respecter exactement la disposition native.
+    /// </summary>
         public ulong AvailExtendedVirtual;
     }
 
+    /// <summary>
+    /// Appelle l’API Windows GlobalMemoryStatusEx afin d’obtenir l’état global de la mémoire physique et virtuelle.
+    /// </summary>
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GlobalMemoryStatusEx(
         [In, Out] MemoryStatusEx buffer);
 
+    /// <summary>
+    /// Calcule et retourne la valeur produite par <c>GetAvailableCommitMiB</c> à partir de l’état courant.
+    /// </summary>
     private static long GetAvailableCommitMiB()
     {
         var status = new MemoryStatusEx();
@@ -2883,6 +3579,9 @@ public partial class MainForm : Form
             : long.MaxValue;
     }
 
+    /// <summary>
+    /// Calcule et retourne la valeur produite par <c>GetConfiguredPageFileMiB</c> à partir de l’état courant.
+    /// </summary>
     private static long GetConfiguredPageFileMiB()
     {
         try
@@ -2929,7 +3628,7 @@ public partial class MainForm : Form
         }
         catch
         {
-            // Fall back to the currently allocated commit extension.
+            // Se replie sur l’extension de mémoire engagée actuellement allouée.
         }
 
         var status = new MemoryStatusEx();
@@ -2944,6 +3643,9 @@ public partial class MainForm : Form
         return Math.Max(0, totalCommit - physical);
     }
 
+    /// <summary>
+    /// Construit les données ou éléments nécessaires à <c>BuildVirtualMemoryGuidance</c> à partir de l’état courant.
+    /// </summary>
     private string BuildVirtualMemoryGuidance(
         string component,
         long availableCommitMiB)
@@ -2974,6 +3676,9 @@ public partial class MainForm : Form
             "or a maximum of at least 16 GB.");
     }
 
+    /// <summary>
+    /// Attend la condition gérée par <c>WaitForCommitRecoveryAsync</c> tout en respectant les délais et mécanismes d’annulation prévus.
+    /// </summary>
     private async Task WaitForCommitRecoveryAsync(
         long minimumMiB,
         TimeSpan timeout,
@@ -2999,6 +3704,9 @@ public partial class MainForm : Form
                 lastAvailable));
     }
 
+    /// <summary>
+    /// Journalise un avertissement lorsque la mémoire virtuelle disponible approche du seuil susceptible de faire échouer un workflow lourd.
+    /// </summary>
     private void LogVirtualMemoryWarningIfNeeded()
     {
         if (_virtualMemoryWarningLogged)
@@ -3024,6 +3732,9 @@ public partial class MainForm : Form
                 "a Windows-managed page file or >= 16 GB is recommended."));
     }
 
+    /// <summary>
+    /// Nettoie l’instance ComfyUI utilisée pendant un benchmark et libère ses ressources avant le cas suivant.
+    /// </summary>
     private async Task CleanupBenchmarkComfyAsync(
         CancellationToken ct)
     {
@@ -3034,7 +3745,7 @@ public partial class MainForm : Form
         finally
         {
             // A previous DreamRaster process can leave its portable ComfyUI alive.
-            // Ensure the tracked port is really released before the next case.
+            // Vérifie que le port suivi est réellement libéré avant le cas suivant.
             await EnsurePortableServicePortFreeAsync(
                 _s.ComfyPort,
                 "ComfyUI",
@@ -3065,44 +3776,13 @@ public partial class MainForm : Form
             $"Benchmark : commit disponible seulement {GetAvailableCommitMiB():N0} MiB après nettoyage.");
     }
 
+    /// <summary>
+    /// Exécute le traitement géré par <c>RunPromptBenchmarkAsync</c> en assurant la préparation et la restauration de l’état associé.
+    /// </summary>
     private async Task RunPromptBenchmarkAsync()
     {
-        var answer = MessageBox.Show(
-            L10n.Pick(
-                _s.Language,
-                "Ce test va générer 8 images FLUX.2 (4 catégories × 2 modèles Ollama) avec des seeds fixes. " +
-                "Il peut prendre plusieurs minutes et solliciter fortement le GPU.\n\nContinuer ?",
-                "This test will generate 8 FLUX.2 images (4 categories × 2 Ollama models) with fixed seeds. " +
-                "It may take several minutes and heavily use the GPU.\n\nContinue?"),
-            L10n.Pick(_s.Language, "Comparatif IA prompt", "Prompt AI comparison"),
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Question);
-
-        if (answer != DialogResult.Yes)
+        if (!ConfirmPromptBenchmarkStart())
             return;
-
-        var pageFileMiB = GetConfiguredPageFileMiB();
-        if (pageFileMiB > 0 && pageFileMiB < 8192)
-        {
-            var memoryAnswer = MessageBox.Show(
-                L10n.Pick(
-                    _s.Language,
-                    $"La mémoire virtuelle Windows semble limitée à environ {pageFileMiB / 1024.0:0.0} Go. " +
-                    "Le benchmark FLUX.2 peut atteindre la limite de mémoire engagée même si de la RAM physique reste libre. " +
-                    "DreamRaster arrêtera ComfyUI entre chaque image pour réduire ce risque.\n\nContinuer ?",
-                    $"Windows virtual memory appears limited to about {pageFileMiB / 1024.0:0.0} GB. " +
-                    "The FLUX.2 benchmark can hit the commit limit even while physical RAM is still available. " +
-                    "DreamRaster will fully stop ComfyUI between images to reduce this risk.\n\nContinue?"),
-                L10n.Pick(
-                    _s.Language,
-                    "Mémoire virtuelle limitée",
-                    "Limited virtual memory"),
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Warning);
-
-            if (memoryAnswer != DialogResult.Yes)
-                return;
-        }
 
         _benchmarkCts = new CancellationTokenSource();
         var ct = _benchmarkCts.Token;
@@ -3117,46 +3797,11 @@ public partial class MainForm : Form
 
         try
         {
-            var installed = await GetInstalledOllamaModelsAsync(ct);
             var models = new[] { "qwen3:1.7b", "qwen3:4b" };
+            await EnsurePromptBenchmarkModelsAsync(models, ct);
 
-            var missing = models
-                .Where(model => !installed.Contains(model))
-                .ToArray();
-
-            if (missing.Length > 0)
-            {
-                throw new InvalidOperationException(
-                    "Modèles Ollama requis absents : " +
-                    string.Join(", ", missing));
-            }
-
-            var cases = new[]
-            {
-                (
-                    Category: "Portrait",
-                    Seed: 1001L,
-                    Prompt: "portrait serré d'une femme rousse de 35 ans, lumière de fenêtre, fond sombre"),
-                (
-                    Category: "Paysage",
-                    Seed: 1002L,
-                    Prompt: "vallée alpine au lever du soleil après une nuit de neige, rivière au premier plan"),
-                (
-                    Category: "Architecture",
-                    Seed: 1003L,
-                    Prompt: "maison brutaliste en béton au bord d'un lac, grandes baies vitrées, temps couvert"),
-                (
-                    Category: "Cinematique",
-                    Seed: 1004L,
-                    Prompt: "détective seul traverse une rue mouillée la nuit, néons rouges et bleus, voiture ancienne au fond")
-            };
-
-            var stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-            var folder = Path.Combine(
-                PortablePaths.Resolve(_s.Images),
-                "benchmark_" + stamp);
-            Directory.CreateDirectory(folder);
-
+            var cases = GetPromptBenchmarkCases();
+            var folder = CreatePromptBenchmarkFolder();
             var rows = new List<PromptBenchmarkRow>();
             var totalJobs = models.Length * cases.Length;
             var job = 0;
@@ -3168,167 +3813,345 @@ public partial class MainForm : Form
                     ct.ThrowIfCancellationRequested();
                     job++;
 
-                    await CleanupBenchmarkComfyAsync(ct);
-
-                    _genText.Text =
-                        $"Benchmark {job}/{totalJobs} · {test.Category} · {model}";
-                    _prompt.Text = test.Prompt;
-                    _seedInput.Value = test.Seed;
-                    _randomSeedCheck.Checked = false;
-
-                    var totalWatch = Stopwatch.StartNew();
-
-                    var promptWatch = Stopwatch.StartNew();
-                    var improved = await ImprovePromptTextAsync(
-                        test.Prompt,
-                        ct,
-                        model);
-                    promptWatch.Stop();
-
-                    _prompt.Text = improved;
-
-                    var fluxWatch = Stopwatch.StartNew();
-                    ImageGenerationResult result;
-                    try
-                    {
-                        result = await _generator.GenerateAsync(
-                            improved,
-                            _negativePrompt.Text.Trim(),
-                            _s.DefaultWidth,
-                            _s.DefaultHeight,
-                            inputImagePath: null,
-                            imgToImgStrength: 1.0,
-                            ct,
-                            test.Seed);
-                    }
-                    finally
-                    {
-                        fluxWatch.Stop();
-                        await CleanupBenchmarkComfyAsync(ct);
-                    }
-
-                    totalWatch.Stop();
-
-                    if (!result.Ok ||
-                        string.IsNullOrWhiteSpace(result.Path) ||
-                        !File.Exists(result.Path))
-                    {
-                        throw new InvalidOperationException(
-                            result.Error ??
-                            $"Image benchmark absente : {test.Category} / {model}");
-                    }
-
-                    var safeModel = model
-                        .Replace(":", "_")
-                        .Replace("/", "_");
-                    var destination = Path.Combine(
-                        folder,
-                        $"{test.Seed}_{test.Category}_{safeModel}.png");
-                    File.Copy(result.Path, destination, true);
-                    ShowPreviewImage(destination);
-
-                    rows.Add(new PromptBenchmarkRow(
-                        test.Category,
-                        model,
-                        test.Seed,
-                        test.Prompt,
-                        improved,
-                        Math.Round(promptWatch.Elapsed.TotalSeconds, 3),
-                        Math.Round(fluxWatch.Elapsed.TotalSeconds, 3),
-                        Math.Round(totalWatch.Elapsed.TotalSeconds, 3),
-                        destination));
-
-                    Log(
-                        "UI",
-                        $"Benchmark {test.Category}/{model} : " +
-                        $"prompt {promptWatch.Elapsed.TotalSeconds:0.00}s · " +
-                        $"FLUX {fluxWatch.Elapsed.TotalSeconds:0.00}s · " +
-                        $"total {totalWatch.Elapsed.TotalSeconds:0.00}s.");
+                    rows.Add(
+                        await RunPromptBenchmarkCaseAsync(
+                            folder,
+                            model,
+                            test,
+                            job,
+                            totalJobs,
+                            ct));
                 }
             }
 
-            var jsonPath = Path.Combine(folder, "benchmark.json");
-            await File.WriteAllTextAsync(
-                jsonPath,
-                JsonSerializer.Serialize(
-                    rows,
-                    new JsonSerializerOptions
-                    {
-                        WriteIndented = true
-                    }),
+            await ExportPromptBenchmarkAsync(
+                folder,
+                rows,
                 ct);
 
-            var csvPath = Path.Combine(folder, "benchmark.csv");
-            var csvLines = new List<string>
-            {
-                "category;model;seed;prompt_seconds;flux_seconds;total_seconds;image"
-            };
-            csvLines.AddRange(rows.Select(row =>
-                string.Join(
-                    ";",
-                    row.Category,
-                    row.Model,
-                    row.Seed,
-                    row.PromptSeconds.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture),
-                    row.FluxSeconds.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture),
-                    row.TotalSeconds.ToString("0.000", System.Globalization.CultureInfo.InvariantCulture),
-                    row.ImagePath.Replace(";", "_"))));
-            await File.WriteAllLinesAsync(csvPath, csvLines, ct);
-
-            var summaries = models.Select(model =>
-            {
-                var modelRows = rows
-                    .Where(row => row.Model.Equals(
-                        model,
-                        StringComparison.OrdinalIgnoreCase))
-                    .ToArray();
-
-                return
-                    $"{model} : prompt {modelRows.Average(x => x.PromptSeconds):0.00}s · " +
-                    $"FLUX {modelRows.Average(x => x.FluxSeconds):0.00}s · " +
-                    $"total {modelRows.Average(x => x.TotalSeconds):0.00}s";
-            });
-
-            _genText.Text = L10n.Pick(
-                _s.Language,
-                "Benchmark terminé.",
-                "Benchmark complete.");
-
-            MessageBox.Show(
-                string.Join(Environment.NewLine, summaries) +
-                Environment.NewLine + Environment.NewLine +
+            ShowPromptBenchmarkSummary(
                 folder,
-                L10n.Pick(_s.Language, "Benchmark terminé", "Benchmark complete"),
-                MessageBoxButtons.OK,
-                MessageBoxIcon.Information);
+                rows,
+                models);
         }
         finally
         {
-            try
-            {
-                await CleanupBenchmarkComfyAsync(
-                    CancellationToken.None);
-            }
-            catch
-            {
-            }
-
-            _prompt.Text = originalPrompt;
-
-            if (!string.IsNullOrWhiteSpace(originalModel))
-                _promptModelCombo.Text = originalModel;
-
-            _benchmarkCts?.Dispose();
-            _benchmarkCts = null;
-            _benchmarkButton.Text = L10n.Pick(
-                _s.Language,
-                "Comparer 1.7B / 4B",
-                "Compare 1.7B / 4B");
-            btnGenerate.Enabled = true;
-            UpdatePromptEnhancementState();
+            await RestorePromptBenchmarkUiAsync(
+                originalPrompt,
+                originalModel);
         }
     }
 
+    /// <summary>
+    /// Demande confirmation avant le benchmark et avertit lorsque la mémoire virtuelle Windows semble insuffisante.
+    /// </summary>
+    private bool ConfirmPromptBenchmarkStart()
+    {
+        var answer = MessageBox.Show(
+            L10n.Pick(
+                _s.Language,
+                "Ce test va générer 8 images FLUX.2 (4 catégories × 2 modèles Ollama) avec des seeds fixes. " +
+                "Il peut prendre plusieurs minutes et solliciter fortement le GPU.\n\nContinuer ?",
+                "This test will generate 8 FLUX.2 images (4 categories ? 2 Ollama models) with fixed seeds. " +
+                "It may take several minutes and heavily use the GPU.\n\nContinue?"),
+            L10n.Pick(_s.Language, "Comparatif IA prompt", "Prompt AI comparison"),
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Question);
+
+        if (answer != DialogResult.Yes)
+            return false;
+
+        var pageFileMiB = GetConfiguredPageFileMiB();
+        if (pageFileMiB <= 0 || pageFileMiB >= 8192)
+            return true;
+
+        var memoryAnswer = MessageBox.Show(
+            L10n.Pick(
+                _s.Language,
+                $"La mémoire virtuelle Windows semble limitée à environ {pageFileMiB / 1024.0:0.0} Go. " +
+                "Le benchmark FLUX.2 peut atteindre la limite de mémoire engagée même si de la RAM physique reste libre. " +
+                "DreamRaster arrêtera ComfyUI entre chaque image pour réduire ce risque.\n\nContinuer ?",
+                $"Windows virtual memory appears limited to about {pageFileMiB / 1024.0:0.0} GB. " +
+                "The FLUX.2 benchmark can hit the commit limit even while physical RAM is still available. " +
+                "DreamRaster will fully stop ComfyUI between images to reduce this risk.\n\nContinue?"),
+            L10n.Pick(
+                _s.Language,
+                "Mémoire virtuelle limitée",
+                "Limited virtual memory"),
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+
+        return memoryAnswer == DialogResult.Yes;
+    }
+
+    /// <summary>
+    /// Vérifie que tous les modèles Ollama nécessaires au benchmark sont déjà installés localement.
+    /// </summary>
+    private async Task EnsurePromptBenchmarkModelsAsync(
+        IReadOnlyCollection<string> models,
+        CancellationToken ct)
+    {
+        var installed = await GetInstalledOllamaModelsAsync(ct);
+        var missing = models
+            .Where(model => !installed.Contains(model))
+            .ToArray();
+
+        if (missing.Length == 0)
+            return;
+
+        throw new InvalidOperationException(
+            "Modèles Ollama requis absents : " +
+            string.Join(", ", missing));
+    }
+
+    /// <summary>
+    /// Retourne les quatre scénarios fixes utilisés pour comparer les modèles de prompt avec des seeds reproductibles.
+    /// </summary>
+    private static PromptBenchmarkCase[] GetPromptBenchmarkCases() =>
+        new[]
+        {
+            new PromptBenchmarkCase(
+                "Portrait",
+                1001L,
+                "portrait serré d'une femme rousse de 35 ans, lumière de fenêtre, fond sombre"),
+            new PromptBenchmarkCase(
+                "Paysage",
+                1002L,
+                "vallée alpine au lever du soleil après une nuit de neige, rivière au premier plan"),
+            new PromptBenchmarkCase(
+                "Architecture",
+                1003L,
+                "maison brutaliste en béton au bord d'un lac, grandes baies vitrées, temps couvert"),
+            new PromptBenchmarkCase(
+                "Cinematique",
+                1004L,
+                "détective seul traverse une rue mouillée la nuit, néons rouges et bleus, voiture ancienne au fond")
+        };
+
+    /// <summary>
+    /// Crée le dossier horodaté recevant les images et rapports du benchmark.
+    /// </summary>
+    private string CreatePromptBenchmarkFolder()
+    {
+        var stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+        var folder = Path.Combine(
+            PortablePaths.Resolve(_s.Images),
+            "benchmark_" + stamp);
+        Directory.CreateDirectory(folder);
+        return folder;
+    }
+
+    /// <summary>
+    /// Exécute un scénario du benchmark pour un modèle Ollama, mesure chaque phase et copie l’image produite dans le dossier du rapport.
+    /// </summary>
+    private async Task<PromptBenchmarkRow> RunPromptBenchmarkCaseAsync(
+        string folder,
+        string model,
+        PromptBenchmarkCase test,
+        int job,
+        int totalJobs,
+        CancellationToken ct)
+    {
+        await CleanupBenchmarkComfyAsync(ct);
+
+        _genText.Text =
+            $"Benchmark {job}/{totalJobs} ? {test.Category} ? {model}";
+        _prompt.Text = test.Prompt;
+        _seedInput.Value = test.Seed;
+        _randomSeedCheck.Checked = false;
+
+        var totalWatch = Stopwatch.StartNew();
+
+        var promptWatch = Stopwatch.StartNew();
+        var improved = await ImprovePromptTextAsync(
+            test.Prompt,
+            ct,
+            model);
+        promptWatch.Stop();
+
+        _prompt.Text = improved;
+
+        var fluxWatch = Stopwatch.StartNew();
+        ImageGenerationResult result;
+        try
+        {
+            result = await _generator.GenerateAsync(
+                improved,
+                _negativePrompt.Text.Trim(),
+                _s.DefaultWidth,
+                _s.DefaultHeight,
+                inputImagePath: null,
+                imgToImgStrength: 1.0,
+                ct,
+                test.Seed);
+        }
+        finally
+        {
+            fluxWatch.Stop();
+            await CleanupBenchmarkComfyAsync(ct);
+        }
+
+        totalWatch.Stop();
+
+        if (!result.Ok ||
+            string.IsNullOrWhiteSpace(result.Path) ||
+            !File.Exists(result.Path))
+        {
+            throw new InvalidOperationException(
+                result.Error ??
+                $"Image benchmark absente : {test.Category} / {model}");
+        }
+
+        var safeModel = model
+            .Replace(":", "_")
+            .Replace("/", "_");
+        var destination = Path.Combine(
+            folder,
+            $"{test.Seed}_{test.Category}_{safeModel}.png");
+        File.Copy(result.Path, destination, true);
+        ShowPreviewImage(destination);
+
+        var row = new PromptBenchmarkRow(
+            test.Category,
+            model,
+            test.Seed,
+            test.Prompt,
+            improved,
+            Math.Round(promptWatch.Elapsed.TotalSeconds, 3),
+            Math.Round(fluxWatch.Elapsed.TotalSeconds, 3),
+            Math.Round(totalWatch.Elapsed.TotalSeconds, 3),
+            destination);
+
+        Log(
+            "UI",
+            $"Benchmark {test.Category}/{model} : " +
+            $"prompt {promptWatch.Elapsed.TotalSeconds:0.00}s ? " +
+            $"FLUX {fluxWatch.Elapsed.TotalSeconds:0.00}s ? " +
+            $"total {totalWatch.Elapsed.TotalSeconds:0.00}s.");
+
+        return row;
+    }
+
+    /// <summary>
+    /// Écrit les résultats du benchmark dans les fichiers JSON et CSV du dossier de rapport.
+    /// </summary>
+    private static async Task ExportPromptBenchmarkAsync(
+        string folder,
+        IReadOnlyCollection<PromptBenchmarkRow> rows,
+        CancellationToken ct)
+    {
+        var jsonPath = Path.Combine(folder, "benchmark.json");
+        await File.WriteAllTextAsync(
+            jsonPath,
+            JsonSerializer.Serialize(
+                rows,
+                new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                }),
+            ct);
+
+        var csvPath = Path.Combine(folder, "benchmark.csv");
+        var csvLines = new List<string>
+        {
+            "category;model;seed;prompt_seconds;flux_seconds;total_seconds;image"
+        };
+        csvLines.AddRange(rows.Select(row =>
+            string.Join(
+                ";",
+                row.Category,
+                row.Model,
+                row.Seed,
+                row.PromptSeconds.ToString(
+                    "0.000",
+                    System.Globalization.CultureInfo.InvariantCulture),
+                row.FluxSeconds.ToString(
+                    "0.000",
+                    System.Globalization.CultureInfo.InvariantCulture),
+                row.TotalSeconds.ToString(
+                    "0.000",
+                    System.Globalization.CultureInfo.InvariantCulture),
+                row.ImagePath.Replace(";", "_"))));
+
+        await File.WriteAllLinesAsync(
+            csvPath,
+            csvLines,
+            ct);
+    }
+
+    /// <summary>
+    /// Affiche la moyenne des temps par modèle à la fin du benchmark et indique le dossier contenant les rapports.
+    /// </summary>
+    private void ShowPromptBenchmarkSummary(
+        string folder,
+        IReadOnlyCollection<PromptBenchmarkRow> rows,
+        IReadOnlyCollection<string> models)
+    {
+        var summaries = models.Select(model =>
+        {
+            var modelRows = rows
+                .Where(row => row.Model.Equals(
+                    model,
+                    StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            return
+                $"{model} : prompt {modelRows.Average(x => x.PromptSeconds):0.00}s ? " +
+                $"FLUX {modelRows.Average(x => x.FluxSeconds):0.00}s ? " +
+                $"total {modelRows.Average(x => x.TotalSeconds):0.00}s";
+        });
+
+        _genText.Text = L10n.Pick(
+            _s.Language,
+            "Benchmark termin?.",
+            "Benchmark complete.");
+
+        MessageBox.Show(
+            string.Join(Environment.NewLine, summaries) +
+            Environment.NewLine + Environment.NewLine +
+            folder,
+            L10n.Pick(
+                _s.Language,
+                "Benchmark termin?",
+                "Benchmark complete"),
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
+    }
+
+    /// <summary>
+    /// Nettoie ComfyUI après le benchmark et restaure le prompt, le modèle et les contrôles de l’interface.
+    /// </summary>
+    private async Task RestorePromptBenchmarkUiAsync(
+        string originalPrompt,
+        string originalModel)
+    {
+        try
+        {
+            await CleanupBenchmarkComfyAsync(
+                CancellationToken.None);
+        }
+        catch
+        {
+        }
+
+        _prompt.Text = originalPrompt;
+
+        if (!string.IsNullOrWhiteSpace(originalModel))
+            _promptModelCombo.Text = originalModel;
+
+        _benchmarkCts?.Dispose();
+        _benchmarkCts = null;
+        _benchmarkButton.Text = L10n.Pick(
+            _s.Language,
+            "Comparer 1.7B / 4B",
+            "Compare 1.7B / 4B");
+        btnGenerate.Enabled = true;
+        UpdatePromptEnhancementState();
+    }
+
+    /// <summary>
+    /// Applique les règles de <c>ApplyEnhancedTranslations</c> à l’état courant puis synchronise les contrôles affectés.
+    /// </summary>
     private void ApplyEnhancedTranslations()
     {
         if (_negativePromptLabel is null)
@@ -3394,15 +4217,23 @@ public partial class MainForm : Form
                 "Validation: [OK] compatible/installed · [?] detected but unverified · [X] incompatible, missing or not installed.");
     }
 
+    /// <summary>
+    /// Active les services et actualise les données de modèles pour l’onglet principal sélectionné.
+    /// Toutes les exceptions sont contenues car cette méthode est un gestionnaire WinForms async-void.
+    /// </summary>
     private async void MainTabs_SelectedIndexChanged(object? sender, EventArgs e)
     {
-        RefreshSelectedTab();
-
-        if (Interlocked.Exchange(ref _tabActivationBusy, 1) != 0)
-            return;
+        var ownsActivation = false;
 
         try
         {
+            RefreshSelectedTab();
+
+            if (Interlocked.Exchange(ref _tabActivationBusy, 1) != 0)
+                return;
+
+            ownsActivation = true;
+
             if (_tabs.SelectedTab == tabComfy && !_closing)
             {
                 await SafeUiAsync("ComfyUI", OpenComfyEmbeddedAsync);
@@ -3431,38 +4262,75 @@ public partial class MainForm : Form
                 else
                 {
                     await SafeUiAsync("Ollama", StartOllamaAsync);
-                    await RefreshModelChoicesAsync();
+                    await SafeUiAsync(
+                        L10n.Pick(
+                            _s.Language,
+                            "Actualisation des modèles",
+                            "Refresh models"),
+                        RefreshModelChoicesAsync);
                 }
             }
             else if (_tabs.SelectedTab == tabConfiguration && !_closing)
             {
-                await RefreshModelChoicesAsync();
+                await SafeUiAsync(
+                    L10n.Pick(
+                        _s.Language,
+                        "Actualisation des modèles",
+                        "Refresh models"),
+                    RefreshModelChoicesAsync);
             }
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Write("Main tab activation", ex);
+            Log("UI !", "Activation onglet : " + ex.Message);
         }
         finally
         {
-            Interlocked.Exchange(ref _tabActivationBusy, 0);
+            if (ownsActivation)
+                Interlocked.Exchange(ref _tabActivationBusy, 0);
+
             RefreshSelectedTab();
         }
     }
 
+    /// <summary>
+    /// Actualise les données gérées par <c>RefreshSelectedTab</c> à partir de l’état courant et synchronise les contrôles dépendants.
+    /// </summary>
     private void RefreshSelectedTab()
     {
-        if (!IsHandleCreated)
-            return;
-
-        BeginInvoke(new Action(() =>
+        if (IsDisposed ||
+            Disposing ||
+            !IsHandleCreated)
         {
-            var page = _tabs.SelectedTab;
-            _tabs.Invalidate(true);
-            page?.Invalidate(true);
-            _web.Invalidate();
-            _comfyWeb.Invalidate();
-            page?.Refresh();
-            _tabs.Refresh();
-        }));
+            return;
+        }
+
+        try
+        {
+            BeginInvoke(new Action(() =>
+            {
+                if (IsDisposed || Disposing)
+                    return;
+
+                var page = _tabs.SelectedTab;
+                _tabs.Invalidate(true);
+                page?.Invalidate(true);
+                _web.Invalidate();
+                _comfyWeb.Invalidate();
+                page?.Refresh();
+                _tabs.Refresh();
+            }));
+        }
+        catch (InvalidOperationException) when (IsDisposed || Disposing)
+        {
+            // La fenêtre peut perdre son handle natif pendant la fin d’un changement d’onglet.
+        }
     }
 
+    /// <summary>
+    /// Active le double-buffering et les styles de peinture appropriés pour réduire le scintillement des onglets WinForms.
+    /// </summary>
     private void EnableSmoothTabPainting()
     {
         try
@@ -3479,6 +4347,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Force une couleur de texte lisible sur les boutons du thème sombre sans modifier leurs autres propriétés visuelles.
+    /// </summary>
     private static void ForceWhiteButtonText(Control root)
     {
         foreach (Control control in root.Controls)
@@ -3494,6 +4365,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Actualise les choix de modèles depuis les dossiers de modèles du ComfyUI portable courant.
+    /// </summary>
     private async Task RefreshModelChoicesAsync()
     {
         var comfyRoot = PortablePreflight.GetComfyRoot(_s);
@@ -3506,7 +4380,11 @@ public partial class MainForm : Form
 
         RefreshValidatedModelChoices(
             _textEncoderCombo,
-            Path.Combine(comfyRoot, "models", "text_encoders"),
+            new[]
+            {
+                Path.Combine(comfyRoot, "models", "text_encoders"),
+                Path.Combine(comfyRoot, "models", "clip")
+            },
             Flux2ModelRole.TextEncoder,
             _s.TextEncoderModel);
 
@@ -3519,6 +4397,9 @@ public partial class MainForm : Form
         await RefreshVisionModelChoicesAsync();
     }
 
+    /// <summary>
+    /// Actualise les données gérées par <c>RefreshVisionModelChoicesAsync</c> à partir de l’état courant et synchronise les contrôles dépendants.
+    /// </summary>
     private async Task RefreshVisionModelChoicesAsync()
     {
         var wanted = CurrentComboModel(_visionModelCombo);
@@ -3549,9 +4430,9 @@ public partial class MainForm : Form
         }
         catch
         {
-            // The portable Ollama service may legitimately be stopped.
-            // The manifest check below still gives a reliable local state
-            // for explicitly configured/default models.
+            // Le service Ollama portable peut légitimement être arrêté.
+            // Le contrôle du manifeste ci-dessous fournit malgré tout un état local
+            // fiable pour les modèles configurés explicitement ou par défaut.
         }
 
         var candidates = new HashSet<string>(installed, StringComparer.OrdinalIgnoreCase)
@@ -3621,6 +4502,9 @@ public partial class MainForm : Form
         RefreshPromptModelChoices(installed);
     }
 
+    /// <summary>
+    /// Actualise les données gérées par <c>RefreshPromptModelChoices</c> à partir de l’état courant et synchronise les contrôles dépendants.
+    /// </summary>
     private void RefreshPromptModelChoices(
         HashSet<string> installed)
     {
@@ -3693,6 +4577,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Détermine la condition représentée par <c>IsPortableOllamaModelInstalled</c> à partir de l’état courant.
+    /// </summary>
     private bool IsPortableOllamaModelInstalled(string modelName)
     {
         if (string.IsNullOrWhiteSpace(modelName))
@@ -3726,9 +4613,26 @@ public partial class MainForm : Form
         return File.Exists(manifest);
     }
 
+    /// <summary>
+    /// Actualise les données gérées par <c>RefreshValidatedModelChoices</c> à partir de l’état courant et synchronise les contrôles dépendants.
+    /// </summary>
     private void RefreshValidatedModelChoices(
         ComboBox combo,
         string folder,
+        Flux2ModelRole role,
+        string configured)
+        => RefreshValidatedModelChoices(
+            combo,
+            new[] { folder },
+            role,
+            configured);
+
+    /// <summary>
+    /// Actualise les données gérées par <c>RefreshValidatedModelChoices</c> à partir de l’état courant et synchronise les contrôles dépendants.
+    /// </summary>
+    private void RefreshValidatedModelChoices(
+        ComboBox combo,
+        IEnumerable<string> folders,
         Flux2ModelRole role,
         string configured)
     {
@@ -3736,12 +4640,16 @@ public partial class MainForm : Form
         if (string.IsNullOrWhiteSpace(wanted))
             wanted = configured;
 
-        var files = Directory.Exists(folder)
-            ? Directory.EnumerateFiles(folder)
-                .Where(IsSupportedModelFile)
-                .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
-                .ToArray()
-            : [];
+        var files = folders
+            .Where(Directory.Exists)
+            .SelectMany(Directory.EnumerateFiles)
+            .Where(IsSupportedModelFile)
+            .GroupBy(
+                Path.GetFileName,
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
         var choices = files
             .Select(path => CreateModelChoice(
@@ -3788,6 +4696,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Crée l’objet géré par <c>CreateModelChoice</c> et initialise les propriétés nécessaires à son utilisation.
+    /// </summary>
     private ModelChoice CreateModelChoice(
         string fileName,
         ModelCompatibilityResult result)
@@ -3818,6 +4729,9 @@ public partial class MainForm : Form
             $"{marker} {fileName} — {status} ({result.Reason})");
     }
 
+    /// <summary>
+    /// Convertit l’état de compatibilité d’un modèle en priorité de tri afin de présenter d’abord les choix les plus sûrs.
+    /// </summary>
     private static int CompatibilityOrder(ModelCompatibilityState state)
         => state switch
         {
@@ -3828,11 +4742,17 @@ public partial class MainForm : Form
             _ => 4
         };
 
+    /// <summary>
+    /// Détermine la condition représentée par <c>IsSupportedModelFile</c> à partir de l’état courant.
+    /// </summary>
     private static bool IsSupportedModelFile(string path)
         => path.EndsWith(".safetensors", StringComparison.OrdinalIgnoreCase)
            || path.EndsWith(".gguf", StringComparison.OrdinalIgnoreCase)
            || path.EndsWith(".ckpt", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Retourne le nom de fichier du modèle actuellement représenté par une ComboBox, qu’il provienne d’un objet riche ou d’un texte simple.
+    /// </summary>
     private static string CurrentComboModel(ComboBox combo)
     {
         if (combo.SelectedItem is ModelChoice choice)
@@ -3841,6 +4761,9 @@ public partial class MainForm : Form
         return combo.Text.Trim();
     }
 
+    /// <summary>
+    /// Sélectionne la valeur gérée par <c>SelectedModel</c> et synchronise les contrôles associés.
+    /// </summary>
     private static string SelectedModel(ComboBox combo, TextBox fallback)
     {
         var value = CurrentComboModel(combo);
@@ -3849,6 +4772,9 @@ public partial class MainForm : Form
             : value;
     }
 
+    /// <summary>
+    /// Valide les données traitées par <c>ValidateSelectedFlux2Models</c> et signale toute configuration incohérente avant exécution.
+    /// </summary>
     private void ValidateSelectedFlux2Models(
         string fluxModel,
         string textEncoderModel,
@@ -3861,7 +4787,9 @@ public partial class MainForm : Form
                 Path.Combine(root, "models", "diffusion_models", fluxModel),
                 Flux2ModelRole.Diffusion),
             ("Text encoder",
-                Path.Combine(root, "models", "text_encoders", textEncoderModel),
+                PortablePreflight.GetComfyTextEncoderPath(
+                    _s,
+                    textEncoderModel),
                 Flux2ModelRole.TextEncoder),
             ("VAE",
                 Path.Combine(root, "models", "vae", vaeModel),
@@ -3880,6 +4808,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Aligne les réglages Image et Vidéo avec les valeurs recommandées des workflows lorsque la configuration n’a pas encore été personnalisée.
+    /// </summary>
     private void SynchronizeWorkflowDefaults()
     {
         var width = _s.DefaultWidth;
@@ -3908,6 +4839,9 @@ public partial class MainForm : Form
             $"Workflows synchronisés : {width}x{height}, {steps} steps.");
     }
 
+    /// <summary>
+    /// Synchronise un fichier workflow embarqué vers le dossier portable uniquement lorsque son contenu doit être créé ou actualisé.
+    /// </summary>
     private static void SynchronizeWorkflow(
         string path,
         int width,
@@ -3964,6 +4898,9 @@ public partial class MainForm : Form
             workflow.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
     }
 
+    /// <summary>
+    /// Définit l’état géré par <c>SetWorkflowInputs</c> et applique immédiatement ses effets sur l’interface concernée.
+    /// </summary>
     private static void SetWorkflowInputs(
         JsonObject workflow,
         string classType,
@@ -3987,16 +4924,53 @@ public partial class MainForm : Form
         }
     }
 
-    // =====================================================================
-    // MainForm.GenerationExperience
-    // =====================================================================
+    #endregion
+
+    #region Expérience de génération et presets Image/Vidéo
+
+/// <summary>
+/// Associe un identifiant stable de preset ? son libell? traduit afin que la ComboBox puisse changer de langue sans modifier la valeur persist?e.
+/// </summary>
     private sealed record TemplateComboItem(string Id, string Label)
     {
+        /// <summary>
+        /// Retourne le libellé utilisateur de cet objet afin qu’il soit affiché directement dans les listes WinForms.
+        /// </summary>
         public override string ToString() => Label;
     }
 
+    /// <summary>
+    /// Décrit un profil complet de pipeline. Les noms de fichiers correspondent
+    /// aux composants ComfyUI attendus ; un composant absent n’est jamais
+    /// téléchargé automatiquement lorsque le profil est appliqué.
+    /// </summary>
+    private sealed record PipelinePreset(
+        string Id,
+        string Fr,
+        string En,
+        string Model,
+        string Encoder,
+        string Vae,
+        string ClipVision,
+        string Lora,
+        double LoraStrength,
+        string Style,
+        string Negative,
+        string Quality);
+
+    /// <summary>
+    /// Centralise les infobulles associées aux presets, profils et statuts de génération.
+    /// </summary>
     private readonly ToolTip _generationTemplateTips = new();
+    /// <summary>
+    /// Indique qu’une synchronisation programmatique des presets est en cours afin
+    /// d’éviter les sauvegardes ou traitements réentrants déclenchés par les ComboBox.
+    /// </summary>
     private bool _updatingGenerationTemplateUi;
+    /// <summary>
+    /// Initialise l’expérience de génération Image/Vidéo : presets, historique,
+    /// infobulles, disponibilité des fonctions et interactions de navigation.
+    /// </summary>
     private void InitializeGenerationExperienceUi()
     {
         InitializeImageTemplateUi();
@@ -4021,47 +4995,35 @@ public partial class MainForm : Form
     }
 
 
+    /// <summary>
+    /// Remplit les presets Image et branche les comportements qui évoluent pendant l’exécution.
+    /// </summary>
     private void InitializeImageTemplateUi()
     {
-        _preview.Location = new Point(370, 52);
-        _preview.Size = new Size(666, 430);
-        _preview.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-
-
-
         FillImageTemplateCombos();
         UpdateMaximumQualitySharpnessUi();
 
-
-        _imageHistoryLabel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-        _imageHistoryPanel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-
-        tabGenerate.Controls.AddRange(
-        [
-            _imageStyleTemplateLabel,
-            _imageStyleTemplateCombo,
-            _imageNegativeTemplateLabel,
-            _imageNegativeTemplateCombo,
-            _imageHistoryLabel,
-            _imageHistoryPanel
-        ]);
-
         _imageSharpnessPreviewButton.Click += async (_, _) =>
-        {
-            if (_imageSharpnessComparisonPanel.Visible)
-            {
-                SetImageSharpnessComparisonVisible(false);
-                return;
-            }
+            await SafeUiAsync(
+                L10n.Pick(
+                    _s.Language,
+                    "Aperçu netteté Image",
+                    "Image sharpness preview"),
+                async () =>
+                {
+                    if (_imageSharpnessComparisonPanel.Visible)
+                    {
+                        SetImageSharpnessComparisonVisible(false);
+                        return;
+                    }
 
-            await RefreshImageSharpnessPreviewAsync(CancellationToken.None);
-        };
+                    await RefreshImageSharpnessPreviewAsync(CancellationToken.None);
+                });
 
         _imageSharpnessComparisonSlider.ValueChanged += (_, _) =>
             _imageSharpnessComparisonPanel.Invalidate();
 
-        _imageSharpnessComparisonPanel.Paint +=
-            DrawImageSharpnessComparison;
+        _imageSharpnessComparisonPanel.Paint += DrawImageSharpnessComparison;
         _imageSharpnessComparisonPanel.MouseDown += (_, e) =>
         {
             if (e.Button != MouseButtons.Left)
@@ -4084,83 +5046,821 @@ public partial class MainForm : Form
         };
 
         _imageStyleTemplateCombo.SelectedIndexChanged += (_, _) =>
-        {
-            if (_updatingGenerationTemplateUi)
-                return;
+            SafeUiAction(
+                L10n.Pick(_s.Language, "Preset Image", "Image preset"),
+                () =>
+                {
+                    if (_updatingGenerationTemplateUi)
+                        return;
 
-            _s.ImageStyleTemplate = SelectedTemplateId(_imageStyleTemplateCombo, "photo4k");
-            ApplyImageObjectiveSettings(_s.ImageStyleTemplate);
-            UpdateMaximumQualitySharpnessUi();
-            UpdateTemplateToolTips();
-            SettingsStore.Save(_s);
-        };
+                    _s.ImageStyleTemplate =
+                        SelectedTemplateId(_imageStyleTemplateCombo, "photo4k");
+                    ApplyImageObjectiveSettings(_s.ImageStyleTemplate);
+                    UpdateMaximumQualitySharpnessUi();
+                    UpdateTemplateToolTips();
+                    SynchronizePipelinePresetSelection(
+                        video: false,
+                        persist: false);
+                    SaveSettingsFromUiEvent("Image style preset");
+                });
+
         _imageNegativeTemplateCombo.SelectedIndexChanged += (_, _) =>
-        {
-            if (_updatingGenerationTemplateUi)
-                return;
+            SafeUiAction(
+                L10n.Pick(_s.Language, "Négatif Image", "Image negative"),
+                () =>
+                {
+                    if (_updatingGenerationTemplateUi)
+                        return;
 
-            _s.ImageNegativeTemplate = SelectedTemplateId(_imageNegativeTemplateCombo, "style");
-            SettingsStore.Save(_s);
-        };
+                    _s.ImageNegativeTemplate =
+                        SelectedTemplateId(_imageNegativeTemplateCombo, "style");
+                    SynchronizePipelinePresetSelection(
+                        video: false,
+                        persist: false);
+                    SaveSettingsFromUiEvent("Image negative preset");
+                });
     }
 
+    /// <summary>
+    /// Remplit les presets Vidéo et branche les comportements qui évoluent pendant l’exécution.
+    /// </summary>
     private void InitializeVideoTemplateUi()
     {
-
-
         FillVideoTemplateCombos();
         UpdateMaximumQualitySharpnessUi();
 
-
-        _videoHistoryLabel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-        _videoStyleTemplateLabel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-        _videoNegativeTemplateLabel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-        _videoStyleTemplateCombo.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-        _videoNegativeTemplateCombo.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-        _videoHistoryPanel.Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-
-        _tabVideo.Controls.AddRange(
-        [
-            _videoStyleTemplateLabel,
-            _videoStyleTemplateCombo,
-            _videoNegativeTemplateLabel,
-            _videoNegativeTemplateCombo,
-            _videoHistoryLabel,
-            _videoHistoryPanel
-        ]);
         _videoSharpnessPreviewButton.Click += async (_, _) =>
-        {
-            if (_videoSharpnessPreviewPanel.Visible)
-            {
-                SetVideoSharpnessComparisonVisible(false);
-                return;
-            }
+            await SafeUiAsync(
+                L10n.Pick(
+                    _s.Language,
+                    "Aperçu netteté Vidéo",
+                    "Video sharpness preview"),
+                async () =>
+                {
+                    if (_videoSharpnessPreviewPanel.Visible)
+                    {
+                        SetVideoSharpnessComparisonVisible(false);
+                        return;
+                    }
 
-            await RefreshVideoSharpnessPreviewAsync(CancellationToken.None);
-        };
+                    await RefreshVideoSharpnessPreviewAsync(CancellationToken.None);
+                });
 
         _videoStyleTemplateCombo.SelectedIndexChanged += (_, _) =>
-        {
-            if (_updatingGenerationTemplateUi)
-                return;
+            SafeUiAction(
+                L10n.Pick(_s.Language, "Preset Vidéo", "Video preset"),
+                () =>
+                {
+                    if (_updatingGenerationTemplateUi)
+                        return;
 
-            _s.VideoStyleTemplate = SelectedTemplateId(_videoStyleTemplateCombo, "cinematic");
-            ApplyVideoObjectiveSettings(_s.VideoStyleTemplate);
-            UpdateMaximumQualitySharpnessUi();
-            UpdateTemplateToolTips();
-            SettingsStore.Save(_s);
-        };
+                    _s.VideoStyleTemplate =
+                        SelectedTemplateId(_videoStyleTemplateCombo, "cinematic");
+                    ApplyVideoObjectiveSettings(_s.VideoStyleTemplate);
+                    UpdateMaximumQualitySharpnessUi();
+                    UpdateTemplateToolTips();
+                    SynchronizePipelinePresetSelection(
+                        video: true,
+                        persist: false);
+                    SaveSettingsFromUiEvent("Video style preset");
+                });
 
         _videoNegativeTemplateCombo.SelectedIndexChanged += (_, _) =>
-        {
-            if (_updatingGenerationTemplateUi)
-                return;
+            SafeUiAction(
+                L10n.Pick(_s.Language, "Négatif Vidéo", "Video negative"),
+                () =>
+                {
+                    if (_updatingGenerationTemplateUi)
+                        return;
 
-            _s.VideoNegativeTemplate = SelectedTemplateId(_videoNegativeTemplateCombo, "style");
-            SettingsStore.Save(_s);
-        };
+                    _s.VideoNegativeTemplate =
+                        SelectedTemplateId(_videoNegativeTemplateCombo, "style");
+                    SynchronizePipelinePresetSelection(
+                        video: true,
+                        persist: false);
+                    SaveSettingsFromUiEvent("Video negative preset");
+                });
     }
 
+
+    /// <summary>
+    /// Profils complets proposés dans l’onglet Image.
+    /// </summary>
+    private static readonly PipelinePreset[] ImagePipelinePresets =
+    [
+        new("custom", "Personnalisé", "Custom",
+            "", "", "", "", "", 1.0, "", "", ""),
+        new("photo", "Photo 4K / studio", "4K photo / studio",
+            "flux-2-klein-4b-fp8.safetensors", "qwen_3_4b.safetensors",
+            "flux2-vae.safetensors", "", "", 1.0,
+            "photo4k", "safe_quality", ""),
+        new("realism", "Réalisme / détails", "Realism / detail",
+            "flux-2-klein-4b-fp8.safetensors", "qwen_3_4b.safetensors",
+            "flux2-vae.safetensors", "",
+            "f2k_4B_consist_20260314.safetensors", 0.65,
+            "photorealistic", "anatomy", ""),
+        new("portrait", "Portrait premium", "Premium portrait",
+            "flux-2-klein-4b-fp8.safetensors", "qwen_3_4b.safetensors",
+            "flux2-vae.safetensors", "", "", 1.0,
+            "portrait-premium", "anatomy", ""),
+        new("product", "Produit / studio", "Product / studio",
+            "flux-2-klein-4b-fp8.safetensors", "qwen_3_4b.safetensors",
+            "flux2-vae.safetensors", "", "", 1.0,
+            "product", "no-text", ""),
+        new("landscape", "Paysage cinématique", "Cinematic landscape",
+            "flux-2-klein-4b-fp8.safetensors", "qwen_3_4b.safetensors",
+            "flux2-vae.safetensors", "", "", 1.0,
+            "landscape", "safe_quality", ""),
+        new("fantasy", "Fantasy / concept", "Fantasy / concept",
+            "flux-2-klein-4b-fp8.safetensors", "qwen_3_4b.safetensors",
+            "flux2-vae.safetensors", "", "", 1.0,
+            "fantasy", "safe_quality", ""),
+        new("anime", "Anime premium", "Premium anime",
+            "flux-2-klein-4b-fp8.safetensors", "qwen_3_4b.safetensors",
+            "flux2-vae.safetensors", "",
+            "Flux_klein_4b_anime_Koni.safetensors", 0.85,
+            "anime", "style", ""),
+        new("scifi", "Science-fiction / Old Gods", "Sci-fi / Old Gods",
+            "flux-2-klein-4b-fp8.safetensors", "qwen_3_4b.safetensors",
+            "flux2-vae.safetensors", "",
+            "flux2-klein-4b-lora-old-gods.safetensors", 0.80,
+            "scifi", "safe_quality", ""),
+        new("lowlight", "Nuit / basse lumière", "Night / low light",
+            "flux-2-klein-4b-fp8.safetensors", "qwen_3_4b.safetensors",
+            "flux2-vae.safetensors", "", "", 1.0,
+            "lowlight", "safe_quality", ""),
+        new("max-quality", "Qualité maximale", "Maximum quality",
+            "flux-2-klein-4b-fp8.safetensors", "qwen_3_4b.safetensors",
+            "flux2-vae.safetensors", "", "", 1.0,
+            "max-quality", "safe_quality", ""),
+        new("erotic", "Glamour / érotique 18+", "Glamour / erotic 18+",
+            "flux-2-klein-4b-fp8.safetensors", "qwen_3_4b.safetensors",
+            "flux2-vae.safetensors", "", "", 1.0,
+            "erotic", "adult-erotic", ""),
+        new("adult-explicit", "Adulte explicite 18+", "Explicit adult 18+",
+            "flux-2-klein-4b-fp8.safetensors", "qwen_3_4b.safetensors",
+            "flux2-vae.safetensors", "", "", 1.0,
+            "adult-explicit", "adult-explicit", "")
+    ];
+
+    /// <summary>
+    /// Profils complets proposés dans l’onglet Vidéo.
+    /// </summary>
+    private static readonly PipelinePreset[] VideoPipelinePresets =
+    [
+        new("custom", "Personnalisé", "Custom",
+            "", "", "", "", "", 1.0, "", "", ""),
+        new("cinematic", "Cinématique T2V", "Cinematic T2V",
+            "wan2.1_t2v_1.3B_fp16.safetensors",
+            "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+            "wan_2.1_vae.safetensors", "clip_vision_h.safetensors",
+            "", 1.0, "cinematic", "safe_stable", "best"),
+        new("i2v-quality", "Image vers vidéo / qualité", "Image to video / quality",
+            "wan2.1_i2v_480p_14B_fp8_e4m3fn.safetensors",
+            "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+            "wan_2.1_vae.safetensors", "clip_vision_h.safetensors",
+            "", 1.0, "cinematic", "identity", "best"),
+        new("portrait", "Portrait vidéo", "Portrait video",
+            "wan2.1_t2v_1.3B_fp16.safetensors",
+            "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+            "wan_2.1_vae.safetensors", "clip_vision_h.safetensors",
+            "", 1.0, "portrait", "identity", "quality"),
+        new("product", "Produit / publicité", "Product / commercial",
+            "wan2.1_t2v_1.3B_fp16.safetensors",
+            "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+            "wan_2.1_vae.safetensors", "clip_vision_h.safetensors",
+            "", 1.0, "product", "safe_stable", "quality"),
+        new("landscape", "Paysage cinématique", "Cinematic landscape",
+            "wan2.1_t2v_1.3B_fp16.safetensors",
+            "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+            "wan_2.1_vae.safetensors", "clip_vision_h.safetensors",
+            "", 1.0, "landscape", "safe_stable", "quality"),
+        new("photorealistic", "Photoréaliste", "Photorealistic",
+            "wan2.1_t2v_1.3B_fp16.safetensors",
+            "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+            "wan_2.1_vae.safetensors", "clip_vision_h.safetensors",
+            "", 1.0, "photorealistic", "safe_stable", "best"),
+        new("anime", "Anime vidéo", "Anime video",
+            "wan2.1_t2v_1.3B_fp16.safetensors",
+            "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+            "wan_2.1_vae.safetensors", "clip_vision_h.safetensors",
+            "", 1.0, "anime", "animation", "quality"),
+        new("scifi", "Science-fiction vidéo", "Sci-fi video",
+            "wan2.1_t2v_1.3B_fp16.safetensors",
+            "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+            "wan_2.1_vae.safetensors", "clip_vision_h.safetensors",
+            "", 1.0, "scifi", "safe_stable", "best"),
+        new("lowlight", "Nuit / basse lumière", "Night / low light",
+            "wan2.1_t2v_1.3B_fp16.safetensors",
+            "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+            "wan_2.1_vae.safetensors", "clip_vision_h.safetensors",
+            "", 1.0, "lowlight", "safe_stable", "quality"),
+        new("max-quality", "Qualité maximale", "Maximum quality",
+            "wan2.1_t2v_1.3B_fp16.safetensors",
+            "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+            "wan_2.1_vae.safetensors", "clip_vision_h.safetensors",
+            "", 1.0, "max-quality", "safe_stable", "best"),
+        new("erotic", "Glamour / érotique 18+", "Glamour / erotic 18+",
+            "wan2.1_t2v_1.3B_fp16.safetensors",
+            "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+            "wan_2.1_vae.safetensors", "clip_vision_h.safetensors",
+            "", 1.0, "erotic", "adult-erotic", "quality"),
+        new("adult-explicit", "Adulte explicite 18+", "Explicit adult 18+",
+            "wan2.1_t2v_1.3B_fp16.safetensors",
+            "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+            "wan_2.1_vae.safetensors", "clip_vision_h.safetensors",
+            "", 1.0, "adult-explicit", "adult-explicit", "best")
+    ];
+
+    /// <summary>
+    /// Indique qu’un profil complet est en cours d’application afin d’éviter
+    /// les sauvegardes intermédiaires déclenchées par les changements de contrôles.
+    /// </summary>
+    private bool _applyingPipelinePreset;
+
+    /// <summary>
+    /// Rafraîchit les libellés traduits des profils complets tout en conservant
+    /// les identifiants sélectionnés dans les réglages.
+    /// </summary>
+    private void RefreshPipelinePresetTranslations()
+    {
+        if (_imagePipelinePresetCombo is null ||
+            _videoPipelinePresetCombo is null)
+        {
+            return;
+        }
+
+        var previous = _applyingPipelinePreset;
+        _applyingPipelinePreset = true;
+        try
+        {
+            _imagePipelinePresetLabel.Text = L10n.Pick(_s.Language, "Profil", "Profile");
+            _videoPipelinePresetLabel.Text = L10n.Pick(_s.Language, "Profil", "Profile");
+            FillPipelinePresetCombo(_imagePipelinePresetCombo, ImagePipelinePresets, _s.ImagePipelinePreset);
+            FillPipelinePresetCombo(_videoPipelinePresetCombo, VideoPipelinePresets, _s.VideoPipelinePreset);
+        }
+        finally
+        {
+            _applyingPipelinePreset = previous;
+        }
+    }
+
+    /// <summary>
+    /// Remplit les sélecteurs de profils complets et branche leur application.
+    /// </summary>
+    private void InitializePipelinePresetUi()
+    {
+        FillPipelinePresetCombo(_imagePipelinePresetCombo, ImagePipelinePresets, _s.ImagePipelinePreset);
+        FillPipelinePresetCombo(_videoPipelinePresetCombo, VideoPipelinePresets, _s.VideoPipelinePreset);
+
+        _imagePipelinePresetCombo.SelectedIndexChanged += (_, _) =>
+            SafeUiAction(
+                L10n.Pick(_s.Language, "Profil complet Image", "Image pipeline profile"),
+                () => ApplySelectedPipelinePreset(video: false));
+
+        _videoPipelinePresetCombo.SelectedIndexChanged += (_, _) =>
+            SafeUiAction(
+                L10n.Pick(_s.Language, "Profil complet Vidéo", "Video pipeline profile"),
+                () => ApplySelectedPipelinePreset(video: true));
+
+        _generationTemplateTips.SetToolTip(
+            _imagePipelinePresetCombo,
+            L10n.Pick(
+                _s.Language,
+                "Applique modèle, encodeur, VAE, LoRA et presets Image sans téléchargement automatique.",
+                "Applies Image model, encoder, VAE, LoRA and presets without automatic downloads."));
+        _generationTemplateTips.SetToolTip(
+            _videoPipelinePresetCombo,
+            L10n.Pick(
+                _s.Language,
+                "Applique modèle Wan, encodeur, VAE, CLIP Vision, LoRA et qualité sans téléchargement automatique.",
+                "Applies Wan model, encoder, VAE, CLIP Vision, LoRA and quality without automatic downloads."));
+
+        // Un profil mémorisé peut ne plus correspondre aux composants ou réglages
+        // réellement actifs. Au démarrage on recalcule donc l'étiquette affichée
+        // sans écrire settings.json.
+        SynchronizePipelinePresetSelection(
+            video: false,
+            persist: false);
+        SynchronizePipelinePresetSelection(
+            video: true,
+            persist: false);
+    }
+
+    /// <summary>
+    /// Remplit une ComboBox de profils en conservant l’identifiant persistant.
+    /// </summary>
+    private void FillPipelinePresetCombo(
+        ComboBox combo,
+        IEnumerable<PipelinePreset> presets,
+        string selectedId)
+    {
+        combo.BeginUpdate();
+        try
+        {
+            combo.Items.Clear();
+            foreach (var preset in presets)
+            {
+                combo.Items.Add(new TemplateComboItem(
+                    preset.Id,
+                    L10n.IsEnglish(_s.Language) ? preset.En : preset.Fr));
+            }
+
+            combo.SelectedItem =
+                combo.Items.OfType<TemplateComboItem>()
+                    .FirstOrDefault(item => item.Id.Equals(selectedId, StringComparison.OrdinalIgnoreCase))
+                ?? combo.Items.Cast<object>().FirstOrDefault();
+        }
+        finally
+        {
+            combo.EndUpdate();
+        }
+    }
+
+    /// <summary>
+    /// Recalcule le profil complet qui correspond réellement au pipeline courant.
+    /// Lorsque les composants ou paramètres ont été modifiés manuellement et ne
+    /// correspondent plus exactement à un profil prédéfini, le sélecteur passe
+    /// automatiquement à <c>Personnalisé</c>.
+    /// </summary>
+    private void SynchronizePipelinePresetSelection(
+        bool video,
+        bool persist)
+    {
+        if (_applyingPipelinePreset)
+            return;
+
+        var combo = video
+            ? _videoPipelinePresetCombo
+            : _imagePipelinePresetCombo;
+
+        if (combo is null)
+            return;
+
+        var detectedId = DetectPipelinePresetId(video);
+        var previousId = video
+            ? _s.VideoPipelinePreset
+            : _s.ImagePipelinePreset;
+
+        var changed = !string.Equals(
+            previousId,
+            detectedId,
+            StringComparison.OrdinalIgnoreCase);
+
+        _applyingPipelinePreset = true;
+        try
+        {
+            if (video)
+                _s.VideoPipelinePreset = detectedId;
+            else
+                _s.ImagePipelinePreset = detectedId;
+
+            var item = combo.Items
+                .OfType<TemplateComboItem>()
+                .FirstOrDefault(candidate =>
+                    candidate.Id.Equals(
+                        detectedId,
+                        StringComparison.OrdinalIgnoreCase));
+
+            if (item is not null &&
+                !ReferenceEquals(combo.SelectedItem, item))
+            {
+                combo.SelectedItem = item;
+            }
+        }
+        finally
+        {
+            _applyingPipelinePreset = false;
+        }
+
+        if (persist && changed)
+            PersistSettingsIfAllowed();
+    }
+
+    /// <summary>
+    /// Recherche le premier profil complet dont les composants et paramètres
+    /// correspondent exactement à l’état courant. Retourne <c>custom</c> si
+    /// aucune définition prédéfinie ne représente fidèlement le pipeline.
+    /// </summary>
+    private string DetectPipelinePresetId(bool video)
+    {
+        var presets = video
+            ? VideoPipelinePresets
+            : ImagePipelinePresets;
+
+        return presets
+            .Where(preset =>
+                !preset.Id.Equals(
+                    "custom",
+                    StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault(preset =>
+                PipelinePresetMatchesCurrent(
+                    preset,
+                    video))
+            ?.Id
+            ?? "custom";
+    }
+
+    /// <summary>
+    /// Vérifie qu’un profil complet décrit exactement les composants, LoRA,
+    /// presets et paramètres numériques actuellement actifs.
+    /// </summary>
+    private bool PipelinePresetMatchesCurrent(
+        PipelinePreset preset,
+        bool video)
+    {
+        if (video)
+        {
+            if (!PipelineTextEquals(_s.VideoModel, preset.Model) ||
+                !PipelineTextEquals(_s.VideoTextEncoderModel, preset.Encoder) ||
+                !PipelineTextEquals(_s.VideoVaeModel, preset.Vae) ||
+                !PipelineTextEquals(_s.VideoClipVisionModel, preset.ClipVision) ||
+                !PipelineTextEquals(_s.VideoLora, preset.Lora) ||
+                !PipelineTextEquals(_s.VideoStyleTemplate, preset.Style) ||
+                !PipelineTextEquals(_s.VideoNegativeTemplate, preset.Negative) ||
+                !PipelineTextEquals(_s.VideoQualityPreset, preset.Quality))
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(preset.Lora) &&
+                !PipelineNumberEquals(
+                    _s.VideoLoraStrength,
+                    preset.LoraStrength))
+            {
+                return false;
+            }
+
+            var objective =
+                GenerationTemplates.FindVideoSettings(
+                    preset.Style);
+            if (objective is null)
+                return false;
+
+            var quality = VideoQualityPresets.FirstOrDefault(
+                item => item.Id.Equals(
+                    preset.Quality,
+                    StringComparison.OrdinalIgnoreCase));
+
+            var qualityOverridesSampling =
+                quality is { Steps: > 0 };
+
+            var expectedSteps =
+                qualityOverridesSampling
+                    ? quality!.Steps
+                    : objective.Steps;
+            var expectedCfg =
+                qualityOverridesSampling
+                    ? 6d
+                    : objective.Cfg;
+            var expectedShift =
+                qualityOverridesSampling
+                    ? 8d
+                    : objective.SamplingShift;
+            var expectedSampler =
+                qualityOverridesSampling
+                    ? "uni_pc"
+                    : objective.Sampler;
+            var expectedScheduler =
+                qualityOverridesSampling
+                    ? "simple"
+                    : objective.Scheduler;
+
+            return
+                _s.VideoWidth == objective.Width &&
+                _s.VideoHeight == objective.Height &&
+                _s.VideoFrames == objective.Frames &&
+                _s.VideoFps == objective.Fps &&
+                _s.VideoSteps == expectedSteps &&
+                PipelineNumberEquals(
+                    _s.VideoCfg,
+                    expectedCfg) &&
+                PipelineNumberEquals(
+                    _s.VideoSamplingShift,
+                    expectedShift) &&
+                PipelineTextEquals(
+                    _s.VideoSampler,
+                    expectedSampler) &&
+                PipelineTextEquals(
+                    _s.VideoScheduler,
+                    expectedScheduler);
+        }
+
+        if (!PipelineTextEquals(_s.FluxModel, preset.Model) ||
+            !PipelineTextEquals(_s.TextEncoderModel, preset.Encoder) ||
+            !PipelineTextEquals(_s.VaeModel, preset.Vae) ||
+            !PipelineTextEquals(_s.ImageLora, preset.Lora) ||
+            !PipelineTextEquals(_s.ImageStyleTemplate, preset.Style) ||
+            !PipelineTextEquals(_s.ImageNegativeTemplate, preset.Negative))
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(preset.Lora) &&
+            !PipelineNumberEquals(
+                _s.ImageLoraStrength,
+                preset.LoraStrength))
+        {
+            return false;
+        }
+
+        var imageObjective =
+            GenerationTemplates.FindImageSettings(
+                preset.Style);
+        if (imageObjective is null)
+            return false;
+
+        return
+            _s.DefaultWidth == imageObjective.Width &&
+            _s.DefaultHeight == imageObjective.Height &&
+            _s.DefaultSteps == imageObjective.Steps &&
+            PipelineNumberEquals(
+                _s.ImageCfg,
+                imageObjective.Cfg);
+    }
+
+    /// <summary>
+    /// Compare deux identifiants de pipeline sans tenir compte de la casse et
+    /// traite les valeurs nulles comme des chaînes vides.
+    /// </summary>
+    private static bool PipelineTextEquals(
+        string? left,
+        string? right) =>
+        string.Equals(
+            left?.Trim() ?? string.Empty,
+            right?.Trim() ?? string.Empty,
+            StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Compare deux paramètres numériques de pipeline avec une petite tolérance
+    /// afin d’absorber les conversions decimal/double des contrôles WinForms.
+    /// </summary>
+    private static bool PipelineNumberEquals(
+        double left,
+        double right) =>
+        Math.Abs(left - right) < 0.0001d;
+
+    /// <summary>
+    /// Applique le profil complet choisi. Les composants absents ne remplacent
+    /// jamais une configuration valide et sont listés dans la barre d’état.
+    /// </summary>
+    private void ApplySelectedPipelinePreset(bool video)
+    {
+        if (_applyingPipelinePreset)
+            return;
+
+        var combo = video ? _videoPipelinePresetCombo : _imagePipelinePresetCombo;
+        if (combo.SelectedItem is not TemplateComboItem selected)
+            return;
+
+        var presets = video ? VideoPipelinePresets : ImagePipelinePresets;
+        var preset = presets.FirstOrDefault(item =>
+            item.Id.Equals(selected.Id, StringComparison.OrdinalIgnoreCase));
+        if (preset is null)
+            return;
+
+        if (preset.Id.Equals(
+                "custom",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _applyingPipelinePreset = true;
+            try
+            {
+                if (video)
+                    _s.VideoPipelinePreset = "custom";
+                else
+                    _s.ImagePipelinePreset = "custom";
+
+                PersistSettingsIfAllowed();
+            }
+            finally
+            {
+                _applyingPipelinePreset = false;
+            }
+
+            return;
+        }
+
+        var missing = new List<string>();
+        var root = PortablePreflight.GetComfyRoot(_s);
+
+        _applyingPipelinePreset = true;
+        _updatingGenerationTemplateUi = true;
+        try
+        {
+            if (video)
+            {
+                TryAssignInstalledPipelineFile(Path.Combine(root, "models", "diffusion_models"), preset.Model,
+                    value => _s.VideoModel = value, missing, "modèle Wan");
+                TryAssignInstalledTextEncoder(preset.Encoder, value => _s.VideoTextEncoderModel = value,
+                    missing, "encodeur");
+                TryAssignInstalledPipelineFile(Path.Combine(root, "models", "vae"), preset.Vae,
+                    value => _s.VideoVaeModel = value, missing, "VAE");
+                TryAssignInstalledPipelineFile(Path.Combine(root, "models", "clip_vision"), preset.ClipVision,
+                    value => _s.VideoClipVisionModel = value, missing, "CLIP Vision");
+                ApplyPipelineLora(preset, video: true, missing);
+                _s.VideoStyleTemplate = preset.Style;
+                _s.VideoNegativeTemplate = preset.Negative;
+                _s.VideoQualityPreset = preset.Quality;
+                _s.VideoPipelinePreset = preset.Id;
+                SelectTemplateById(_videoStyleTemplateCombo, preset.Style);
+                SelectTemplateById(_videoNegativeTemplateCombo, preset.Negative);
+                ApplyVideoObjectiveSettings(preset.Style);
+                ApplyPipelineVideoQuality(preset.Quality);
+            }
+            else
+            {
+                TryAssignInstalledPipelineFile(Path.Combine(root, "models", "diffusion_models"), preset.Model,
+                    value => _s.FluxModel = value, missing, "modèle FLUX.2");
+                TryAssignInstalledTextEncoder(preset.Encoder, value => _s.TextEncoderModel = value,
+                    missing, "encodeur");
+                TryAssignInstalledPipelineFile(Path.Combine(root, "models", "vae"), preset.Vae,
+                    value => _s.VaeModel = value, missing, "VAE");
+                ApplyPipelineLora(preset, video: false, missing);
+                _s.ImageStyleTemplate = preset.Style;
+                _s.ImageNegativeTemplate = preset.Negative;
+                _s.ImagePipelinePreset = preset.Id;
+                SelectTemplateById(_imageStyleTemplateCombo, preset.Style);
+                SelectTemplateById(_imageNegativeTemplateCombo, preset.Negative);
+                ApplyImageObjectiveSettings(preset.Style);
+            }
+
+            PersistSettingsIfAllowed();
+            RefreshRuntimeModelChoicesV36();
+            RefreshLoraChoicesV37();
+            RefreshFeatureAvailability();
+            RefreshVideoModelStatus();
+            UpdateMaximumQualitySharpnessUi();
+
+            var status = missing.Count == 0
+                ? L10n.Pick(_s.Language,
+                    $"Profil « {preset.Fr} » appliqué.",
+                    $"Profile “{preset.En}” applied.")
+                : L10n.Pick(_s.Language,
+                    $"Profil « {preset.Fr} » appliqué partiellement · manquant : {string.Join(", ", missing)}.",
+                    $"Profile “{preset.En}” partially applied · missing: {string.Join(", ", missing)}.");
+            if (video)
+                _videoStatus.Text = status;
+            else
+                _genText.Text = status;
+        }
+        finally
+        {
+            _updatingGenerationTemplateUi = false;
+            _applyingPipelinePreset = false;
+        }
+
+        // Un profil incomplet n'est jamais considéré comme actif, même si
+        // les anciens réglages portent encore les mêmes noms de fichiers.
+        if (missing.Count > 0)
+        {
+            _applyingPipelinePreset = true;
+            try
+            {
+                if (video)
+                    _s.VideoPipelinePreset = "custom";
+                else
+                    _s.ImagePipelinePreset = "custom";
+
+                var customItem = combo.Items.OfType<TemplateComboItem>()
+                    .FirstOrDefault(item => item.Id == "custom");
+                if (customItem is not null)
+                    combo.SelectedItem = customItem;
+            }
+            finally
+            {
+                _applyingPipelinePreset = false;
+            }
+
+            PersistSettingsIfAllowed();
+        }
+        else
+        {
+            SynchronizePipelinePresetSelection(video, persist: true);
+        }
+    }
+
+    /// <summary>
+    /// Affecte un composant uniquement si le fichier existe déjà sur le disque.
+    /// </summary>
+    private static void TryAssignInstalledPipelineFile(
+        string folder,
+        string fileName,
+        Action<string> assign,
+        ICollection<string> missing,
+        string label)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) return;
+        if (File.Exists(Path.Combine(folder, fileName)))
+        {
+            assign(fileName);
+            return;
+        }
+        missing.Add($"{label}: {fileName}");
+    }
+
+    /// <summary>
+    /// Affecte un encodeur texte depuis models/text_encoders ou models/clip.
+    /// </summary>
+    private void TryAssignInstalledTextEncoder(
+        string fileName,
+        Action<string> assign,
+        ICollection<string> missing,
+        string label)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) return;
+        var path = PortablePreflight.GetComfyTextEncoderPath(_s, fileName);
+        if (File.Exists(path))
+        {
+            assign(fileName);
+            return;
+        }
+        missing.Add($"{label}: {fileName}");
+    }
+
+    /// <summary>
+    /// Active le LoRA d’un profil lorsqu’il est installé ; un profil sans LoRA
+    /// désactive explicitement le LoRA précédent.
+    /// </summary>
+    private void ApplyPipelineLora(PipelinePreset preset, bool video, ICollection<string> missing)
+    {
+        if (string.IsNullOrWhiteSpace(preset.Lora))
+        {
+            if (video) _s.VideoLora = string.Empty; else _s.ImageLora = string.Empty;
+            return;
+        }
+        var path = Path.Combine(PortablePreflight.GetComfyRoot(_s), "models", "loras", preset.Lora);
+        if (!File.Exists(path))
+        {
+            if (video) _s.VideoLora = string.Empty; else _s.ImageLora = string.Empty;
+            missing.Add($"LoRA: {preset.Lora}");
+            return;
+        }
+        if (video)
+        {
+            _s.VideoLora = preset.Lora;
+            _s.VideoLoraStrength = preset.LoraStrength;
+            _videoLoraStrength.Value = Math.Clamp((decimal)preset.LoraStrength,
+                _videoLoraStrength.Minimum, _videoLoraStrength.Maximum);
+        }
+        else
+        {
+            _s.ImageLora = preset.Lora;
+            _s.ImageLoraStrength = preset.LoraStrength;
+            _imageLoraStrength.Value = Math.Clamp((decimal)preset.LoraStrength,
+                _imageLoraStrength.Minimum, _imageLoraStrength.Maximum);
+        }
+    }
+
+    /// <summary>
+    /// Sélectionne un preset par identifiant indépendamment du libellé traduit.
+    /// </summary>
+    private static void SelectTemplateById(ComboBox combo, string id)
+    {
+        var item = combo.Items.OfType<TemplateComboItem>()
+            .FirstOrDefault(candidate => candidate.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        if (item is not null) combo.SelectedItem = item;
+    }
+
+    /// <summary>
+    /// Applique la qualité vidéo d’un profil sans lancer une chaîne de
+    /// sauvegardes intermédiaires.
+    /// </summary>
+    private void ApplyPipelineVideoQuality(string id)
+    {
+        var preset = VideoQualityPresets.FirstOrDefault(item =>
+            item.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+        if (preset is null || preset.Steps <= 0) return;
+        var previous = _applyingVideoQualityPreset;
+        _applyingVideoQualityPreset = true;
+        try
+        {
+            _videoSteps.Value = Math.Clamp(preset.Steps,
+                Decimal.ToInt32(_videoSteps.Minimum), Decimal.ToInt32(_videoSteps.Maximum));
+            _videoCfg.Value = 6m;
+            _videoSamplingShift.Value = 8m;
+            _videoSampler.SelectedItem = "uni_pc";
+            _videoScheduler.SelectedItem = "simple";
+            _s.VideoSteps = preset.Steps;
+            _s.VideoCfg = 6d;
+            _s.VideoSamplingShift = 8d;
+            _s.VideoSampler = "uni_pc";
+            _s.VideoScheduler = "simple";
+            _s.VideoQualityPreset = id;
+            var item = _videoQualityCombo.Items.OfType<TemplateComboItem>()
+                .FirstOrDefault(candidate => candidate.Id.Equals(id, StringComparison.OrdinalIgnoreCase));
+            if (item is not null) _videoQualityCombo.SelectedItem = item;
+        }
+        finally
+        {
+            _applyingVideoQualityPreset = previous;
+        }
+        UpdateVideoQualityHint();
+    }
+
+    /// <summary>
+    /// Applique les règles de <c>ApplyImageObjectiveSettings</c> à l’état courant puis synchronise les contrôles affectés.
+    /// </summary>
     private void ApplyImageObjectiveSettings(string id)
     {
         var preset = GenerationTemplates.FindImageSettings(id);
@@ -4199,6 +5899,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Applique les règles de <c>ApplyVideoObjectiveSettings</c> à l’état courant puis synchronise les contrôles affectés.
+    /// </summary>
     private void ApplyVideoObjectiveSettings(string id)
     {
         var preset = GenerationTemplates.FindVideoSettings(id);
@@ -4283,10 +5986,12 @@ public partial class MainForm : Form
         UpdateVideoQualityHint();
     }
 
+    /// <summary>
+    /// Branche les actions d’installation et actualise l’état d’installation à l’exécution.
+    /// La disposition statique de l’onglet Installation appartient à MainForm.Designer.cs.
+    /// </summary>
     private void InitializeInstallationVideoUi()
     {
-
-
         _generationTemplateTips.SetToolTip(
             _installVideoModelsStatus,
             _installVideoModelsStatus.Text);
@@ -4294,15 +5999,6 @@ public partial class MainForm : Form
             _generationTemplateTips.SetToolTip(
                 _installVideoModelsStatus,
                 _installVideoModelsStatus.Text);
-
-
-        _installLog.Location = new Point(18, 412);
-        _installLog.Size = new Size(1018, 216);
-
-        tabInstallation.Controls.Add(_installImageModelsButton);
-        tabInstallation.Controls.Add(_installVideoModelsButton);
-        tabInstallation.Controls.Add(_installVideoModelsStatus);
-        tabInstallation.Controls.Add(_installComponentsStatus);
 
         _installImageModelsButton.Click += async (_, _) =>
             await SafeUiAsync(
@@ -4323,6 +6019,9 @@ public partial class MainForm : Form
     }
 
 
+    /// <summary>
+    /// Installe les composants gérés par <c>InstallModelGroupAsync</c> puis actualise l’état de disponibilité correspondant.
+    /// </summary>
     private async Task InstallModelGroupAsync(
         string label,
         Func<CancellationToken, Task> install)
@@ -4342,6 +6041,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Installe les composants gérés par <c>InstallModelGroupCoreAsync</c> puis actualise l’état de disponibilité correspondant.
+    /// </summary>
     private async Task InstallModelGroupCoreAsync(
         string label,
         Func<CancellationToken, Task> install)
@@ -4384,6 +6086,9 @@ public partial class MainForm : Form
     }
 
 
+    /// <summary>
+    /// Applique les règles de <c>ApplyGenerationExperienceTranslations</c> à l’état courant puis synchronise les contrôles affectés.
+    /// </summary>
     private void ApplyGenerationExperienceTranslations()
     {
         if (_imageNegativeTemplateLabel is null)
@@ -4422,6 +6127,9 @@ public partial class MainForm : Form
         RefreshInstallationComponentsStatus();
     }
 
+    /// <summary>
+    /// Remplit le contrôle ou la collection géré par <c>FillImageTemplateCombos</c> à partir des données disponibles.
+    /// </summary>
     private void FillImageTemplateCombos()
     {
         FillTemplateCombo(
@@ -4436,6 +6144,9 @@ public partial class MainForm : Form
                 new TemplateComboItem(x.Id, GenerationTemplates.Display(x, _s.Language))),
             _s.ImageNegativeTemplate);
     }
+    /// <summary>
+    /// Remplit le contrôle ou la collection géré par <c>FillVideoTemplateCombos</c> à partir des données disponibles.
+    /// </summary>
     private void FillVideoTemplateCombos()
     {
         FillTemplateCombo(
@@ -4453,6 +6164,9 @@ public partial class MainForm : Form
         UpdateTemplateToolTips();
     }
 
+    /// <summary>
+    /// Met à jour l’état géré par <c>UpdateMaximumQualitySharpnessUi</c> et propage la nouvelle valeur aux éléments concernés.
+    /// </summary>
     private void UpdateMaximumQualitySharpnessUi()
     {
         var imageEnabled =
@@ -4512,6 +6226,9 @@ public partial class MainForm : Form
                 "Sharpness applied only to Maximum quality video pass 2. 0 = no sharpening."));
     }
 
+    /// <summary>
+    /// Actualise les données gérées par <c>RefreshImageSharpnessPreviewAsync</c> à partir de l’état courant et synchronise les contrôles dépendants.
+    /// </summary>
     private async Task RefreshImageSharpnessPreviewAsync(
         CancellationToken cancellationToken)
     {
@@ -4554,6 +6271,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Actualise les données gérées par <c>RefreshVideoSharpnessPreviewAsync</c> à partir de l’état courant et synchronise les contrôles dépendants.
+    /// </summary>
     private async Task RefreshVideoSharpnessPreviewAsync(
         CancellationToken cancellationToken)
     {
@@ -4596,6 +6316,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Dessine les éléments visuels gérés par <c>DrawImageSharpnessComparison</c> à partir des limites et du thème courants.
+    /// </summary>
     private void DrawImageSharpnessComparison(
         object? sender,
         PaintEventArgs e)
@@ -4664,6 +6387,9 @@ public partial class MainForm : Form
         e.Graphics.DrawEllipse(dividerPen, handleRect);
     }
 
+    /// <summary>
+    /// Calcule le rectangle source à afficher pour produire un zoom centré et borné dans l’aperçu Image.
+    /// </summary>
     private static Rectangle CalculateZoomRectangle(
         Size imageSize,
         Rectangle bounds)
@@ -4692,6 +6418,9 @@ public partial class MainForm : Form
             height);
     }
 
+    /// <summary>
+    /// Déplace le séparateur de comparaison avant/après de netteté et invalide le panneau pour redessiner le rendu comparatif.
+    /// </summary>
     private void MoveImageSharpnessDivider(int mouseX)
     {
         var width =
@@ -4709,6 +6438,9 @@ public partial class MainForm : Form
                 _imageSharpnessComparisonSlider.Maximum);
     }
 
+    /// <summary>
+    /// Définit l’état géré par <c>SetImageSharpnessComparisonVisible</c> et applique immédiatement ses effets sur l’interface concernée.
+    /// </summary>
     private void SetImageSharpnessComparisonVisible(bool visible)
     {
         _imagePreviewViewport.Enabled = visible;
@@ -4736,6 +6468,9 @@ public partial class MainForm : Form
                 : L10n.Pick(_s.Language, "Aperçu avant/après", "Before/after preview");
     }
 
+    /// <summary>
+    /// Définit l’état géré par <c>SetVideoSharpnessComparisonVisible</c> et applique immédiatement ses effets sur l’interface concernée.
+    /// </summary>
     private void SetVideoSharpnessComparisonVisible(bool visible)
     {
         _videoSharpnessPreviewPanel.Visible = visible;
@@ -4747,6 +6482,9 @@ public partial class MainForm : Form
                 : L10n.Pick(_s.Language, "Aperçu avant/après", "Before/after preview");
     }
 
+    /// <summary>
+    /// Charge les données nécessaires à <c>LoadPreviewPicture</c> et les projette dans l’état ou l’interface correspondante.
+    /// </summary>
     private static void LoadPreviewPicture(PictureBox pictureBox, string path)
     {
         using var stream = new FileStream(
@@ -4760,6 +6498,9 @@ public partial class MainForm : Form
         old?.Dispose();
     }
 
+    /// <summary>
+    /// Tente de supprimer un fichier temporaire d’aperçu sans propager une erreur de nettoyage vers l’interface.
+    /// </summary>
     private static void TryDeletePreviewFile(string path)
     {
         try
@@ -4772,6 +6513,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Met à jour l’état géré par <c>UpdateTemplateToolTips</c> et propage la nouvelle valeur aux éléments concernés.
+    /// </summary>
     private void UpdateTemplateToolTips()
     {
         if (_imageStyleTemplateCombo is not null)
@@ -4803,6 +6547,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Remplit le contrôle ou la collection géré par <c>FillTemplateCombo</c> à partir des données disponibles.
+    /// </summary>
     private static void FillTemplateCombo(
         ComboBox combo,
         IEnumerable<TemplateComboItem> items,
@@ -4820,8 +6567,14 @@ public partial class MainForm : Form
         combo.EndUpdate();
     }
 
+    /// <summary>
+    /// Sélectionne la valeur gérée par <c>SelectedTemplateId</c> et synchronise les contrôles associés.
+    /// </summary>
     private static string SelectedTemplateId(ComboBox combo, string fallback) =>
         combo.SelectedItem is TemplateComboItem item ? item.Id : fallback;
+    /// <summary>
+    /// Applique les règles de <c>ApplyImageStyleTemplate</c> à l’état courant puis synchronise les contrôles affectés.
+    /// </summary>
     private string ApplyImageStyleTemplate(string prompt)
     {
         var style = GenerationTemplates.FindStyle(
@@ -4831,6 +6584,9 @@ public partial class MainForm : Form
         return GenerationTemplates.ApplyPrompt(prompt, style);
     }
 
+    /// <summary>
+    /// Applique les règles de <c>ApplyImageNegativeTemplate</c> à l’état courant puis synchronise les contrôles affectés.
+    /// </summary>
     private string ApplyImageNegativeTemplate(string negative)
     {
         var preset = GenerationTemplates.FindNegative(
@@ -4843,6 +6599,9 @@ public partial class MainForm : Form
         return GenerationTemplates.MergeNegative(negative, preset, style);
     }
 
+    /// <summary>
+    /// Applique les règles de <c>ApplyVideoStyleTemplate</c> à l’état courant puis synchronise les contrôles affectés.
+    /// </summary>
     private string ApplyVideoStyleTemplate(string prompt)
     {
         var style = GenerationTemplates.FindStyle(
@@ -4852,6 +6611,9 @@ public partial class MainForm : Form
         return GenerationTemplates.ApplyPrompt(prompt, style);
     }
 
+    /// <summary>
+    /// Applique les règles de <c>ApplyVideoNegativeTemplate</c> à l’état courant puis synchronise les contrôles affectés.
+    /// </summary>
     private string ApplyVideoNegativeTemplate(string negative)
     {
         var preset = GenerationTemplates.FindNegative(
@@ -4863,6 +6625,9 @@ public partial class MainForm : Form
 
         return GenerationTemplates.MergeNegative(negative, preset, style);
     }
+    /// <summary>
+    /// Reconstruit les cartes dynamiques de l’historique Image à partir des fichiers générés sur disque.
+    /// </summary>
     private void RefreshImageHistory()
     {
         if (_imageHistoryPanel is null)
@@ -4885,6 +6650,9 @@ public partial class MainForm : Form
             _imageHistoryPanel.Controls.Add(CreateImageHistoryCard(path));
     }
 
+    /// <summary>
+    /// Crée l’objet géré par <c>CreateImageHistoryCard</c> et initialise les propriétés nécessaires à son utilisation.
+    /// </summary>
     private Control CreateImageHistoryCard(string path)
     {
         var card = CreateHistoryCard();
@@ -4908,6 +6676,9 @@ public partial class MainForm : Form
         card.Controls.Add(label);
         return card;
     }
+    /// <summary>
+    /// Reconstruit les cartes dynamiques de l’historique Vidéo à partir des fichiers MP4 générés sur disque.
+    /// </summary>
     private void RefreshVideoHistory()
     {
         if (_videoHistoryPanel is null)
@@ -4927,6 +6698,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Crée l’objet géré par <c>CreateVideoHistoryCard</c> et initialise les propriétés nécessaires à son utilisation.
+    /// </summary>
     private Control CreateVideoHistoryCard(string path)
     {
         var card = CreateHistoryCard();
@@ -4970,6 +6744,9 @@ public partial class MainForm : Form
         return card;
     }
 
+    /// <summary>
+    /// Crée l’objet géré par <c>CreateHistoryCard</c> et initialise les propriétés nécessaires à son utilisation.
+    /// </summary>
     private static Panel CreateHistoryCard() =>
         new()
         {
@@ -4979,6 +6756,9 @@ public partial class MainForm : Form
             BorderStyle = BorderStyle.FixedSingle
         };
 
+    /// <summary>
+    /// Construit le texte court affiché sous une vignette d’historique à partir du nom du fichier et de ses métadonnées disponibles.
+    /// </summary>
     private static Label HistoryLabel(string path, int y, int height)
     {
         var name = Path.GetFileNameWithoutExtension(path);
@@ -4999,13 +6779,26 @@ public partial class MainForm : Form
         };
     }
 
+    /// <summary>
+    /// Ouvre la ressource gérée par <c>OpenHistoryFile</c> en appliquant les vérifications nécessaires.
+    /// </summary>
     private static void OpenHistoryFile(string path)
     {
         if (!File.Exists(path))
             return;
 
-        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        try
+        {
+            Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Write("Open history file", ex);
+        }
     }
+    /// <summary>
+    /// Charge les données nécessaires à <c>LoadImageThumbnail</c> et les projette dans l’état ou l’interface correspondante.
+    /// </summary>
     private static Image? LoadImageThumbnail(string path, Size size)
     {
         try
@@ -5020,6 +6813,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Libère les contrôles et images d’un panneau d’historique avant de reconstruire son contenu.
+    /// </summary>
     private static void ClearHistoryPanel(FlowLayoutPanel panel)
     {
         foreach (Control control in panel.Controls)
@@ -5034,6 +6830,9 @@ public partial class MainForm : Form
         panel.Controls.Clear();
     }
 
+    /// <summary>
+    /// Actualise les données gérées par <c>RefreshInstallationComponentsStatus</c> à partir de l’état courant et synchronise les contrôles dépendants.
+    /// </summary>
     private void RefreshInstallationComponentsStatus()
     {
         if (_installComponentsStatus is null)
@@ -5054,16 +6853,24 @@ public partial class MainForm : Form
             L10n.Pick(_s.Language, "Image", "Image"),
             StatusLine("FLUX.2", File.Exists(Path.Combine(
                 comfyRoot, "models", "diffusion_models", _s.FluxModel))),
-            StatusLine("Qwen text encoder", File.Exists(Path.Combine(
-                comfyRoot, "models", "text_encoders", _s.TextEncoderModel))),
+            StatusLine(
+                "Qwen text encoder",
+                File.Exists(
+                    PortablePreflight.GetComfyTextEncoderPath(
+                        _s,
+                        _s.TextEncoderModel))),
             StatusLine("FLUX VAE", File.Exists(Path.Combine(
                 comfyRoot, "models", "vae", _s.VaeModel))),
             string.Empty,
             L10n.Pick(_s.Language, "Vidéo", "Video"),
             StatusLine("Wan 2.1", File.Exists(Path.Combine(
                 comfyRoot, "models", "diffusion_models", _s.VideoModel))),
-            StatusLine("UMT5", File.Exists(Path.Combine(
-                comfyRoot, "models", "text_encoders", _s.VideoTextEncoderModel))),
+            StatusLine(
+                "UMT5",
+                File.Exists(
+                    PortablePreflight.GetComfyTextEncoderPath(
+                        _s,
+                        _s.VideoTextEncoderModel))),
             StatusLine("Wan VAE", File.Exists(Path.Combine(
                 comfyRoot, "models", "vae", _s.VideoVaeModel)))
         };
@@ -5071,11 +6878,17 @@ public partial class MainForm : Form
         _installComponentsStatus.Text = string.Join(Environment.NewLine, lines);
     }
 
+    /// <summary>
+    /// Construit une ligne d’état concise combinant le nom d’un composant, sa disponibilité et un détail facultatif.
+    /// </summary>
     private string StatusLine(string label, bool installed) =>
         installed
             ? $"  ✓ {label} — {L10n.Pick(_s.Language, "Installé", "Installed")}"
             : $"  ⚠ {label} — {L10n.Pick(_s.Language, "Manquant", "Missing")}";
 
+    /// <summary>
+    /// Actualise les données gérées par <c>RefreshInstallationVideoStatus</c> à partir de l’état courant et synchronise les contrôles dépendants.
+    /// </summary>
     private void RefreshInstallationVideoStatus()
     {
         if (_installVideoModelsStatus is null || _videoGenerator is null)
@@ -5087,6 +6900,9 @@ public partial class MainForm : Form
             : L10n.Pick(_s.Language, $"Wan vidéo : {missing.Count} modèle(s) manquant(s)", $"Wan video: {missing.Count} model(s) missing");
         _installVideoModelsStatus.ForeColor = missing.Count == 0 ? AppTheme.SuccessHover : AppTheme.Warning;
     }
+    /// <summary>
+    /// Réévalue la disponibilité des services et modèles locaux puis actualise l’état des fonctionnalités.
+    /// </summary>
     private void RefreshFeatureAvailability()
     {
         if (_tabVideo is null)
@@ -5097,7 +6913,8 @@ public partial class MainForm : Form
         var ollamaOk = File.Exists(PortablePaths.Resolve(_s.OllamaExe));
         var comfyOk = File.Exists(PortablePaths.Resolve(_s.ComfyPython)) &&
                       File.Exists(PortablePaths.Resolve(_s.ComfyMain));
-        var fluxOk = comfyOk && HasFluxModels();
+        var missingImage = Flux2Generator.GetMissingModels(_s);
+        var fluxOk = comfyOk && missingImage.Count == 0;
         var missingVideo = _videoGenerator.GetMissingModels();
         var videoOk = comfyOk && missingVideo.Count == 0;
 
@@ -5106,8 +6923,11 @@ public partial class MainForm : Form
             $"Capacités · OpenCode={(openCodeOk ? "OK" : "manquant")} · " +
             $"Ollama={(ollamaOk ? "OK" : "manquant")} · " +
             $"ComfyUI={(comfyOk ? "OK" : "manquant")} · " +
-            $"Image={(fluxOk ? "OK" : "manquante")} · " +
-            $"Vidéo={(videoOk ? "OK" : "manquante")}" +
+            $"Image={(fluxOk ? "OK" : "manquante")}" +
+            (missingImage.Count == 0
+                ? string.Empty
+                : " · " + string.Join(", ", missingImage.Select(x => x.Label))) +
+            $" · Vidéo={(videoOk ? "OK" : "manquante")}" +
             (missingVideo.Count == 0
                 ? string.Empty
                 : " · " + string.Join(", ", missingVideo.Select(x => x.Label))));
@@ -5118,30 +6938,35 @@ public partial class MainForm : Form
             L10n.Pick(_s.Language, "ComfyUI/WebView2 portable manque.", "Portable ComfyUI/WebView2 is missing."));
         SetFeatureTab(tabOllama, ollamaOk,
             L10n.Pick(_s.Language, "Ollama portable manque.", "Portable Ollama is missing."));
-        SetFeatureTab(tabGenerate, fluxOk,
-            L10n.Pick(_s.Language, "ComfyUI ou modèles FLUX.2 manquants.", "ComfyUI or FLUX.2 models are missing."));
+        var imageReason = comfyOk
+            ? L10n.Pick(
+                _s.Language,
+                "Dépendances Image manquantes : ",
+                "Missing Image dependencies: ") +
+              string.Join(", ", missingImage.Select(x => x.Label))
+            : L10n.Pick(
+                _s.Language,
+                "ComfyUI portable manque.",
+                "Portable ComfyUI is missing.");
+
+        SetFeatureTab(tabGenerate, fluxOk, imageReason);
         SetFeatureTab(_tabVideo, videoOk,
             L10n.Pick(_s.Language, "ComfyUI ou modèles Wan vidéo manquants.", "ComfyUI or Wan video models are missing."));
 
         RefreshInstallationVideoStatus();
         RefreshInstallationComponentsStatus();
     }
-
-    private bool HasFluxModels()
-    {
-        var root = PortablePreflight.GetComfyRoot(_s);
-        return File.Exists(Path.Combine(root, "models", "diffusion_models", _s.FluxModel)) &&
-               File.Exists(Path.Combine(root, "models", "text_encoders", _s.TextEncoderModel)) &&
-               File.Exists(Path.Combine(root, "models", "vae", _s.VaeModel));
-    }
+    /// <summary>
+    /// Définit l’état géré par <c>SetFeatureTab</c> et applique immédiatement ses effets sur l’interface concernée.
+    /// </summary>
     private void SetFeatureTab(TabPage page, bool enabled, string reason)
     {
         page.ToolTipText = enabled ? string.Empty : reason;
 
-        // Image and Video are editors as well as launch surfaces. Missing
-        // models/backends must block generation, not lock the entire page.
-        // Users still need access to prompts, dimensions, presets, model
-        // selectors and installation/configuration helpers.
+        // Image et Vidéo servent à la fois d’éditeurs et de surfaces de lancement.
+        // Les modèles ou backends manquants doivent bloquer la génération, pas
+        // verrouiller toute la page. L’utilisateur doit conserver l’accès aux
+        // prompts, dimensions, presets, sélecteurs et aides d’installation/configuration.
         if (page == tabGenerate || page == _tabVideo)
         {
             page.Enabled = true;
@@ -5171,6 +6996,9 @@ public partial class MainForm : Form
         _tabs.Invalidate();
     }
 
+    /// <summary>
+    /// Contrôle la navigation vers les onglets principaux et empêche uniquement les transitions qui seraient incohérentes pendant une opération bloquante.
+    /// </summary>
     private void MainTabs_Selecting(object? sender, TabControlCancelEventArgs e)
     {
         if (e.TabPage is null || e.TabPage.Enabled || e.TabPage == tabInstallation)
@@ -5187,13 +7015,25 @@ public partial class MainForm : Form
         BeginInvoke(() => _tabs.SelectedTab = tabInstallation);
     }
 
+        /// <summary>
+    /// Structure native SIZE transmise ? IShellItemImageFactory pour demander une miniature Windows aux dimensions exactes souhait?es.
+    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     private struct ShellSize
     {
+        /// <summary>
+    /// Largeur native demand?e ? IShellItemImageFactory lors de l?extraction d?une miniature Windows.
+    /// </summary>
         public int Width;
+        /// <summary>
+    /// Hauteur native demand?e ? IShellItemImageFactory lors de l?extraction d?une miniature Windows.
+    /// </summary>
         public int Height;
     }
 
+        /// <summary>
+    /// Options natives SIIGBF contr?lant la fa?on dont Windows extrait une miniature ou une ic?ne depuis IShellItemImageFactory.
+    /// </summary>
     [Flags]
     private enum ShellImageFlags
     {
@@ -5204,6 +7044,9 @@ public partial class MainForm : Form
         ThumbnailOnly = 0x08,
         InCacheOnly = 0x10
     }
+        /// <summary>
+    /// D?claration COM minimale de IShellItemImageFactory utilis?e pour demander ? l?Explorateur Windows une miniature de fichier sans charger le m?dia dans DreamRaster.
+    /// </summary>
     [ComImport]
     [Guid("bcc18b79-ba16-442f-80c4-8a59c30c463b")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -5216,17 +7059,26 @@ public partial class MainForm : Form
             out IntPtr bitmapHandle);
     }
 
+    /// <summary>
+    /// Importe la fonction Shell Windows qui transforme un chemin en objet IShellItem utilisable par les API de miniatures.
+    /// </summary>
     [DllImport("shell32.dll", CharSet = CharSet.Unicode, PreserveSig = false)]
     private static extern void SHCreateItemFromParsingName(
         [MarshalAs(UnmanagedType.LPWStr)] string path,
         IntPtr bindContext,
         ref Guid interfaceId,
+    /// <summary>
+    /// Libère un objet GDI natif créé lors de l’extraction d’une miniature Windows.
+    /// </summary>
         [MarshalAs(UnmanagedType.Interface)] out IShellItemImageFactory factory);
 
     [DllImport("gdi32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DeleteObject(IntPtr handle);
 
+    /// <summary>
+    /// Tente d’obtenir une miniature via le Shell Windows et retourne null si le format ou le fichier ne peut pas être prévisualisé.
+    /// </summary>
     private static Image? TryLoadShellThumbnail(string path, Size size)
     {
         IntPtr handle = IntPtr.Zero;
@@ -5255,262 +7107,43 @@ public partial class MainForm : Form
         }
     }
 
-    // =====================================================================
-    // MainForm.SettingsExperience
-    // =====================================================================
+    #endregion
+
+    #region Configuration, persistance et synchronisation des réglages
+
+    /// <summary>
+    /// Indique l’état interne « _loadingSettingsExperience » utilisé pour empêcher les mises à jour réentrantes ou incohérentes.
+    /// </summary>
     private bool _loadingSettingsExperience;
+    /// <summary>
+    /// Indique l’état interne « _configurationAutoSaveBusy » utilisé pour empêcher les mises à jour réentrantes ou incohérentes.
+    /// </summary>
     private bool _configurationAutoSaveBusy;
 
+    /// <summary>
+    /// Branche la persistance de la configuration et les comportements des réglages à l’exécution.
+    /// La propriété des contrôles, leurs positions, dimensions et styles statiques sont définis par le Designer.
+    /// </summary>
     private void InitializeSettingsExperienceUi()
     {
-        ReorderMainTabs();
-        MoveImageGenerationSettingsToImageTab();
-        ExtendVideoGenerationSettings();
-        AddVideoModelConfiguration();
         InitializeConfigurationAutoSave();
         WireGenerationSettingsPersistence();
         WireConfigurationAutoSave();
         UpdateVideoQualityHint();
     }
 
-    private void ReorderMainTabs()
-    {
-        var selected = _tabs.SelectedTab;
-        var order = new[]
-        {
-            tabDashboard,
-            tabGenerate,
-            _tabVideo,
-            tabConfiguration,
-            tabInstallation,
-            tabOpenCode,
-            tabComfy,
-            tabOllama,
-            tabLogs,
-            tabAbout
-        };
-
-        _tabs.SuspendLayout();
-        try
-        {
-            _tabs.TabPages.Clear();
-            _tabs.TabPages.AddRange(order);
-            _tabs.ItemSize = new Size(103, 28);
-            _tabs.SelectedTab = selected is not null && order.Contains(selected)
-                ? selected
-                : tabDashboard;
-        }
-        finally
-        {
-            _tabs.ResumeLayout();
-        }
-    }
-
-    private void MoveImageGenerationSettingsToImageTab()
-    {
-        // These controls keep their historical persisted names (DefaultWidth/Height/Steps)
-        // for settings.json compatibility, but belong visually to the Image feature.
-        tabGenerate.Controls.Add(lblCfgWidth);
-        tabGenerate.Controls.Add(numDefaultWidth);
-        tabGenerate.Controls.Add(lblCfgHeight);
-        tabGenerate.Controls.Add(numDefaultHeight);
-        tabGenerate.Controls.Add(lblCfgSteps);
-        tabGenerate.Controls.Add(numDefaultSteps);
-
-        lblCfgWidth.Text = "Largeur image";
-        lblCfgHeight.Text = "Hauteur image";
-        lblCfgSteps.Text = "Steps image";
-
-        lblCfgWidth.Location = new Point(18, 474);
-        lblCfgWidth.Size = new Size(90, 23);
-        numDefaultWidth.Location = new Point(108, 474);
-        numDefaultWidth.Size = new Size(74, 23);
-        numDefaultWidth.Increment = 64;
-
-        lblCfgHeight.Location = new Point(190, 474);
-        lblCfgHeight.Size = new Size(86, 23);
-        numDefaultHeight.Location = new Point(278, 474);
-        numDefaultHeight.Size = new Size(70, 23);
-        numDefaultHeight.Increment = 64;
-
-        lblCfgSteps.Location = new Point(18, 504);
-        lblCfgSteps.Size = new Size(90, 23);
-        numDefaultSteps.Location = new Point(108, 504);
-        numDefaultSteps.Size = new Size(74, 23);
-
-        tabGenerate.Controls.Add(_imageCfgLabel);
-        tabGenerate.Controls.Add(_imageCfg);
-
-        // Compact the left column so every Image setting remains visible.
-        _prompt.Size = new Size(330, 105);
-        _negativePromptLabel.Location = new Point(18, 190);
-        _negativePrompt.Location = new Point(18, 213);
-        _negativePrompt.Size = new Size(330, 52);
-
-        lblGenerationMode.Location = new Point(18, 274);
-        cmbGenerationMode.Location = new Point(18, 296);
-        lblInputImage.Location = new Point(18, 329);
-        txtInputImage.Location = new Point(18, 351);
-        txtInputImage.Size = new Size(178, 23);
-        btnBrowseInputImage.Location = new Point(202, 350);
-        btnBrowseInputImage.Size = new Size(80, 25);
-        btnClearInputImage.Location = new Point(288, 350);
-        btnClearInputImage.Size = new Size(60, 25);
-        lblImg2ImgStrength.Location = new Point(18, 384);
-        numImg2ImgStrength.Location = new Point(18, 406);
-
-        _seedLabel.Location = new Point(132, 386);
-        _seedLabel.Size = new Size(90, 18);
-        _seedInput.Location = new Point(132, 406);
-        _seedInput.Size = new Size(110, 23);
-        _randomSeedCheck.Location = new Point(248, 406);
-        _randomSeedCheck.Size = new Size(50, 23);
-
-        btnGenerate.Location = new Point(18, 545);
-        _benchmarkButton.Location = new Point(151, 545);
-        _genText.Location = new Point(18, 587);
-        _genProgress.Location = new Point(18, 621);
-    }
-
-    private void ExtendVideoGenerationSettings()
-    {
-        // Make room for the advanced sampling controls.
-        _videoPrompt.Size = new Size(390, 112);
-        _videoNegative.Location = new Point(18, 188);
-        _videoNegative.Size = new Size(390, 52);
-
-        RepositionVideoBaseControls();
-
-        _videoCfg.Name = "_videoCfg";
-
-        _videoSamplingShift.Name = "_videoSamplingShift";
-
-        _videoSampler.Name = "_videoSampler";
-
-        _videoScheduler.Name = "_videoScheduler";
-
-        _videoSeed.Enabled = !_videoRandomSeed.Checked;
-
-        _videoQualityHint.AutoSize = false;
-        _videoQualityHint.Size = new Size(390, 38);
-
-        _tabVideo.Controls.AddRange(
-        [
-            _videoCfgLabel,
-            _videoCfg,
-            _videoShiftLabel,
-            _videoSamplingShift,
-            _videoSamplerLabel,
-            _videoSampler,
-            _videoSchedulerLabel,
-            _videoScheduler,
-            _videoSeedLabel,
-            _videoSeed,
-            _videoRandomSeed,
-            _videoQualityHint
-        ]);
-
-        _videoRandomSeed.CheckedChanged += (_, _) =>
-        {
-            _videoSeed.Enabled = !_videoRandomSeed.Checked;
-            SaveVideoGenerationSettings();
-        };
-
-        _videoSteps.ValueChanged += (_, _) => UpdateVideoQualityHint();
-    }
-
-    private void RepositionVideoBaseControls()
-    {
-        // Labels are discovered by their current text because they are local variables
-        // in InitializeVideoUi. Their controls themselves already have stable fields.
-        foreach (var label in _tabVideo.Controls.OfType<Label>())
-        {
-            switch (label.Text)
-            {
-                case "Négatif / éléments à éviter":
-                    label.Location = new Point(18, 163);
-                    break;
-                case "Largeur":
-                    label.Location = new Point(18, 265);
-                    break;
-                case "Hauteur":
-                    label.Location = new Point(210, 265);
-                    break;
-                case "Frames":
-                    label.Location = new Point(18, 300);
-                    break;
-                case "FPS":
-                    label.Location = new Point(210, 300);
-                    break;
-                case "Steps":
-                    label.Text = "Steps vidéo";
-                    label.Location = new Point(18, 335);
-                    break;
-            }
-        }
-
-        _videoWidth.Location = new Point(90, 261);
-        _videoWidth.Size = new Size(100, 23);
-        _videoHeight.Location = new Point(292, 261);
-        _videoHeight.Size = new Size(116, 23);
-        _videoFrames.Location = new Point(90, 296);
-        _videoFrames.Size = new Size(100, 23);
-        _videoFps.Location = new Point(292, 296);
-        _videoFps.Size = new Size(116, 23);
-        _videoSteps.Location = new Point(90, 331);
-        _videoSteps.Size = new Size(100, 23);
-
-        _videoGenerateButton.Location = new Point(18, 478);
-        _videoCancelButton.Location = new Point(174, 478);
-        _videoRefreshButton.Location = new Point(290, 478);
-        _videoProgress.Location = new Point(18, 522);
-        _videoStatus.Location = new Point(18, 548);
-    }
 
 
 
-    private void AddVideoModelConfiguration()
-    {
-
-        _cfgVideoModel.Name = "_cfgVideoModel";
-        _cfgVideoTextEncoder.Name = "_cfgVideoTextEncoder";
-        _cfgVideoVae.Name = "_cfgVideoVae";
-
-
-        tabConfiguration.Controls.AddRange(
-        [
-            _cfgVideoModelLabel,
-            _cfgVideoTextEncoderLabel,
-            _cfgVideoVaeLabel,
-            _cfgVideoModel,
-            _cfgVideoTextEncoder,
-            _cfgVideoVae,
-            _cfgVideoClipVisionLabel,
-            _cfgVideoClipVision
-        ]);
-
-        // Reclaim the space previously used by Image generation defaults.
-        lblCfgVram.Location = new Point(18, 340);
-        numSafeVram.Location = new Point(150, 340);
-        lblCfgRam.Location = new Point(18, 373);
-        numSafeRam.Location = new Point(150, 373);
-
-        lblCfgConnections.Location = new Point(330, 340);
-        numDownloadConnections.Location = new Point(500, 340);
-        lblCfgBuffer.Location = new Point(620, 340);
-        numDownloadBuffer.Location = new Point(790, 340);
-        chkHardStopComfy.Location = new Point(330, 373);
-
-        lblCfgLanguage.Location = new Point(18, 414);
-        cmbLanguage.Location = new Point(150, 414);
-        chkAutoUpdates.Location = new Point(330, 414);
-        lblCfgGitHubRepo.Location = new Point(18, 452);
-        txtGitHubRepo.Location = new Point(150, 452);
-        chkInstallVisionModel.Location = new Point(18, 490);
-    }
 
 
 
+
+
+
+    /// <summary>
+    /// Initialise <c>InitializeConfigurationAutoSave</c>, prépare l’état et les contrôles nécessaires puis branche les comportements associés.
+    /// </summary>
     private void InitializeConfigurationAutoSave()
     {
 
@@ -5522,16 +7155,13 @@ public partial class MainForm : Form
                 _configurationSaveStatus,
                 _configurationSaveStatus.Text);
 
-        tabConfiguration.Controls.Add(_autoSaveConfigurationCheck);
-        tabConfiguration.Controls.Add(_configurationSaveStatus);
-
         _autoSaveConfigurationCheck.CheckedChanged += (_, _) =>
         {
             if (_loadingSettingsExperience)
                 return;
 
             _s.AutoSaveConfiguration = _autoSaveConfigurationCheck.Checked;
-            SettingsStore.Save(_s);
+            SaveSettingsFromUiEvent("Auto-save configuration preference");
             if (_autoSaveConfigurationCheck.Checked)
                 TryAutoSaveConfiguration("activation");
             else
@@ -5539,6 +7169,9 @@ public partial class MainForm : Form
         };
     }
 
+    /// <summary>
+    /// Raccorde les contrôles Image/Vidéo aux routines de persistance afin que les modifications utilisateur soient conservées.
+    /// </summary>
     private void WireGenerationSettingsPersistence()
     {
         numDefaultWidth.ValueChanged += (_, _) => SaveImageGenerationSettings();
@@ -5570,6 +7203,41 @@ public partial class MainForm : Form
         };
     }
 
+    /// <summary>
+    /// Persiste les réglages uniquement hors de la phase d’initialisation
+    /// asynchrone. Les actions utilisateur continuent à enregistrer normalement.
+    /// </summary>
+    private void PersistSettingsIfAllowed()
+    {
+        if (_suppressSettingsPersistence)
+            return;
+
+        SettingsStore.Save(_s);
+    }
+
+    /// <summary>
+    /// Persiste un changement de réglage déclenché par un événement UI léger.
+    /// Les échecs de persistance sont journalisés au lieu de sortir du gestionnaire WinForms.
+    /// </summary>
+    private void SaveSettingsFromUiEvent(string source)
+    {
+        if (_loadingSettingsExperience)
+            return;
+
+        try
+        {
+            PersistSettingsIfAllowed();
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Write(source, ex);
+            Log("Configuration !", source + " : " + ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Collecte et enregistre les valeurs gérées par <c>SaveImageGenerationSettings</c> en préservant la cohérence de la configuration.
+    /// </summary>
     private void SaveImageGenerationSettings()
     {
         if (_loadingSettingsExperience)
@@ -5581,9 +7249,15 @@ public partial class MainForm : Form
         _s.ImageCfg = Decimal.ToDouble(_imageCfg.Value);
         _s.MaximumQualityImageSharpnessPercent =
             Decimal.ToInt32(_imageMaxQualitySharpness.Value);
-        SettingsStore.Save(_s);
+        SynchronizePipelinePresetSelection(
+            video: false,
+            persist: false);
+        SaveSettingsFromUiEvent("Image settings autosave");
     }
 
+    /// <summary>
+    /// Collecte et enregistre les valeurs gérées par <c>SaveVideoGenerationSettings</c> en préservant la cohérence de la configuration.
+    /// </summary>
     private void SaveVideoGenerationSettings()
     {
         if (_loadingSettingsExperience)
@@ -5604,10 +7278,16 @@ public partial class MainForm : Form
         _s.VideoScheduler = _videoScheduler.SelectedItem?.ToString() ?? "simple";
         _s.VideoSeed = Decimal.ToInt64(_videoSeed.Value);
         _s.UseRandomVideoSeed = _videoRandomSeed.Checked;
-        SettingsStore.Save(_s);
+        SynchronizePipelinePresetSelection(
+            video: true,
+            persist: false);
+        SaveSettingsFromUiEvent("Video settings autosave");
         UpdateVideoQualityHint();
     }
 
+    /// <summary>
+    /// Met à jour l’état géré par <c>UpdateVideoQualityHint</c> et propage la nouvelle valeur aux éléments concernés.
+    /// </summary>
     private void UpdateVideoQualityHint()
     {
         if (_videoQualityHint is null || _videoSteps is null)
@@ -5625,7 +7305,19 @@ public partial class MainForm : Form
             sampler.Equals("uni_pc", StringComparison.OrdinalIgnoreCase) &&
             scheduler.Equals("simple", StringComparison.OrdinalIgnoreCase);
 
-        if (steps < 12)
+        if (RequiresLowVramForVideoModel(_s.VideoModel) &&
+            IsHeavyWanI2vWorkload(
+                Decimal.ToInt32(_videoWidth.Value),
+                Decimal.ToInt32(_videoHeight.Value),
+                Decimal.ToInt32(_videoFrames.Value)))
+        {
+            _videoQualityHint.Text = L10n.Pick(
+                _s.Language,
+                "⚠ Wan 14B / 16 Go : essai conseillé à 256×256, 5 images. LOW_VRAM actif.",
+                "⚠ Wan 14B / 16 GB: try 256×256, 5 frames first. LOW_VRAM enabled.");
+            _videoQualityHint.ForeColor = AppTheme.Warning;
+        }
+        else if (steps < 12)
         {
             _videoQualityHint.Text =
                 "⚠ Risque élevé de bruit : Wan 2.1 1.3B n'est pas distillé. Utilisez 20–30 steps (30 recommandé).";
@@ -5654,6 +7346,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Raccorde les champs Configuration au mécanisme de sauvegarde automatique lorsque cette option est activée.
+    /// </summary>
     private void WireConfigurationAutoSave()
     {
         foreach (var numeric in new[]
@@ -5687,6 +7382,9 @@ public partial class MainForm : Form
             text.Validated += (_, _) => TryAutoSaveConfiguration("texte");
     }
 
+    /// <summary>
+    /// Valide puis sauvegarde silencieusement la configuration modifiée, en journalisant les erreurs sans interrompre l’interaction utilisateur.
+    /// </summary>
     private void TryAutoSaveConfiguration(string source)
     {
         if (_loadingSettingsExperience ||
@@ -5702,7 +7400,7 @@ public partial class MainForm : Form
         {
             ValidateConfigurationUi();
             SaveSettingsFromUi();
-            SettingsStore.Save(_s);
+            PersistSettingsIfAllowed();
             SynchronizeWorkflowDefaults();
             _configurationSaveStatus.ForeColor = AppTheme.SuccessHover;
             _configurationSaveStatus.Text =
@@ -5721,6 +7419,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Valide les données traitées par <c>ValidateConfigurationUi</c> et signale toute configuration incohérente avant exécution.
+    /// </summary>
     private void ValidateConfigurationUi()
     {
         var ports = new[]
@@ -5749,6 +7450,9 @@ public partial class MainForm : Form
             throw new InvalidOperationException("Le dépôt GitHub doit utiliser le format propriétaire/dépôt.");
     }
 
+    /// <summary>
+    /// Valide les données traitées par <c>ValidateModelFileName</c> et signale toute configuration incohérente avant exécution.
+    /// </summary>
     private static void ValidateModelFileName(string value, string label)
     {
         value = value.Trim();
@@ -5762,6 +7466,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Charge les données nécessaires à <c>LoadSettingsExperienceToUi</c> et les projette dans l’état ou l’interface correspondante.
+    /// </summary>
     private void LoadSettingsExperienceToUi()
     {
         if (_imageCfg is not null)
@@ -5803,6 +7510,9 @@ public partial class MainForm : Form
         UpdateVideoQualityHint();
     }
 
+    /// <summary>
+    /// Sélectionne la valeur gérée par <c>SelectComboText</c> et synchronise les contrôles associés.
+    /// </summary>
     private static void SelectComboText(ComboBox combo, string value)
     {
         var item = combo.Items.Cast<object>()
@@ -5811,6 +7521,9 @@ public partial class MainForm : Form
             combo.SelectedItem = item;
     }
 
+    /// <summary>
+    /// Applique les règles de <c>ApplySettingsExperienceTranslations</c> à l’état courant puis synchronise les contrôles affectés.
+    /// </summary>
     private void ApplySettingsExperienceTranslations()
     {
         tabGenerate.Text = "Image";
@@ -5827,10 +7540,10 @@ public partial class MainForm : Form
             _imageCfgLabel.Text = "CFG image";
         if (_imageMaxQualitySharpnessLabel is not null)
             _imageMaxQualitySharpnessLabel.Text =
-                L10n.Pick(_s.Language, "Netteté passe 2 (%)", "Pass 2 sharpness (%)");
+                L10n.Pick(_s.Language, "Nettet?", "Sharpness");
         if (_videoMaxQualitySharpnessLabel is not null)
             _videoMaxQualitySharpnessLabel.Text =
-                L10n.Pick(_s.Language, "Netteté passe 2 (%)", "Pass 2 sharpness (%)");
+                L10n.Pick(_s.Language, "Nettet?", "Sharpness");
 
         _imageSharpnessBeforeLabel.Text =
             L10n.Pick(_s.Language, "Avant · upscale seul", "Before · upscale only");
@@ -5877,17 +7590,32 @@ public partial class MainForm : Form
         UpdatePromptEnhancementState();
     }
 
+    /// <summary>
+    /// Limite une valeur décimale à la plage autorisée par le NumericUpDown cible.
+    /// </summary>
     private static decimal ClampDecimal(double value, decimal min, decimal max) =>
         Math.Clamp((decimal)value, min, max);
 
-    // =====================================================================
-    // MainForm.Video
-    // =====================================================================
+    #endregion
+
+    #region Génération vidéo Wan et état des dépendances
+
+    /// <summary>
+    /// Indique l’état interne « _syncingVideoDuration » utilisé pour empêcher les mises à jour réentrantes ou incohérentes.
+    /// </summary>
     private bool _syncingVideoDuration;
-    private Button _videoInstallButton = null!;
+    /// <summary>
+    /// Conserve video generator, état interne nécessaire pour synchroniser la logique métier et l’interface sans ambiguïté.
+    /// </summary>
     private VideoGenerator _videoGenerator = null!;
+    /// <summary>
+    /// Conserve la source d’annulation « _videoCts » afin d’interrompre proprement l’opération associée.
+    /// </summary>
     private CancellationTokenSource? _videoCts;
 
+    /// <summary>
+    /// Initialise <c>InitializeVideoUi</c>, prépare l’état et les contrôles nécessaires puis branche les comportements associés.
+    /// </summary>
     private void InitializeVideoUi()
     {
         _videoGenerator = new VideoGenerator(
@@ -5909,96 +7637,11 @@ public partial class MainForm : Form
         _videoFrames.Value = ClampNumeric(_videoFrames, _s.VideoFrames);
         _videoFps.Value = ClampNumeric(_videoFps, _s.VideoFps);
         _videoSteps.Value = ClampNumeric(_videoSteps, _s.VideoSteps);
-
-        var insertionIndex =
-            Math.Max(0, _tabs.TabPages.IndexOf(tabInstallation));
-
-        _tabs.TabPages.Insert(
-            insertionIndex,
-            _tabVideo);
-
-        // FR : 10 onglets doivent rester visibles sans flèches de défilement.
-        // EN: Keep all 10 main tabs visible without scroll arrows.
-        _tabs.ItemSize = new Size(103, 28);
-
-
-
-
-
         _videoNegative.Text =
             "low quality, blurry, out of focus, flicker, jitter, " +
             "camera shake, warped anatomy, deformed motion, " +
             "text, subtitles, watermark, logo, artifacts";
-
-
-
-
-
-        _videoDurationLabel.Name = "_videoDurationLabel";
-
         UpdateVideoDurationFromFramesV37();
-
-
-
-
-
-        _videoModelTitleLabel.Font =
-            new Font(
-                "Segoe UI Semibold",
-                10F,
-                FontStyle.Bold);
-
-        _videoModelStatus.AutoSize = false;
-        _videoModelStatus.Size = new Size(570, 210);
-
-
-        _videoOutput.ReadOnly = true;
-
-
-        _videoInstallButton = new Button
-        {
-            Location = new Point(625, 354),
-            Size = new Size(230, 34),
-            BackColor = AppTheme.Success,
-            ForeColor = Color.White,
-            FlatStyle = FlatStyle.Flat,
-            Text = "Installer modèles vidéo"
-        };
-
-        _videoNoteLabel.AutoSize = false;
-        _videoNoteLabel.Size = new Size(570, 70);
-        _tabVideo.Controls.AddRange(
-        [
-            _videoPromptLabel,
-            _videoPrompt,
-            _videoNegativeLabel,
-            _videoNegative,
-            _videoWidthLabel,
-            _videoWidth,
-            _videoHeightLabel,
-            _videoHeight,
-            _videoFramesLabel,
-            _videoFrames,
-            _videoFpsLabel,
-            _videoFps,
-            _videoDurationLabel,
-            _videoDurationSeconds,
-            _videoStepsLabel,
-            _videoSteps,
-            _videoGenerateButton,
-            _videoCancelButton,
-            _videoRefreshButton,
-            _videoProgress,
-            _videoStatus,
-            _videoModelTitleLabel,
-            _videoModelStatus,
-            _videoOutputLabel,
-            _videoOutput,
-            _videoOpenButton,
-            _videoInstallButton,
-            _videoNoteLabel
-        ]);
-
         _videoDurationSeconds.ValueChanged += (_, _) =>
             UpdateVideoFramesFromDurationV37();
         _videoFrames.ValueChanged += (_, _) =>
@@ -6012,33 +7655,40 @@ public partial class MainForm : Form
                 () => RunGpuExclusiveAsync("Vidéo Wan", GenerateVideoFromUiAsync));
 
         _videoCancelButton.Click += async (_, _) =>
-        {
-            var cts = _videoCts;
-            if (cts is null || cts.IsCancellationRequested)
-                return;
-
-            _videoStatus.Text =
+            await SafeUiAsync(
                 L10n.Pick(
                     _s.Language,
-                    "Annulation de la génération Wan…",
-                    "Cancelling Wan generation…");
+                    "Annulation vidéo",
+                    "Video cancellation"),
+                async () =>
+                {
+                    var cts = _videoCts;
+                    if (cts is null || cts.IsCancellationRequested)
+                        return;
 
-            // L'UI et les attentes locales s'arrêtent immédiatement, même si
-            // ComfyUI ne répond plus. L'interruption serveur est best-effort.
-            cts.Cancel();
-            await _videoGenerator.CancelActivePromptAsync();
-        };
+                    _videoStatus.Text =
+                        L10n.Pick(
+                            _s.Language,
+                            "Annulation de la génération Wan…",
+                            "Cancelling Wan generation…");
+
+                    // Interrompt immédiatement les attentes locales ; l’arrêt du serveur reste en mode meilleur effort.
+                    cts.Cancel();
+                    await _videoGenerator.CancelActivePromptAsync();
+                });
 
         _videoRefreshButton.Click += (_, _) =>
-            RefreshVideoModelStatus();
+            SafeUiAction(
+                L10n.Pick(
+                    _s.Language,
+                    "Actualiser les modèles vidéo",
+                    "Refresh video models"),
+                RefreshVideoModelStatus);
 
         _videoOpenButton.Click += (_, _) =>
-            OpenGeneratedVideo();
-
-        _videoInstallButton.Click += async (_, _) =>
-            await SafeUiAsync(
-                "Installation vidéo",
-                InstallVideoModelsFromUiAsync);
+            SafeUiAction(
+                L10n.Pick(_s.Language, "Ouvrir la vidéo", "Open video"),
+                OpenGeneratedVideo);
 
         _tabs.SelectedIndexChanged +=
             VideoTab_SelectedIndexChanged;
@@ -6046,6 +7696,9 @@ public partial class MainForm : Form
         ApplyVideoTranslations();
         RefreshVideoModelStatus();
     }
+    /// <summary>
+    /// Traite le changement de sélection « VideoTab_SelectedIndexChanged » et synchronise l’état applicatif correspondant.
+    /// </summary>
     private async void VideoTab_SelectedIndexChanged(
         object? sender,
         EventArgs e)
@@ -6083,12 +7736,62 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Lance la génération gérée par <c>GenerateVideoFromUiAsync</c>, valide les prérequis et synchronise progression, résultat et erreurs.
+    /// </summary>
     private async Task GenerateVideoFromUiAsync()
+    {
+        var input = await PrepareVideoGenerationInputsAsync();
+
+        SaveVideoGenerationSettings();
+        BeginVideoGenerationRun();
+        var videoCt = _videoCts!.Token;
+
+        try
+        {
+            await PrepareVideoGpuForGenerationAsync(videoCt);
+
+            var firstPass =
+                await RunVideoFirstPassAsync(
+                    input.Prompt,
+                    input.IsImageToVideo,
+                    input.ReferenceImage,
+                    videoCt);
+
+            if (!firstPass.Result.Ok)
+            {
+                ShowVideoGenerationFailure(firstPass.Result);
+                return;
+            }
+
+            var qualityPass =
+                await ApplyVideoMaximumQualityPassAsync(
+                    firstPass.Result.Path ?? string.Empty,
+                    firstPass.StyleId,
+                    videoCt);
+
+            await ShowCompletedVideoGenerationAsync(
+                qualityPass.FinalPath,
+                qualityPass.Applied);
+        }
+        finally
+        {
+            EndVideoGenerationRun();
+        }
+    }
+
+    /// <summary>
+    /// Lit, améliore si nécessaire et valide les entrées de génération Vidéo avant d’allouer le pipeline Wan.
+    /// </summary>
+    private async Task<(
+        string Prompt,
+        bool IsImageToVideo,
+        string ReferenceImage)> PrepareVideoGenerationInputsAsync()
     {
         var prompt = _videoPrompt.Text.Trim();
         if (string.IsNullOrWhiteSpace(prompt))
         {
-            throw new InvalidOperationException(
+            throw new UserValidationException(
                 L10n.Pick(
                     _s.Language,
                     "Saisissez un prompt vidéo.",
@@ -6110,8 +7813,9 @@ public partial class MainForm : Form
                 modelOverride: null,
                 videoPrompt: true);
             _videoPrompt.Text = prompt;
-            _s.LastImprovedVideoPromptHash = PromptFingerprint(prompt);
-            SettingsStore.Save(_s);
+            _s.LastImprovedVideoPromptHash =
+                PromptFingerprint(prompt);
+            PersistSettingsIfAllowed();
             UpdateVideoPromptEnhancementStateV37();
         }
 
@@ -6119,7 +7823,7 @@ public partial class MainForm : Form
         if (missing.Count > 0)
         {
             RefreshVideoModelStatus();
-            throw new InvalidOperationException(
+            throw new UserValidationException(
                 L10n.Pick(
                     _s.Language,
                     "Les modèles vidéo Wan sont absents. " +
@@ -6137,26 +7841,37 @@ public partial class MainForm : Form
             (string.IsNullOrWhiteSpace(referenceImage) ||
              !File.Exists(referenceImage)))
         {
-            throw new InvalidOperationException(
+            throw new UserValidationException(
                 L10n.Pick(
                     _s.Language,
-                    "Le modèle Wan I2V sélectionné exige une image de référence. Utilisez le champ Image de référence ou sélectionnez une zone.",
-                    "The selected Wan I2V model requires a reference image. Use Reference image or select a region."));
+                    "Le modèle Wan I2V sélectionné exige une image de référence valide. Utilisez le champ Image de référence ou sélectionnez une zone.",
+                    "The selected Wan I2V model requires a valid reference image. Use Reference image or select a region."));
         }
 
-        var requestedSteps = Decimal.ToInt32(_videoSteps.Value);
+        var requestedSteps =
+            Decimal.ToInt32(_videoSteps.Value);
         if (requestedSteps < 12)
         {
-            throw new InvalidOperationException(
+            throw new UserValidationException(
                 L10n.Pick(
                     _s.Language,
-                    "Wan 2.1 T2V 1.3B n'est pas un modèle distillé pour 4 steps. " +
-                    "Sous 12 steps, le résultat est souvent du bruit. Utilisez 20 à 30 steps (30 recommandé).",
-                    "Wan 2.1 T2V 1.3B is not a 4-step distilled model. " +
-                    "Below 12 steps the result is often noise. Use 20 to 30 steps (30 recommended)."));
+                    "Le modèle Wan 2.1 sélectionné n'est pas prévu pour une génération ultra-courte. " +
+                    "Sous 12 steps, le résultat est souvent du bruit. Utilisez 20 à 30 steps, ou le preset Meilleure pour la qualité maximale.",
+                    "The selected Wan 2.1 model is not intended for ultra-low-step generation. " +
+                    "Below 12 steps the result is often noise. Use 20 to 30 steps, or the Best preset for maximum quality."));
         }
 
-        SaveVideoGenerationSettings();
+        return (
+            prompt,
+            isImageToVideo,
+            referenceImage);
+    }
+
+    /// <summary>
+    /// Prépare les contrôles et la source d’annulation avant de lancer un workflow Wan.
+    /// </summary>
+    private void BeginVideoGenerationRun()
+    {
         _videoCts?.Dispose();
         _videoCts = new CancellationTokenSource();
 
@@ -6165,233 +7880,238 @@ public partial class MainForm : Form
         _videoOpenButton.Enabled = false;
         _videoOutput.Clear();
         _videoProgress.Value = 0;
+    }
+
+    /// <summary>
+    /// Libère Ollama puis attend une marge de mémoire suffisante avant le chargement du pipeline Wan.
+    /// </summary>
+    private async Task PrepareVideoGpuForGenerationAsync(
+        CancellationToken ct)
+    {
+        _videoStatus.Text =
+            L10n.Pick(
+                _s.Language,
+                "Libération d'Ollama avant Wan…",
+                "Releasing Ollama before Wan…");
+
+        await StopVisionModelAsync();
+
+        await WaitForCommitRecoveryAsync(
+            Math.Max(4096, _s.SafeFreeRamMiB),
+            TimeSpan.FromSeconds(30),
+            ct);
+    }
+
+    /// <summary>
+    /// Applique les templates Vidéo et exécute la première passe du workflow Wan.
+    /// </summary>
+    private async Task<(
+        VideoGenerationResult Result,
+        string StyleId)> RunVideoFirstPassAsync(
+            string prompt,
+            bool isImageToVideo,
+            string referenceImage,
+            CancellationToken ct)
+    {
+        var videoStyleId = SelectedTemplateId(
+            _videoStyleTemplateCombo,
+            _s.VideoStyleTemplate);
+        var videoNegativeId = SelectedTemplateId(
+            _videoNegativeTemplateCombo,
+            _s.VideoNegativeTemplate);
+
+        var generationPrompt =
+            ApplyVideoStyleTemplate(prompt);
+        var generationNegative =
+            ApplyVideoNegativeTemplate(
+                _videoNegative.Text.Trim());
+
+        Log(
+            "Video",
+            $"Templates · style={videoStyleId} · négatif={videoNegativeId}.");
+
+        var result =
+            await _videoGenerator.GenerateAsync(
+                generationPrompt,
+                generationNegative,
+                _s.VideoWidth,
+                _s.VideoHeight,
+                _s.VideoFrames,
+                _s.VideoFps,
+                _s.VideoSteps,
+                ct,
+                isImageToVideo
+                    ? referenceImage
+                    : null);
+
+        return (
+            result,
+            videoStyleId);
+    }
+
+    /// <summary>
+    /// Affiche une erreur de première passe Wan sans transformer cet échec attendu en crash applicatif.
+    /// </summary>
+    private void ShowVideoGenerationFailure(
+        VideoGenerationResult result)
+    {
+        _videoStatus.ForeColor = AppTheme.Danger;
+        _videoStatus.Text =
+            result.Error ??
+            L10n.Pick(
+                _s.Language,
+                "Échec de la génération vidéo.",
+                "Video generation failed.");
+    }
+
+    /// <summary>
+    /// Exécute la seconde passe Vidéo du profil qualité maximale et conserve la première passe si l’amélioration échoue.
+    /// </summary>
+    private async Task<(
+        string FinalPath,
+        bool Applied)> ApplyVideoMaximumQualityPassAsync(
+            string finalVideoPath,
+            string videoStyleId,
+            CancellationToken ct)
+    {
+        if (!GenerationTemplates.UsesTwoPassMaximumQuality(
+                videoStyleId) ||
+            string.IsNullOrWhiteSpace(finalVideoPath) ||
+            !File.Exists(finalVideoPath))
+        {
+            return (
+                finalVideoPath,
+                false);
+        }
+
+        _lastMaximumQualityVideoFirstPassPath =
+            finalVideoPath;
+        UpdateMaximumQualitySharpnessUi();
+        await RefreshVideoSharpnessPreviewAsync(ct);
 
         try
         {
-            _videoStatus.Text =
-                L10n.Pick(
-                    _s.Language,
-                    "Libération d'Ollama avant Wan…",
-                    "Releasing Ollama before Wan…");
-
-            await StopVisionModelAsync();
-
-            await WaitForCommitRecoveryAsync(
-                Math.Max(4096, _s.SafeFreeRamMiB),
-                TimeSpan.FromSeconds(30),
-                _videoCts.Token);
-
-            var videoStyleId = SelectedTemplateId(
-                _videoStyleTemplateCombo,
-                _s.VideoStyleTemplate);
-            var videoNegativeId = SelectedTemplateId(
-                _videoNegativeTemplateCombo,
-                _s.VideoNegativeTemplate);
-
-            var generationPrompt = ApplyVideoStyleTemplate(prompt);
-            var generationNegative = ApplyVideoNegativeTemplate(_videoNegative.Text.Trim());
-
-            Log(
-                "Video",
-                $"Templates · style={videoStyleId} · négatif={videoNegativeId}.");
-
-            var result =
-                await _videoGenerator.GenerateAsync(
-                    generationPrompt,
-                    generationNegative,
-                    _s.VideoWidth,
-                    _s.VideoHeight,
-                    _s.VideoFrames,
-                    _s.VideoFps,
-                    _s.VideoSteps,
-                    _videoCts.Token,
-                    isImageToVideo
-                        ? referenceImage
-                        : null);
-
-            if (!result.Ok)
-            {
-                _videoStatus.ForeColor = AppTheme.Danger;
-                _videoStatus.Text =
-                    result.Error ??
-                    L10n.Pick(
-                        _s.Language,
-                        "Échec de la génération vidéo.",
-                        "Video generation failed.");
-                return;
-            }
-
-            var finalVideoPath =
-                result.Path ?? string.Empty;
-            var secondPassApplied = false;
-
-            if (GenerationTemplates.UsesTwoPassMaximumQuality(videoStyleId) &&
-                !string.IsNullOrWhiteSpace(finalVideoPath) &&
-                File.Exists(finalVideoPath))
-            {
-                _lastMaximumQualityVideoFirstPassPath = finalVideoPath;
-                UpdateMaximumQualitySharpnessUi();
-                await RefreshVideoSharpnessPreviewAsync(_videoCts.Token);
-
-                try
-                {
-                    _videoProgress.Value = 95;
-                    _videoStatus.ForeColor = AppTheme.Text;
-                    _videoStatus.Text =
-                        L10n.Pick(
-                            _s.Language,
-                            "Passe 2/2 · upscale et amélioration vidéo…",
-                            "Pass 2/2 · video upscaling and enhancement…");
-
-                    finalVideoPath =
-                        await _qualityPostProcessor.EnhanceVideoAsync(
-                            finalVideoPath,
-                            _videoCts.Token);
-
-                    secondPassApplied = true;
-                    _videoProgress.Value = 100;
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    Log(
-                        "Qualité max !",
-                        "Passe 2 vidéo échouée, passe 1 conservée : " +
-                        ex.Message);
-                }
-            }
-
+            _videoProgress.Value = 95;
             _videoStatus.ForeColor = AppTheme.Text;
             _videoStatus.Text =
-                secondPassApplied
-                    ? L10n.Pick(
-                        _s.Language,
-                        "Terminé · Qualité maximale · 2 passes",
-                        "Done · Maximum quality · 2 passes")
-                    : L10n.Pick(
-                        _s.Language,
-                        "Terminé",
-                        "Done");
-
-            _videoOutput.Text = finalVideoPath;
-            _videoOpenButton.Enabled =
-                !string.IsNullOrWhiteSpace(finalVideoPath);
-
-            if (!string.IsNullOrWhiteSpace(finalVideoPath) &&
-                File.Exists(finalVideoPath))
-            {
-                await PreviewVideoAsync(finalVideoPath);
-                if (secondPassApplied &&
-                    _videoSharpnessBeforePreview.Image is not null)
-                {
-                    SetVideoSharpnessComparisonVisible(true);
-                }
-            }
-
-            RefreshVideoHistory();
-        }
-        finally
-        {
-            _videoCancelButton.Enabled = false;
-            _videoGenerateButton.Enabled =
-                _videoGenerator
-                    .GetMissingModels()
-                    .Count == 0;
-
-            _videoCts.Dispose();
-            _videoCts = null;
-        }
-    }
-
-    private async Task InstallVideoModelsFromUiAsync()
-    {
-        var missing = _videoGenerator.GetMissingModels();
-        if (missing.Count == 0)
-        {
-            RefreshVideoModelStatus();
-            _videoStatus.Text = L10n.Pick(
-                _s.Language,
-                "Tous les modèles vidéo Wan sont déjà installés.",
-                "All Wan video models are already installed.");
-            return;
-        }
-
-        if (_videoCts is not null)
-            throw new InvalidOperationException(
                 L10n.Pick(
                     _s.Language,
-                    "Une opération vidéo est déjà en cours.",
-                    "A video operation is already running."));
+                    "Passe 2/2 · upscale et amélioration vidéo…",
+                    "Pass 2/2 · video upscaling and enhancement…");
 
-        var confirmation = MessageBox.Show(
-            L10n.Pick(
-                _s.Language,
-                "L'installation vidéo va télécharger les modèles officiels Wan 2.1 nécessaires.\n\n" +
-                "Téléchargement total maximal : environ 9,2 GiB.\n" +
-                "Les fichiers seront vérifiés par SHA256 avant utilisation.\n\n" +
-                "Continuer ?",
-                "Video setup will download the required official Wan 2.1 models.\n\n" +
-                "Maximum total download: about 9.2 GiB.\n" +
-                "Files will be verified with SHA256 before use.\n\n" +
-                "Continue?"),
-            L10n.Pick(
-                _s.Language,
-                "Installer les modèles vidéo",
-                "Install video models"),
-            MessageBoxButtons.YesNo,
-            MessageBoxIcon.Information);
+            finalVideoPath =
+                await _qualityPostProcessor.EnhanceVideoAsync(
+                    finalVideoPath,
+                    ct);
 
-        if (confirmation != DialogResult.Yes)
-            return;
-
-        _videoCts = new CancellationTokenSource();
-        _videoInstallButton.Enabled = false;
-        _videoGenerateButton.Enabled = false;
-        _videoCancelButton.Enabled = true;
-        _videoProgress.Value = 0;
-
-        Action<int, string> progress = (value, text) =>
-            Ui(() =>
-            {
-                _videoProgress.Value = Math.Clamp(value, 0, 100);
-                _videoStatus.Text = text;
-            });
-
-        _installer.ProgressChanged += progress;
-
-        try
+            _videoProgress.Value = 100;
+            return (
+                finalVideoPath,
+                true);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
         {
             Log(
-                "Video",
-                "Installation explicite des modèles vidéo Wan 2.1 démarrée.");
+                "Qualité max !",
+                "Passe 2 vidéo échouée, passe 1 conservée : " +
+                ex.Message);
 
-            await _installer.InstallVideoModelsAsync(
-                _videoCts.Token);
-
-            RefreshVideoModelStatus();
-            RefreshInstallationVideoStatus();
-            RefreshFeatureAvailability();
-            _videoStatus.Text = L10n.Pick(
-                _s.Language,
-                "Modèles vidéo Wan installés et vérifiés.",
-                "Wan video models installed and verified.");
-        }
-        finally
-        {
-            _installer.ProgressChanged -= progress;
-            _videoCancelButton.Enabled = false;
-
-            _videoCts.Dispose();
-            _videoCts = null;
-
-            RefreshVideoModelStatus();
+            return (
+                finalVideoPath,
+                false);
         }
     }
 
+    /// <summary>
+    /// Met à jour la sortie, l’aperçu et l’historique après une génération Vidéo réussie.
+    /// </summary>
+    private async Task ShowCompletedVideoGenerationAsync(
+        string finalVideoPath,
+        bool secondPassApplied)
+    {
+        _videoStatus.ForeColor = AppTheme.Text;
+        _videoStatus.Text =
+            secondPassApplied
+                ? L10n.Pick(
+                    _s.Language,
+                    "Terminé · Qualité maximale · 2 passes",
+                    "Done · Maximum quality · 2 passes")
+                : L10n.Pick(
+                    _s.Language,
+                    "Terminé",
+                    "Done");
+
+        _videoOutput.Text = finalVideoPath;
+        _videoOpenButton.Enabled =
+            !string.IsNullOrWhiteSpace(finalVideoPath);
+
+        if (!string.IsNullOrWhiteSpace(finalVideoPath) &&
+            File.Exists(finalVideoPath))
+        {
+            await PreviewVideoAsync(finalVideoPath);
+            if (secondPassApplied &&
+                _videoSharpnessBeforePreview.Image is not null)
+            {
+                SetVideoSharpnessComparisonVisible(true);
+            }
+        }
+
+        RefreshVideoHistory();
+    }
+
+    /// <summary>
+    /// Restaure l’état des boutons Vidéo et libère la source d’annulation en fin de workflow.
+    /// </summary>
+    private void EndVideoGenerationRun()
+    {
+        _videoCancelButton.Enabled = false;
+        _videoGenerateButton.Enabled =
+            _videoGenerator
+                .GetMissingModels()
+                .Count == 0;
+
+        _videoCts?.Dispose();
+        _videoCts = null;
+    }
+
+
+    /// <summary>
+    /// Actualise la disponibilité des modèles Vidéo sans laisser les erreurs de
+    /// configuration ou de système de fichiers sortir d’un gestionnaire WinForms.
+    /// </summary>
     private void RefreshVideoModelStatus()
+    {
+        try
+        {
+            RefreshVideoModelStatusCore();
+            // Le conseil mémoire dépend également du modèle sélectionné,
+            // pas uniquement des champs numériques de génération.
+            UpdateVideoQualityHint();
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Write("Video model status", ex);
+            Log("Vidéo !", "État des modèles vidéo : " + ex.Message);
+
+            _videoGenerateButton.Enabled = false;
+            _videoStatus.ForeColor = AppTheme.Warning;
+            _videoStatus.Text =
+                L10n.Pick(
+                    _s.Language,
+                    "Impossible de vérifier les modèles vidéo : ",
+                    "Unable to check video models: ") +
+                ex.Message;
+        }
+    }
+
+    /// <summary>
+    /// Effectue l’analyse réelle de l’état des modèles Vidéo.
+    /// </summary>
+    private void RefreshVideoModelStatusCore()
     {
         var root = PortablePreflight.GetComfyRoot(_s);
         var isI2v = VideoGenerator.IsImageToVideoModel(_s.VideoModel);
@@ -6399,7 +8119,7 @@ public partial class MainForm : Form
         var models = new List<(string Label, string Path)>
         {
             (
-                isI2v ? "Wan I2V" : "Wan T2V",
+                isI2v ? "Wan 2.1 I2V" : "Wan 2.1 T2V",
                 Path.Combine(
                     root,
                     "models",
@@ -6407,10 +8127,8 @@ public partial class MainForm : Form
                     _s.VideoModel)),
             (
                 "UMT5 XXL",
-                Path.Combine(
-                    root,
-                    "models",
-                    "text_encoders",
+                PortablePreflight.GetComfyTextEncoderPath(
+                    _s,
                     _s.VideoTextEncoderModel)),
             (
                 "Wan VAE",
@@ -6481,15 +8199,20 @@ public partial class MainForm : Form
         else if (_videoCts is null)
         {
             _videoStatus.ForeColor = AppTheme.Text;
+            _videoStatus.Text =
+                L10n.Pick(
+                    _s.Language,
+                    "Prêt.",
+                    "Ready.");
         }
 
         // L'installation des modèles est centralisée dans l'onglet Installation.
-        _videoInstallButton.Visible = false;
-        _videoInstallButton.Enabled = false;
-
         RefreshRuntimeModelChoicesV36();
-    }
+        }
 
+    /// <summary>
+    /// Ouvre la ressource gérée par <c>OpenGeneratedVideo</c> en appliquant les vérifications nécessaires.
+    /// </summary>
     private void OpenGeneratedVideo()
     {
         var path = _videoOutput.Text.Trim();
@@ -6504,6 +8227,9 @@ public partial class MainForm : Form
             });
     }
 
+    /// <summary>
+    /// Met à jour l’état géré par <c>UpdateVideoFramesFromDurationV37</c> et propage la nouvelle valeur aux éléments concernés.
+    /// </summary>
     private void UpdateVideoFramesFromDurationV37()
     {
         if (_syncingVideoDuration ||
@@ -6544,6 +8270,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Met à jour l’état géré par <c>UpdateVideoDurationFromFramesV37</c> et propage la nouvelle valeur aux éléments concernés.
+    /// </summary>
     private void UpdateVideoDurationFromFramesV37()
     {
         if (_syncingVideoDuration ||
@@ -6567,6 +8296,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Met à jour l’état géré par <c>UpdateVideoDurationValueV37</c> et propage la nouvelle valeur aux éléments concernés.
+    /// </summary>
     private void UpdateVideoDurationValueV37(int frames, int fps)
     {
         var maxSeconds = Math.Max(
@@ -6593,6 +8325,9 @@ public partial class MainForm : Form
                 $"Actual Wan duration: {_videoDurationSeconds.Value:0.00} s · {frames} frames at {fps} FPS.");
     }
 
+    /// <summary>
+    /// Applique les règles de <c>ApplyVideoTranslations</c> à l’état courant puis synchronise les contrôles affectés.
+    /// </summary>
     private void ApplyVideoTranslations()
     {
         if (_tabVideo is null)
@@ -6634,39 +8369,80 @@ public partial class MainForm : Form
                 "Ouvrir la vidéo",
                 "Open video");
 
-        _videoInstallButton.Text =
-            L10n.Pick(
-                _s.Language,
-                "Installer modèles vidéo",
-                "Install video models");
     }
 
-    // =====================================================================
-    // MainForm.V36
-    // =====================================================================
+    #endregion
+
+    #region Interactions avancées Image/Vidéo et sélecteurs de pipeline
+
+    /// <summary>
+    /// Conserve l’état image preview zoom nécessaire au zoom, au déplacement et au glisser de l’aperçu Image.
+    /// </summary>
     private double _imagePreviewZoom = 1d;
+    /// <summary>
+    /// Conserve l’état image preview pan nécessaire au zoom, au déplacement et au glisser de l’aperçu Image.
+    /// </summary>
     private Point _imagePreviewPan;
+    /// <summary>
+    /// Conserve l’état image preview drag origin nécessaire au zoom, au déplacement et au glisser de l’aperçu Image.
+    /// </summary>
     private Point _imagePreviewDragOrigin;
+    /// <summary>
+    /// Conserve l’état image preview pan origin nécessaire au zoom, au déplacement et au glisser de l’aperçu Image.
+    /// </summary>
     private Point _imagePreviewPanOrigin;
+    /// <summary>
+    /// Conserve l’état image preview dragging nécessaire au zoom, au déplacement et au glisser de l’aperçu Image.
+    /// </summary>
     private bool _imagePreviewDragging;
+    /// <summary>
+    /// Conserve l’état image preview drag capture nécessaire au zoom, au déplacement et au glisser de l’aperçu Image.
+    /// </summary>
     private Control? _imagePreviewDragCapture;
 
+    /// <summary>
+    /// Conserve l’état video preview ready utilisé pour synchroniser l’aperçu avec le fichier actuellement affiché.
+    /// </summary>
     private bool _videoPreviewReady;
+    /// <summary>
+    /// Mémorise video preview path afin de conserver le chemin utilisé entre les interactions de l’interface.
+    /// </summary>
     private string? _videoPreviewPath;
 
+    /// <summary>
+    /// Indique l’état interne « _gpuUiLocked » utilisé pour empêcher les mises à jour réentrantes ou incohérentes.
+    /// </summary>
     private bool _gpuUiLocked;
+    /// <summary>
+    /// Conserve l’instantané gpu ui enabled snapshot utilisé pour restaurer exactement l’état des contrôles après une opération GPU.
+    /// </summary>
     private readonly Dictionary<Control, bool> _gpuUiEnabledSnapshot = new();
+    /// <summary>
+    /// Indique l’état interne « _comfyDirectTabBusy » utilisé pour empêcher les mises à jour réentrantes ou incohérentes.
+    /// </summary>
     private bool _comfyDirectTabBusy;
+    /// <summary>
+    /// Verrou logique indiquant qu’une mise à jour programmatique de applying video quality preset est en cours, afin d’éviter les gestionnaires réentrants.
+    /// </summary>
     private bool _applyingVideoQualityPreset;
+/// <summary>
+/// D?crit un niveau de qualit? vid?o avec identifiant persistant, libell?s fran?ais/anglais et nombre de steps Wan appliqu?.
+/// </summary>
     private sealed record VideoQualityPreset(
         string Id,
         string Fr,
         string En,
         int Steps)
     {
+        /// <summary>
+        /// Retourne le libellé utilisateur de cet objet afin qu’il soit affiché directement dans les listes WinForms.
+        /// </summary>
         public override string ToString() => Fr;
     }
 
+    /// <summary>
+    /// Conserve video quality presets, état interne nécessaire pour synchroniser la logique métier et l’interface sans ambiguïté.
+    /// </summary>
     private static readonly VideoQualityPreset[] VideoQualityPresets =
     [
         new("fast", "Rapide · 20 steps", "Fast · 20 steps", 20),
@@ -6676,6 +8452,10 @@ public partial class MainForm : Form
         new("custom", "Personnalisé", "Custom", 0)
     ];
 
+    /// <summary>
+    /// Initialise les interactions exclusivement dynamiques introduites avec la série de fonctions v36.
+    /// Aucune disposition statique n’est appliquée ici.
+    /// </summary>
     private void InitializeV36Ui()
     {
         InitializeImageZoomPanV36();
@@ -6688,26 +8468,13 @@ public partial class MainForm : Form
         ConfigureComfyWebViewEnvironmentV36();
         InitializeComfyStatusPanelV36();
         InitializeComfyDirectTabV36();
-        FixV36Layout();
     }
 
+    /// <summary>
+    /// Branche les interactions de zoom et déplacement de l’aperçu Image créé par le Designer.
+    /// </summary>
     private void InitializeImageZoomPanV36()
     {
-        var oldBounds = _preview.Bounds;
-        var oldAnchor = _preview.Anchor;
-
-        tabGenerate.Controls.Remove(_preview);
-
-
-        _preview.Parent = _imagePreviewViewport;
-        _preview.BorderStyle = BorderStyle.None;
-        _preview.SizeMode = PictureBoxSizeMode.Zoom;
-        _preview.Anchor = AnchorStyles.None;
-        _preview.Cursor = Cursors.Default;
-
-        tabGenerate.Controls.Add(_imagePreviewViewport);
-        _imagePreviewViewport.Controls.Add(_preview);
-
         _imagePreviewViewport.MouseEnter += (_, _) => _imagePreviewViewport.Focus();
         _preview.MouseEnter += (_, _) => _imagePreviewViewport.Focus();
 
@@ -6723,6 +8490,9 @@ public partial class MainForm : Form
         _imagePreviewViewport.Resize += (_, _) => UpdateImagePreviewLayout();
     }
 
+    /// <summary>
+    /// Modifie le facteur de zoom de l’aperçu Image autour du pointeur lorsque la molette est utilisée.
+    /// </summary>
     private void ImagePreview_MouseWheel(object? sender, MouseEventArgs e)
     {
         if (_preview.Image is null)
@@ -6737,6 +8507,9 @@ public partial class MainForm : Form
         UpdateImagePreviewLayout();
     }
 
+    /// <summary>
+    /// Démarre le déplacement manuel de l’aperçu Image et mémorise la position initiale du pointeur.
+    /// </summary>
     private void ImagePreview_MouseDown(object? sender, MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left || _preview.Image is null)
@@ -6751,6 +8524,9 @@ public partial class MainForm : Form
         _imagePreviewViewport.Cursor = Cursors.SizeAll;
     }
 
+    /// <summary>
+    /// Met à jour le décalage de l’aperçu Image pendant un glisser actif.
+    /// </summary>
     private void ImagePreview_MouseMove(object? sender, MouseEventArgs e)
     {
         if (!_imagePreviewDragging)
@@ -6763,6 +8539,9 @@ public partial class MainForm : Form
         UpdateImagePreviewLayout();
     }
 
+    /// <summary>
+    /// Termine le déplacement manuel de l’aperçu Image et libère l’état de glisser.
+    /// </summary>
     private void ImagePreview_MouseUp(object? sender, MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left)
@@ -6779,6 +8558,9 @@ public partial class MainForm : Form
         _imagePreviewViewport.Cursor = cursor;
     }
 
+    /// <summary>
+    /// Réinitialise le zoom et le déplacement de l’aperçu Image à leur valeur par défaut.
+    /// </summary>
     private void ResetImagePreviewView()
     {
         _imagePreviewZoom = 1d;
@@ -6786,6 +8568,9 @@ public partial class MainForm : Form
         UpdateImagePreviewLayout();
     }
 
+    /// <summary>
+    /// Met à jour l’état géré par <c>UpdateImagePreviewLayout</c> et propage la nouvelle valeur aux éléments concernés.
+    /// </summary>
     private void UpdateImagePreviewLayout()
     {
         if (_imagePreviewViewport is null || _preview.Image is null)
@@ -6832,11 +8617,11 @@ public partial class MainForm : Form
             : Cursors.Default;
     }
 
+    /// <summary>
+    /// Branche l’extraction du prompt depuis la source Image courante.
+    /// </summary>
     private void InitializeVisionPromptExtractionV36()
     {
-        _imageExtractPromptButton.FlatAppearance.BorderSize = 0;
-        tabGenerate.Controls.Add(_imageExtractPromptButton);
-
         _imageExtractPromptButton.Click += async (_, _) =>
             await SafeUiAsync(
                 "Extraction prompt image",
@@ -6845,6 +8630,9 @@ public partial class MainForm : Form
                     ExtractImagePromptFromUiAsync));
     }
 
+    /// <summary>
+    /// Extrait les informations gérées par <c>ExtractImagePromptFromUiAsync</c> depuis la source courante et retourne ou applique le résultat.
+    /// </summary>
     private async Task ExtractImagePromptFromUiAsync()
     {
         var path = txtInputImage.Text.Trim();
@@ -6888,6 +8676,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Crée l’objet géré par <c>CreateImageOpenDialog</c> et initialise les propriétés nécessaires à son utilisation.
+    /// </summary>
     private static OpenFileDialog CreateImageOpenDialog(string title) =>
         new()
         {
@@ -6896,6 +8687,9 @@ public partial class MainForm : Form
             Multiselect = false
         };
 
+    /// <summary>
+    /// Extrait les informations gérées par <c>ExtractPromptWithVisionAsync</c> depuis la source courante et retourne ou applique le résultat.
+    /// </summary>
     private async Task<string> ExtractPromptWithVisionAsync(
         string path,
         CancellationToken ct)
@@ -6960,6 +8754,9 @@ public partial class MainForm : Form
     }
 
 
+/// <summary>
+/// Repr?sente un choix de mod?le visible dans l?interface, qu?il soit d?j? install? ou propos? par le catalogue, avec les m?tadonn?es n?cessaires ? son activation ou t?l?chargement.
+/// </summary>
     private sealed record RuntimeModelChoice(
         string FileName,
         string Display,
@@ -6977,100 +8774,299 @@ public partial class MainForm : Form
         string LicenseNote = "",
         long FileSizeBytes = 0)
     {
+        /// <summary>
+        /// Retourne le libellé utilisateur de cet objet afin qu’il soit affiché directement dans les listes WinForms.
+        /// </summary>
         public override string ToString() => Display;
     }
 
+    /// <summary>
+    /// Charge les choix de modèles d’exécution dans les sélecteurs Image et Vidéo créés par le Designer.
+    /// </summary>
     private void InitializeRuntimeModelSelectorsV36()
     {
+        ConfigureRuntimeDependencyComboV39(
+            _imageTextEncoderRuntimeLabel,
+            _imageTextEncoderRuntimeCombo,
+            "Encodeur");
+        ConfigureRuntimeDependencyComboV39(
+            _imageVaeRuntimeLabel,
+            _imageVaeRuntimeCombo,
+            "VAE");
+        ConfigureRuntimeDependencyComboV39(
+            _videoTextEncoderRuntimeLabel,
+            _videoTextEncoderRuntimeCombo,
+            "Encodeur");
+        ConfigureRuntimeDependencyComboV39(
+            _videoVaeRuntimeLabel,
+            _videoVaeRuntimeCombo,
+            "VAE");
+        ConfigureRuntimeDependencyComboV39(
+            _videoClipVisionRuntimeLabel,
+            _videoClipVisionRuntimeCombo,
+            "CLIP Vision");
 
+        _imageTextEncoderRuntimeCombo.Name = "_imageTextEncoderRuntimeCombo";
+        _imageVaeRuntimeCombo.Name = "_imageVaeRuntimeCombo";
+        _videoTextEncoderRuntimeCombo.Name = "_videoTextEncoderRuntimeCombo";
+        _videoVaeRuntimeCombo.Name = "_videoVaeRuntimeCombo";
+        _videoClipVisionRuntimeCombo.Name = "_videoClipVisionRuntimeCombo";
 
-        _imageImportModelButton.FlatAppearance.BorderSize = 0;
+        _imageTextEncoderRuntimeCombo.SelectedIndexChanged += async (_, _) =>
+            await SafeUiAsync(
+                L10n.Pick(
+                    _s.Language,
+                    "Sélection de l'encodeur Image",
+                    "Image encoder selection"),
+                ApplyImageTextEncoderSelectionV39Async);
 
-        tabGenerate.Controls.AddRange(
-        [
-            _imageModelRuntimeLabel,
-            _imageModelRuntimeCombo,
-            _imageImportModelButton
-        ]);
+        _imageVaeRuntimeCombo.SelectedIndexChanged += (_, _) =>
+            ApplyRuntimeDependencySelectionV39(
+                _imageVaeRuntimeCombo,
+                value => _s.VaeModel = value,
+                _vaeCombo,
+                txtVae,
+                refreshVideo: false);
 
+        _videoTextEncoderRuntimeCombo.SelectedIndexChanged += (_, _) =>
+            ApplyRuntimeDependencySelectionV39(
+                _videoTextEncoderRuntimeCombo,
+                value => _s.VideoTextEncoderModel = value,
+                null,
+                _cfgVideoTextEncoder,
+                refreshVideo: true);
 
+        _videoVaeRuntimeCombo.SelectedIndexChanged += (_, _) =>
+            ApplyRuntimeDependencySelectionV39(
+                _videoVaeRuntimeCombo,
+                value => _s.VideoVaeModel = value,
+                null,
+                _cfgVideoVae,
+                refreshVideo: true);
 
-        _videoImportModelButton.FlatAppearance.BorderSize = 0;
-        _generationTemplateTips.SetToolTip(
-            _videoImportModelButton,
-            L10n.Pick(
-                _s.Language,
-                "Importer un checkpoint Wan T2V local compatible.",
-                "Import a compatible local Wan T2V checkpoint."));
-
-        _tabVideo.Controls.AddRange(
-        [
-            _videoModelRuntimeLabel,
-            _videoModelRuntimeCombo,
-            _videoImportModelButton
-        ]);
+        _videoClipVisionRuntimeCombo.SelectedIndexChanged += (_, _) =>
+            ApplyRuntimeDependencySelectionV39(
+                _videoClipVisionRuntimeCombo,
+                value => _s.VideoClipVisionModel = value,
+                null,
+                _cfgVideoClipVision,
+                refreshVideo: true);
 
         RefreshRuntimeModelChoicesV36();
-
-        _imageModelRuntimeCombo.SelectedIndexChanged += async (_, _) =>
-        {
-            UpdateRuntimeCatalogTooltipV37(_imageModelRuntimeCombo);
-
-            RefreshCatalogDownloadUiV37();
-
-            if (_refreshingRuntimeCatalogChoicesV37 ||
-                _imageModelRuntimeCombo.SelectedItem is not RuntimeModelChoice choice)
-            {
-                return;
-            }
-
-            if (choice.Catalog && !choice.Installed)
-                return;
-
-            await SafeUiAsync(
-                L10n.Pick(_s.Language, "Sélection du modèle Image", "Image model selection"),
-                () => HandleRuntimeModelChoiceV37Async(choice, imageModel: true));
-        };
-
-        _videoModelRuntimeCombo.SelectedIndexChanged += async (_, _) =>
-        {
-            UpdateRuntimeCatalogTooltipV37(_videoModelRuntimeCombo);
-
-            RefreshCatalogDownloadUiV37();
-
-            if (_refreshingRuntimeCatalogChoicesV37 ||
-                _videoModelRuntimeCombo.SelectedItem is not RuntimeModelChoice choice)
-            {
-                return;
-            }
-
-            if (choice.Catalog && !choice.Installed)
-                return;
-
-            await SafeUiAsync(
-                L10n.Pick(_s.Language, "Sélection du modèle Vidéo", "Video model selection"),
-                () => HandleRuntimeModelChoiceV37Async(choice, imageModel: false));
-        };
-
-        _imageImportModelButton.Text =
-            L10n.Pick(_s.Language, "Ajouter…", "Add…");
-        _imageImportModelButton.Click += (_, _) =>
-            ShowRuntimeModelAddMenuV36(
-                _imageImportModelButton,
-                imageModel: true);
-
-        _videoImportModelButton.Click += (_, _) =>
-            ShowRuntimeModelAddMenuV36(
-                _videoImportModelButton,
-                imageModel: false);
-
         UpdateRuntimeCatalogTooltipV37(_imageModelRuntimeCombo);
         UpdateRuntimeCatalogTooltipV37(_videoModelRuntimeCombo);
     }
 
-    private void ShowRuntimeModelAddMenuV36(
-        Control anchor,
-        bool imageModel)
+    /// <summary>
+    /// Prépare un sélecteur de dépendance du pipeline affiché directement dans
+    /// l'espace de travail Image ou Vidéo.
+    /// </summary>
+    private static void ConfigureRuntimeDependencyComboV39(
+        Label label,
+        ComboBox combo,
+        string caption)
+    {
+        label.Text = caption;
+        label.ForeColor = AppTheme.TextMuted;
+        label.TextAlign = ContentAlignment.MiddleLeft;
+        label.AutoEllipsis = true;
+
+        combo.Name = combo.Name.Length == 0
+            ? "_runtimeDependencyCombo"
+            : combo.Name;
+        combo.DropDownStyle = ComboBoxStyle.DropDownList;
+        combo.FlatStyle = FlatStyle.Flat;
+        combo.BackColor = AppTheme.Input;
+        combo.ForeColor = AppTheme.Text;
+        combo.DropDownWidth = 620;
+        combo.IntegralHeight = false;
+        combo.MaxDropDownItems = 16;
+        combo.DrawMode = DrawMode.OwnerDrawFixed;
+        combo.DrawItem += DrawRuntimeDependencyItemV39;
+    }
+
+    /// <summary>
+    /// Dessine le nom réel du fichier sans modifier la valeur utilisée par ComfyUI.
+    /// Signale visuellement les dépendances configurées mais absentes.
+    /// </summary>
+    private static void DrawRuntimeDependencyItemV39(object? sender, DrawItemEventArgs e)
+    {
+        if (sender is not ComboBox combo || e.Index < 0 ||
+            e.Index >= combo.Items.Count)
+            return;
+
+        var fileName = combo.Items[e.Index]?.ToString() ?? string.Empty;
+        var installed = combo.Tag as HashSet<string>;
+        var missing = installed is not null && !installed.Contains(fileName);
+        var display = missing ? "[X] " + fileName : fileName;
+        e.DrawBackground();
+        TextRenderer.DrawText(
+            e.Graphics,
+            display,
+            e.Font ?? combo.Font,
+            e.Bounds,
+            e.ForeColor,
+            TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis |
+            TextFormatFlags.NoPrefix);
+        e.DrawFocusRectangle();
+    }
+
+    /// <summary>
+    /// Applique l'encodeur FLUX.2 choisi. Les GGUF restent visibles pour
+    /// expliquer clairement pourquoi ils ne sont pas utilisables par le
+    /// CLIPLoader actuel, mais ils ne peuvent pas devenir l'encodeur actif.
+    /// </summary>
+    private async Task ApplyImageTextEncoderSelectionV39Async()
+    {
+        if (_refreshingPipelineDependencyChoicesV39 ||
+            _imageTextEncoderRuntimeCombo.SelectedItem is not RuntimeModelChoice choice)
+        {
+            return;
+        }
+
+        if (choice.FileName.EndsWith(
+                ".gguf",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _genText.Text = L10n.Pick(
+                _s.Language,
+                "Encodeur GGUF détecté mais non supporté par le CLIPLoader actuel.",
+                "GGUF encoder detected but unsupported by the current CLIPLoader.");
+            return;
+        }
+
+        await HandleRuntimeModelChoiceV37Async(
+            choice,
+            imageModel: true);
+
+        if (string.Equals(
+                _s.TextEncoderModel,
+                choice.FileName,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _textEncoderCombo.Text = choice.FileName;
+            txtTextEncoder.Text = choice.FileName;
+        }
+    }
+
+    /// <summary>
+    /// Applique immédiatement une dépendance choisie depuis l'onglet de
+    /// génération et synchronise la Configuration persistante.
+    /// </summary>
+    private void ApplyRuntimeDependencySelectionV39(
+        ComboBox combo,
+        Action<string> assign,
+        ComboBox? configurationCombo,
+        TextBox? configurationText,
+        bool refreshVideo)
+    {
+        if (_refreshingPipelineDependencyChoicesV39 ||
+            combo.SelectedItem is not string selected ||
+            string.IsNullOrWhiteSpace(selected))
+        {
+            return;
+        }
+
+        assign(selected);
+
+        if (configurationCombo is not null)
+            configurationCombo.Text = selected;
+        if (configurationText is not null)
+            configurationText.Text = selected;
+
+        var videoPipeline =
+            ReferenceEquals(
+                combo,
+                _videoTextEncoderRuntimeCombo) ||
+            ReferenceEquals(
+                combo,
+                _videoVaeRuntimeCombo) ||
+            ReferenceEquals(
+                combo,
+                _videoClipVisionRuntimeCombo);
+
+        SynchronizePipelinePresetSelection(
+            video: videoPipeline,
+            persist: false);
+        PersistSettingsIfAllowed();
+        RefreshFeatureAvailability();
+
+        if (refreshVideo)
+            RefreshVideoModelStatus();
+    }
+
+
+    /// <summary>
+    /// Applique le modèle Image sélectionné par l’utilisateur et actualise les métadonnées du catalogue.
+    /// </summary>
+    private async void ImageModelRuntimeCombo_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        await SafeUiAsync(
+            L10n.Pick(_s.Language, "Sélection du modèle Image", "Image model selection"),
+            async () =>
+            {
+                UpdateRuntimeCatalogTooltipV37(_imageModelRuntimeCombo);
+                RefreshCatalogDownloadUiV37();
+
+                if (_refreshingRuntimeCatalogChoicesV37 ||
+                    _imageModelRuntimeCombo.SelectedItem is not RuntimeModelChoice choice ||
+                    (choice.Catalog && !choice.Installed))
+                {
+                    return;
+                }
+
+                await HandleRuntimeModelChoiceV37Async(
+                    choice,
+                    imageModel: true);
+            });
+    }
+
+    /// <summary>
+    /// Applique le modèle Vidéo sélectionné par l’utilisateur et actualise les métadonnées du catalogue.
+    /// </summary>
+    private async void VideoModelRuntimeCombo_SelectedIndexChanged(object? sender, EventArgs e)
+    {
+        await SafeUiAsync(
+            L10n.Pick(_s.Language, "Sélection du modèle Vidéo", "Video model selection"),
+            async () =>
+            {
+                UpdateRuntimeCatalogTooltipV37(_videoModelRuntimeCombo);
+                RefreshCatalogDownloadUiV37();
+
+                if (_refreshingRuntimeCatalogChoicesV37 ||
+                    _videoModelRuntimeCombo.SelectedItem is not RuntimeModelChoice choice ||
+                    (choice.Catalog && !choice.Installed))
+                {
+                    return;
+                }
+
+                await HandleRuntimeModelChoiceV37Async(
+                    choice,
+                    imageModel: false);
+            });
+    }
+
+    /// <summary>
+    /// Ouvre le menu d’ajout ou d’import d’un modèle Image.
+    /// </summary>
+    private void ImageImportModelButton_Click(object? sender, EventArgs e)
+        => SafeUiAction(
+            L10n.Pick(_s.Language, "Menu modèle Image", "Image model menu"),
+            () => ShowRuntimeModelAddMenuV36(_imageImportModelButton, imageModel: true));
+
+    /// <summary>
+    /// Ouvre le menu d’ajout ou d’import d’un modèle Vidéo.
+    /// </summary>
+    private void VideoImportModelButton_Click(object? sender, EventArgs e)
+        => SafeUiAction(
+            L10n.Pick(_s.Language, "Menu modèle Vidéo", "Video model menu"),
+            () => ShowRuntimeModelAddMenuV36(_videoImportModelButton, imageModel: false));
+
+    /// <summary>
+    /// Construit le menu contextuel d’import/téléchargement des modèles sans l’afficher,
+    /// ce qui permet une validation sûre dans les tests.
+    /// </summary>
+    private ContextMenuStrip BuildRuntimeModelAddMenuV36(bool imageModel)
     {
         var menu = new ContextMenuStrip
         {
@@ -7166,10 +9162,56 @@ public partial class MainForm : Form
             menu,
             imageModel);
 
-        menu.Closed += (_, _) => menu.Dispose();
+        return menu;
+        }
+
+    /// <summary>
+    /// Affiche le menu des modèles d’exécution sous son contrôle propriétaire.
+    /// </summary>
+    private void ShowRuntimeModelAddMenuV36(
+        Control anchor,
+        bool imageModel)
+    {
+        var menu = BuildRuntimeModelAddMenuV36(imageModel);
+        WireDeferredContextMenuDisposalV37(menu);
         menu.Show(anchor, new Point(0, anchor.Height));
     }
 
+    /// <summary>
+    /// Diffère la libération du ContextMenuStrip jusqu’à la fin complète du message
+    /// de fermeture/clic de WinForms. Une libération synchrone depuis Closed peut
+    /// laisser le filtre modal ToolStrip conserver un menu déjà libéré et planter l’UI.
+    /// </summary>
+    private void WireDeferredContextMenuDisposalV37(ContextMenuStrip menu)
+    {
+        menu.Closed += (_, _) =>
+        {
+            if (menu.IsDisposed ||
+                IsDisposed ||
+                Disposing ||
+                !IsHandleCreated)
+            {
+                return;
+            }
+
+            try
+            {
+                BeginInvoke(new Action(() =>
+                {
+                    if (!menu.IsDisposed)
+                        menu.Dispose();
+                }));
+            }
+            catch (InvalidOperationException) when (IsDisposed || Disposing)
+            {
+                // La fenêtre peut perdre son handle pendant la fermeture d’un menu contextuel.
+            }
+        };
+    }
+
+    /// <summary>
+    /// Télécharge external flux text encoder v36 async en gérant progression, annulation, destination et validation avant activation.
+    /// </summary>
     private async Task DownloadExternalFluxTextEncoderV36Async()
     {
         using var dialog =
@@ -7277,7 +9319,7 @@ public partial class MainForm : Form
             txtTextEncoder.Text =
                 _s.TextEncoderModel;
 
-            SettingsStore.Save(_s);
+            PersistSettingsIfAllowed();
             await RefreshModelChoicesAsync();
             RefreshFeatureAvailability();
 
@@ -7300,6 +9342,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Télécharge official video i2v v36 async en gérant progression, annulation, destination et validation avant activation.
+    /// </summary>
     private async Task DownloadOfficialVideoI2vV36Async()
     {
         var confirm = MessageBox.Show(
@@ -7359,7 +9404,7 @@ public partial class MainForm : Form
             if (_cfgVideoModel is not null)
                 _cfgVideoModel.Text = _s.VideoModel;
 
-            SettingsStore.Save(_s);
+            PersistSettingsIfAllowed();
             RefreshRuntimeModelChoicesV36();
             RefreshVideoModelStatus();
             RefreshFeatureAvailability();
@@ -7376,6 +9421,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Télécharge video clip vision v36 async en gérant progression, annulation, destination et validation avant activation.
+    /// </summary>
     private async Task DownloadVideoClipVisionV36Async()
     {
         var root =
@@ -7438,6 +9486,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Télécharge runtime model from url async en gérant progression, annulation, destination et validation avant activation.
+    /// </summary>
     private async Task DownloadRuntimeModelFromUrlAsync(bool imageModel)
     {
         using var dialog =
@@ -7577,7 +9628,7 @@ public partial class MainForm : Form
                         _s.VideoModel;
             }
 
-            SettingsStore.Save(_s);
+            PersistSettingsIfAllowed();
             RefreshRuntimeModelChoicesV36();
             RefreshFeatureAvailability();
             RefreshVideoModelStatus();
@@ -7601,6 +9652,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Actualise les données gérées par <c>RefreshRuntimeModelChoicesV36</c> à partir de l’état courant et synchronise les contrôles dépendants.
+    /// </summary>
     private void RefreshRuntimeModelChoicesV36()
     {
         if (_imageModelRuntimeCombo is null || _videoModelRuntimeCombo is null)
@@ -7698,8 +9752,235 @@ public partial class MainForm : Form
             _videoModelRuntimeCombo,
             videoChoices,
             _s.VideoModel);
+
+        RefreshRuntimeDependencyChoicesV39();
     }
 
+    /// <summary>
+    /// Recharge les dépendances directement sélectionnables dans les onglets
+    /// Image et Vidéo : encodeurs texte, VAE et CLIP Vision.
+    /// </summary>
+    private void RefreshRuntimeDependencyChoicesV39()
+    {
+        var root = PortablePreflight.GetComfyRoot(_s);
+
+        var encoderFolders = new[]
+        {
+            Path.Combine(root, "models", "text_encoders"),
+            Path.Combine(root, "models", "clip")
+        };
+
+        var videoEncoders = encoderFolders
+            .Where(Directory.Exists)
+            .SelectMany(folder => Directory.EnumerateFiles(folder))
+            .Where(IsSupportedModelFile)
+            .Select(Path.GetFileName)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Cast<string>();
+
+        var vaeFolder = Path.Combine(root, "models", "vae");
+        var vaes = Directory.Exists(vaeFolder)
+            ? Directory.EnumerateFiles(vaeFolder)
+                .Where(IsSupportedModelFile)
+                .Select(Path.GetFileName)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Cast<string>()
+            : Enumerable.Empty<string>();
+
+        var clipVisionFolder = Path.Combine(root, "models", "clip_vision");
+        var clipVisionModels = Directory.Exists(clipVisionFolder)
+            ? Directory.EnumerateFiles(clipVisionFolder)
+                .Where(IsSupportedModelFile)
+                .Select(Path.GetFileName)
+                .Where(name => !string.IsNullOrWhiteSpace(name))
+                .Cast<string>()
+            : Enumerable.Empty<string>();
+
+        _refreshingPipelineDependencyChoicesV39 = true;
+        try
+        {
+            RefreshRuntimeTextEncoderChoicesV39();
+            FillRuntimeDependencyComboV39(
+                _imageVaeRuntimeCombo,
+                vaes,
+                _s.VaeModel);
+            FillRuntimeDependencyComboV39(
+                _videoTextEncoderRuntimeCombo,
+                videoEncoders,
+                _s.VideoTextEncoderModel);
+            FillRuntimeDependencyComboV39(
+                _videoVaeRuntimeCombo,
+                vaes,
+                _s.VideoVaeModel);
+            FillRuntimeDependencyComboV39(
+                _videoClipVisionRuntimeCombo,
+                clipVisionModels,
+                _s.VideoClipVisionModel);
+        }
+        finally
+        {
+            _refreshingPipelineDependencyChoicesV39 = false;
+        }
+    }
+
+    /// <summary>
+    /// Recharge la liste des encodeurs FLUX.2 installés depuis les deux dossiers
+    /// officiellement reconnus par ComfyUI (<c>text_encoders</c> et <c>clip</c>).
+    /// Les fichiers GGUF sont volontairement affichés avec un indicateur explicite
+    /// afin d'expliquer leur présence sans permettre leur activation accidentelle.
+    /// </summary>
+    private void RefreshRuntimeTextEncoderChoicesV39()
+    {
+        var root = PortablePreflight.GetComfyRoot(_s);
+        var folders = new[]
+        {
+            (
+                Path: Path.Combine(root, "models", "text_encoders"),
+                TargetFolder: "text_encoders"),
+            (
+                Path: Path.Combine(root, "models", "clip"),
+                TargetFolder: "clip")
+        };
+
+        var choices = new List<RuntimeModelChoice>();
+
+        foreach (var candidate in folders
+                     .Where(folder => Directory.Exists(folder.Path))
+                     .SelectMany(folder =>
+                         Directory.EnumerateFiles(folder.Path)
+                             .Where(IsSupportedModelFile)
+                             .Select(path => (
+                                 Path: path,
+                                 folder.TargetFolder)))
+                     .GroupBy(
+                         item => Path.GetFileName(item.Path),
+                         StringComparer.OrdinalIgnoreCase)
+                     .Select(group => group.First())
+                     .OrderBy(
+                         item => Path.GetFileName(item.Path),
+                         StringComparer.OrdinalIgnoreCase))
+        {
+            var compatibility = Flux2ModelCompatibility.Validate(
+                candidate.Path,
+                Flux2ModelRole.TextEncoder);
+
+            var ggufUnsupported =
+                candidate.Path.EndsWith(
+                    ".gguf",
+                    StringComparison.OrdinalIgnoreCase) &&
+                compatibility.State == ModelCompatibilityState.Incompatible;
+
+            if (compatibility.State is not
+                    (ModelCompatibilityState.Compatible or
+                     ModelCompatibilityState.Unverified) &&
+                !ggufUnsupported)
+            {
+                continue;
+            }
+
+            var fileName = Path.GetFileName(candidate.Path);
+            var marker = compatibility.State switch
+            {
+                ModelCompatibilityState.Compatible => "[OK]",
+                ModelCompatibilityState.Unverified => "[?]",
+                _ => "[X]"
+            };
+
+            var detail = ggufUnsupported
+                ? L10n.Pick(
+                    _s.Language,
+                    " · GGUF non supporté",
+                    " · unsupported GGUF")
+                : string.Empty;
+
+            choices.Add(
+                new RuntimeModelChoice(
+                    fileName,
+                    $"{marker} {fileName}{detail}",
+                    "text-encoder",
+                    TargetFolder: candidate.TargetFolder,
+                    ActivatesTextEncoder: true));
+        }
+
+        foreach (var entry in RuntimeModelCatalogV37.Where(
+                     entry =>
+                         !entry.Video &&
+                         entry.ActivatesTextEncoder))
+        {
+            choices.Add(CreateRuntimeModelChoiceV37(entry));
+        }
+
+        if (!choices.Any(choice =>
+                string.Equals(
+                    choice.FileName,
+                    _s.TextEncoderModel,
+                    StringComparison.OrdinalIgnoreCase)))
+        {
+            choices.Add(
+                new RuntimeModelChoice(
+                    _s.TextEncoderModel,
+                    "[X] " + _s.TextEncoderModel,
+                    "text-encoder",
+                    TargetFolder: "text_encoders",
+                    ActivatesTextEncoder: true));
+        }
+
+        var previousRefreshState = _refreshingPipelineDependencyChoicesV39;
+        _refreshingPipelineDependencyChoicesV39 = true;
+        try
+        {
+            FillRuntimeModelCombo(
+                _imageTextEncoderRuntimeCombo,
+                choices,
+                _s.TextEncoderModel);
+        }
+        finally
+        {
+            _refreshingPipelineDependencyChoicesV39 = previousRefreshState;
+        }
+    }
+
+    /// <summary>
+    /// Remplit un sélecteur de dépendance avec les fichiers installés et conserve
+    /// la valeur configurée même lorsqu'elle est actuellement absente du disque.
+    /// </summary>
+    private static void FillRuntimeDependencyComboV39(
+        ComboBox combo,
+        IEnumerable<string> values,
+        string selected)
+    {
+        var items = values
+            .Append(selected)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        combo.BeginUpdate();
+        try
+        {
+            combo.Tag = values
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            combo.Items.Clear();
+            combo.Items.AddRange(items);
+            combo.SelectedItem = items.FirstOrDefault(
+                value => string.Equals(
+                    value,
+                    selected,
+                    StringComparison.OrdinalIgnoreCase));
+            if (combo.SelectedIndex < 0 && combo.Items.Count > 0)
+                combo.SelectedIndex = 0;
+        }
+        finally
+        {
+            combo.EndUpdate();
+        }
+    }
+
+    /// <summary>
+    /// Déduit le type de workflow Wan, T2V ou I2V, à partir du nom de fichier du modèle vidéo.
+    /// </summary>
     private static string VideoModelKindFromName(string name)
     {
         if (name.Contains("i2v", StringComparison.OrdinalIgnoreCase))
@@ -7712,6 +9993,9 @@ public partial class MainForm : Form
         return "custom";
     }
 
+    /// <summary>
+    /// Remplit le contrôle ou la collection géré par <c>FillRuntimeModelCombo</c> à partir des données disponibles.
+    /// </summary>
     private void FillRuntimeModelCombo(
         ComboBox combo,
         IEnumerable<RuntimeModelChoice> choices,
@@ -7738,8 +10022,13 @@ public partial class MainForm : Form
             foreach (var item in list)
                 combo.Items.Add(item);
 
+            var selectsTextEncoder =
+                ReferenceEquals(
+                    combo,
+                    _imageTextEncoderRuntimeCombo);
+
             combo.SelectedItem = list.FirstOrDefault(x =>
-                !x.ActivatesTextEncoder &&
+                x.ActivatesTextEncoder == selectsTextEncoder &&
                 string.Equals(
                     x.FileName,
                     selectedFile,
@@ -7752,6 +10041,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Importe un modèle local dans le dossier ComfyUI approprié, valide son extension puis actualise les choix visibles dans l’interface.
+    /// </summary>
     private async Task ImportRuntimeModelAsync(bool imageModel)
     {
         using var ofd = new OpenFileDialog
@@ -7820,12 +10112,15 @@ public partial class MainForm : Form
                 _cfgVideoModel.Text = _s.VideoModel;
         }
 
-        SettingsStore.Save(_s);
+        PersistSettingsIfAllowed();
         RefreshRuntimeModelChoicesV36();
         RefreshFeatureAvailability();
         RefreshVideoModelStatus();
     }
 
+    /// <summary>
+    /// Initialise <c>InitializeVideoQualityUiV36</c>, prépare l’état et les contrôles nécessaires puis branche les comportements associés.
+    /// </summary>
     private void InitializeVideoQualityUiV36()
     {
 
@@ -7838,50 +10133,58 @@ public partial class MainForm : Form
                     L10n.IsEnglish(_s.Language) ? preset.En : preset.Fr));
         }
 
-        _tabVideo.Controls.Add(_videoQualityLabel);
-        _tabVideo.Controls.Add(_videoQualityCombo);
-
         SelectVideoQualityPresetForCurrentSettings();
 
         _videoQualityCombo.SelectedIndexChanged += (_, _) =>
-        {
-            if (_applyingVideoQualityPreset ||
-                _videoQualityCombo.SelectedItem is not TemplateComboItem item)
-            {
-                return;
-            }
+            SafeUiAction(
+                L10n.Pick(
+                    _s.Language,
+                    "Qualité vidéo",
+                    "Video quality"),
+                () =>
+                {
+                    if (_applyingVideoQualityPreset ||
+                        _videoQualityCombo.SelectedItem is not TemplateComboItem item)
+                    {
+                        return;
+                    }
 
-            var preset = VideoQualityPresets.FirstOrDefault(x => x.Id == item.Id);
-            if (preset is null)
-                return;
+                    var preset = VideoQualityPresets.FirstOrDefault(
+                        x => x.Id == item.Id);
+                    if (preset is null)
+                        return;
 
-            _s.VideoQualityPreset = item.Id;
-            if (preset.Steps <= 0)
-            {
-                SettingsStore.Save(_s);
-                return;
-            }
+                    _s.VideoQualityPreset = item.Id;
+                    if (preset.Steps <= 0)
+                    {
+                        SynchronizePipelinePresetSelection(
+                            video: true,
+                            persist: false);
+                        SaveSettingsFromUiEvent("Video quality preset");
+                        return;
+                    }
 
-            _applyingVideoQualityPreset = true;
-            try
-            {
-                _videoSteps.Value = Math.Clamp(
-                    preset.Steps,
-                    Decimal.ToInt32(_videoSteps.Minimum),
-                    Decimal.ToInt32(_videoSteps.Maximum));
-                _videoCfg.Value = 6m;
-                _videoSamplingShift.Value = 8m;
-                _videoSampler.SelectedItem = "uni_pc";
-                _videoScheduler.SelectedItem = "simple";
-                _videoNegative.Text = VideoNegativeForQualityV37(item.Id);
-                SaveVideoGenerationSettings();
-                UpdateVideoQualityHint();
-            }
-            finally
-            {
-                _applyingVideoQualityPreset = false;
-            }
-        };
+                    _applyingVideoQualityPreset = true;
+                    try
+                    {
+                        _videoSteps.Value = Math.Clamp(
+                            preset.Steps,
+                            Decimal.ToInt32(_videoSteps.Minimum),
+                            Decimal.ToInt32(_videoSteps.Maximum));
+                        _videoCfg.Value = 6m;
+                        _videoSamplingShift.Value = 8m;
+                        _videoSampler.SelectedItem = "uni_pc";
+                        _videoScheduler.SelectedItem = "simple";
+                        _videoNegative.Text =
+                            VideoNegativeForQualityV37(item.Id);
+                        SaveVideoGenerationSettings();
+                        UpdateVideoQualityHint();
+                    }
+                    finally
+                    {
+                        _applyingVideoQualityPreset = false;
+                    }
+                });
 
         EventHandler refreshQuality = (_, _) =>
         {
@@ -7896,6 +10199,9 @@ public partial class MainForm : Form
         _videoScheduler.SelectedIndexChanged += refreshQuality;
     }
 
+    /// <summary>
+    /// Sélectionne la valeur gérée par <c>SelectVideoQualityPresetForCurrentSettings</c> et synchronise les contrôles associés.
+    /// </summary>
     private void SelectVideoQualityPresetForCurrentSettings()
     {
         if (_videoQualityCombo is null)
@@ -7937,47 +10243,42 @@ public partial class MainForm : Form
     }
 
 
+    /// <summary>
+    /// Branche la sélection de référence Image→Vidéo, le recadrage et l’extraction de prompt.
+    /// </summary>
     private void InitializeVideoReferenceUiV36()
     {
-
-        _videoReferenceImage.Name = "_videoReferenceImage";
-        _videoReferenceImage.ReadOnly = true;
-
-        _videoReferenceBrowseButton.FlatAppearance.BorderSize = 0;
-
-        _videoReferenceCropButton.FlatAppearance.BorderSize = 0;
-
-        _videoExtractPromptButton.FlatAppearance.BorderSize = 0;
-
-        _videoReferenceHint.AutoSize = false;
-        _videoReferenceHint.Size = new Size(203, 30);
-        _videoReferenceHint.ForeColor = AppTheme.TextDim;
-        _videoReferenceHint.Font = new Font("Segoe UI", 7.5F);
-
-        _tabVideo.Controls.AddRange(
-        [
-            _videoReferenceLabel,
-            _videoReferenceImage,
-            _videoReferenceBrowseButton,
-            _videoReferenceCropButton,
-            _videoExtractPromptButton,
-            _videoReferenceHint
-        ]);
+        // Autoriser aussi le collage d'un chemin existant : le sélecteur Windows
+        // peut être inaccessible via clavier, lecteurs réseau ou automatisation.
+        // La validation File.Exists reste effectuée avant chaque génération I2V.
+        _videoReferenceImage.Enabled = true;
+        _videoReferenceImage.ReadOnly = false;
 
         _videoReferenceBrowseButton.Click += (_, _) =>
-        {
-            using var ofd = CreateImageOpenDialog(
+            SafeUiAction(
                 L10n.Pick(
                     _s.Language,
-                    "Choisir l'image de référence vidéo",
-                    "Choose the video reference image"));
+                    "Image de référence vidéo",
+                    "Video reference image"),
+                () =>
+                {
+                    using var ofd = CreateImageOpenDialog(
+                        L10n.Pick(
+                            _s.Language,
+                            "Choisir l'image de référence vidéo",
+                            "Choose the video reference image"));
 
-            if (ofd.ShowDialog(this) == DialogResult.OK)
-                _videoReferenceImage.Text = ofd.FileName;
-        };
+                    if (ofd.ShowDialog(this) == DialogResult.OK)
+                        _videoReferenceImage.Text = ofd.FileName;
+                });
 
         _videoReferenceCropButton.Click += (_, _) =>
-            SelectVideoReferenceRegionV36();
+            SafeUiAction(
+                L10n.Pick(
+                    _s.Language,
+                    "Zone de référence vidéo",
+                    "Video reference crop"),
+                SelectVideoReferenceRegionV36);
 
         _videoExtractPromptButton.Click += async (_, _) =>
             await SafeUiAsync(
@@ -7987,6 +10288,9 @@ public partial class MainForm : Form
                     ExtractVideoPromptFromUiAsync));
     }
 
+    /// <summary>
+    /// Sélectionne la valeur gérée par <c>SelectVideoReferenceRegionV36</c> et synchronise les contrôles associés.
+    /// </summary>
     private void SelectVideoReferenceRegionV36()
     {
         var path = _videoReferenceImage.Text.Trim();
@@ -8048,6 +10352,9 @@ public partial class MainForm : Form
             $"Zone de référence sélectionnée · {region.Width}x{region.Height} · {output}");
     }
 
+    /// <summary>
+    /// Extrait les informations gérées par <c>ExtractVideoPromptFromUiAsync</c> depuis la source courante et retourne ou applique le résultat.
+    /// </summary>
     private async Task ExtractVideoPromptFromUiAsync()
     {
         var path = _videoReferenceImage.Text.Trim();
@@ -8091,12 +10398,12 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Initialise le contenu de l’aperçu Vidéo à l’exécution.
+    /// Le contrôle WebView lui-même est créé et positionné par le Designer.
+    /// </summary>
     private void InitializeVideoPreviewV36()
     {
-
-        _tabVideo.Controls.Add(_videoPreviewWeb);
-        _videoPreviewWeb.BringToFront();
-
         ShowVideoPreviewPlaceholderV36(
             L10n.Pick(
                 _s.Language,
@@ -8104,6 +10411,9 @@ public partial class MainForm : Form
                 "Click a video in the history to preview it."));
     }
 
+    /// <summary>
+    /// Vérifie puis garantit la condition requise par <c>EnsureVideoPreviewWebReadyV36</c> avant de poursuivre le traitement.
+    /// </summary>
     private async Task EnsureVideoPreviewWebReadyV36()
     {
         if (_videoPreviewReady)
@@ -8138,6 +10448,9 @@ public partial class MainForm : Form
         _videoPreviewReady = true;
     }
 
+    /// <summary>
+    /// Charge la vidéo générée dans l’aperçu WebView2 et affiche un état de repli lorsque la lecture n’est pas disponible.
+    /// </summary>
     private async Task PreviewVideoAsync(string path)
     {
         if (!File.Exists(path))
@@ -8189,6 +10502,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Affiche le contenu géré par <c>ShowVideoPreviewPlaceholderV36</c> et synchronise son état visuel.
+    /// </summary>
     private void ShowVideoPreviewPlaceholderV36(string message)
     {
         var safe = System.Net.WebUtility.HtmlEncode(message);
@@ -8209,6 +10525,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Initialise <c>InitializeLogTabColorsV36</c>, prépare l’état et les contrôles nécessaires puis branche les comportements associés.
+    /// </summary>
     private void InitializeLogTabColorsV36()
     {
         if (_logTabs is null)
@@ -8241,6 +10560,9 @@ public partial class MainForm : Form
         };
     }
 
+    /// <summary>
+    /// Associe une couleur visuelle au type de journal afin de distinguer rapidement UI, ComfyUI, Ollama, FLUX et Vidéo.
+    /// </summary>
     private static Color LogTabColorV36(int index) =>
         index switch
         {
@@ -8254,215 +10576,9 @@ public partial class MainForm : Form
             8 => AppTheme.TextMuted,
             _ => AppTheme.Text
         };
-
-    private void FixV36Layout()
-    {
-        // Image : deuxième ligne réservée au modèle, puis aperçu.
-        if (_imagePreviewViewport is not null)
-        {
-            _imagePreviewViewport.Location = new Point(370, 82);
-            _imagePreviewViewport.Size = new Size(666, 400);
-        }
-
-        // Garder les libellés Image compacts : l'ancien texte très long
-        // "Force (non utilisée...)" recouvrait le libellé Seed.
-        lblImg2ImgStrength.AutoSize = false;
-        lblImg2ImgStrength.Location = new Point(18, 384);
-        lblImg2ImgStrength.Size = new Size(100, 22);
-        lblImg2ImgStrength.Text =
-            L10n.Pick(
-                _s.Language,
-                "Force I2I",
-                "I2I strength");
-        _generationTemplateTips.SetToolTip(
-            lblImg2ImgStrength,
-            L10n.Pick(
-                _s.Language,
-                "Paramètre legacy conservé pour compatibilité ; le workflow FLUX.2 officiel actuel ne l'utilise pas.",
-                "Legacy compatibility setting; the current official FLUX.2 workflow does not use it."));
-
-        // Aligner les deux boutons d'action principaux de l'onglet Image.
-        btnGenerate.Location = new Point(18, 545);
-        btnGenerate.Size = new Size(125, 34);
-        _benchmarkButton.Location = new Point(151, 545);
-        _benchmarkButton.Size = new Size(197, 34);
-
-        // Vidéo : l'aperçu occupe uniquement la zone supérieure droite.
-        // Ne pas l'ancrer au bas : sinon WebView2 peut recouvrir fichier/historique
-        // lorsque l'onglet reçoit sa taille définitive après construction.
-        if (_videoPreviewWeb is not null)
-        {
-            _videoPreviewWeb.Location = new Point(448, 82);
-            _videoPreviewWeb.Size = new Size(570, 374);
-            _videoPreviewWeb.Anchor =
-                AnchorStyles.Top |
-                AnchorStyles.Left |
-                AnchorStyles.Right;
-        }
-
-        // Vidéo : l'installation appartient à l'onglet Installation.
-        _videoInstallButton.Visible = false;
-        _videoInstallButton.Enabled = false;
-        if (_videoInstallButton.Parent == _tabVideo)
-            _tabVideo.Controls.Remove(_videoInstallButton);
-
-        foreach (var label in _tabVideo.Controls.OfType<Label>())
-        {
-            if (label.Text.StartsWith(
-                    "Modèles vidéo",
-                    StringComparison.OrdinalIgnoreCase) ||
-                label.Text.StartsWith(
-                    "Moteur local prévu",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                label.Visible = false;
-            }
-
-            if (label.Text == "Style" && label.Left >= 440)
-            {
-                label.Anchor =
-                    AnchorStyles.Top | AnchorStyles.Left;
-                label.Location = new Point(448, 49);
-                label.Size = new Size(45, 26);
-            }
-
-            if (label.Text.StartsWith(
-                    "Fichier vidéo",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                label.Anchor =
-                    AnchorStyles.Bottom | AnchorStyles.Left;
-                label.Location = new Point(448, 462);
-                label.Size = new Size(110, 22);
-            }
-        }
-
-        _videoModelStatus.Visible = false;
-
-        _videoStyleTemplateCombo.Anchor =
-            AnchorStyles.Top | AnchorStyles.Left;
-        _videoStyleTemplateCombo.Location = new Point(493, 50);
-        _videoStyleTemplateCombo.Size = new Size(222, 25);
-
-        _videoNegativeTemplateLabel.Anchor =
-            AnchorStyles.Top | AnchorStyles.Left;
-        _videoNegativeTemplateLabel.Location = new Point(730, 49);
-        _videoNegativeTemplateLabel.Size = new Size(62, 26);
-
-        _videoNegativeTemplateCombo.Anchor =
-            AnchorStyles.Top | AnchorStyles.Left;
-        _videoNegativeTemplateCombo.Location = new Point(792, 50);
-        _videoNegativeTemplateCombo.Size = new Size(226, 25);
-
-        _videoOutput.Anchor =
-            AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-        _videoOutput.Location = new Point(448, 484);
-        _videoOutput.Size = new Size(400, 28);
-
-        _videoOpenButton.Anchor =
-            AnchorStyles.Bottom | AnchorStyles.Right;
-        _videoOpenButton.Location = new Point(858, 481);
-        _videoOpenButton.Size = new Size(160, 34);
-
-        _videoHistoryLabel.Anchor =
-            AnchorStyles.Bottom | AnchorStyles.Left;
-        _videoHistoryLabel.Location = new Point(448, 518);
-
-        _videoHistoryPanel.Anchor =
-            AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
-        _videoHistoryPanel.Location = new Point(448, 540);
-        _videoHistoryPanel.Size = new Size(570, 88);
-
-        LayoutVideoLeftColumnV36();
-    }
-
-    private void LayoutVideoLeftColumnV36()
-    {
-        _videoPrompt.Location = new Point(18, 45);
-        _videoPrompt.Size = new Size(390, 88);
-
-        _videoNegative.Location = new Point(18, 163);
-        _videoNegative.Size = new Size(390, 48);
-
-        foreach (var label in _tabVideo.Controls.OfType<Label>())
-        {
-            switch (label.Text)
-            {
-                case "Négatif / éléments à éviter":
-                    label.Location = new Point(18, 138);
-                    break;
-                case "Largeur vidéo":
-                case "Video width":
-                    label.Location = new Point(18, 307);
-                    label.Size = new Size(68, 23);
-                    break;
-                case "Hauteur vidéo":
-                case "Video height":
-                    label.Location = new Point(210, 307);
-                    label.Size = new Size(75, 23);
-                    break;
-                case "Frames vidéo":
-                case "Video frames":
-                    label.Location = new Point(18, 342);
-                    label.Size = new Size(68, 23);
-                    break;
-                case "FPS vidéo":
-                case "Video FPS":
-                    label.Location = new Point(210, 342);
-                    label.Size = new Size(75, 23);
-                    break;
-                case "Steps vidéo":
-                case "Video steps":
-                    label.Location = new Point(18, 377);
-                    label.Size = new Size(68, 23);
-                    break;
-                case "CFG vidéo":
-                case "Video CFG":
-                    label.Location = new Point(210, 377);
-                    label.Size = new Size(75, 23);
-                    break;
-                case "Shift":
-                    label.Location = new Point(18, 412);
-                    label.Size = new Size(68, 23);
-                    break;
-                case "Sampler":
-                    label.Location = new Point(210, 412);
-                    label.Size = new Size(75, 23);
-                    break;
-                case "Scheduler":
-                    label.Location = new Point(18, 447);
-                    label.Size = new Size(68, 23);
-                    break;
-                case "Seed vidéo":
-                case "Video seed":
-                    label.Location = new Point(210, 447);
-                    label.Size = new Size(75, 23);
-                    break;
-            }
-        }
-
-        _videoWidth.Location = new Point(90, 303);
-        _videoHeight.Location = new Point(292, 303);
-        _videoFrames.Location = new Point(90, 338);
-        _videoFps.Location = new Point(292, 338);
-        _videoSteps.Location = new Point(90, 373);
-        _videoCfg.Location = new Point(292, 373);
-        _videoSamplingShift.Location = new Point(90, 408);
-        _videoSampler.Location = new Point(292, 408);
-        _videoScheduler.Location = new Point(90, 443);
-        _videoSeed.Location = new Point(292, 443);
-        _videoRandomSeed.Location = new Point(379, 443);
-
-        _videoQualityHint.Location = new Point(18, 470);
-        _videoQualityHint.Size = new Size(390, 34);
-
-        _videoGenerateButton.Location = new Point(18, 508);
-        _videoCancelButton.Location = new Point(174, 508);
-        _videoRefreshButton.Location = new Point(290, 508);
-        _videoProgress.Location = new Point(18, 552);
-        _videoStatus.Location = new Point(18, 575);
-    }
-
+    /// <summary>
+    /// Définit l’état géré par <c>SetGpuWorkflowUiLocked</c> et applique immédiatement ses effets sur l’interface concernée.
+    /// </summary>
     private void SetGpuWorkflowUiLocked(
         bool locked,
         string operation)
@@ -8519,6 +10635,15 @@ public partial class MainForm : Form
                 UpdatePromptEnhancementState();
             if (_videoImprovePromptButton is not null)
                 UpdateVideoPromptEnhancementStateV37();
+
+            // A GPU workflow snapshots Enabled states before locking both
+            // workspaces. Runtime state can change while the workflow is
+            // running, so never trust stale Enabled snapshots for actions
+            // whose availability depends on models or newly-created output.
+            RefreshVideoModelStatus();
+            _videoOpenButton.Enabled =
+                !string.IsNullOrWhiteSpace(_videoOutput.Text) &&
+                File.Exists(_videoOutput.Text);
         }
 
         if (InvokeRequired && IsHandleCreated)
@@ -8527,6 +10652,9 @@ public partial class MainForm : Form
             Apply();
     }
 
+    /// <summary>
+    /// Énumère les contrôles interactifs des espaces Image et Vidéo qui doivent être temporairement verrouillés pendant un workflow GPU.
+    /// </summary>
     private IEnumerable<Control> EnumerateGpuWorkspaceInteractiveControls()
     {
         foreach (var root in new Control?[]
@@ -8546,6 +10674,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Parcourt récursivement tous les contrôles enfants d’un conteneur WinForms.
+    /// </summary>
     private static IEnumerable<Control> EnumerateDescendantControls(
         Control parent)
     {
@@ -8566,6 +10697,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Détermine la condition représentée par <c>IsGpuWorkspaceInteractiveControl</c> à partir de l’état courant.
+    /// </summary>
     private static bool IsGpuWorkspaceInteractiveControl(
         Control control)
     {
@@ -8588,6 +10722,9 @@ public partial class MainForm : Form
             DateTimePicker;
     }
 
+    /// <summary>
+    /// Configure l’environnement WebView2 utilisé pour afficher ComfyUI en imposant le runtime portable et les dossiers de données appropriés.
+    /// </summary>
     private void ConfigureComfyWebViewEnvironmentV36()
     {
         var fixedRuntime = PortablePaths.GetFixedWebView2RuntimePath();
@@ -8607,6 +10744,9 @@ public partial class MainForm : Form
             };
     }
 
+    /// <summary>
+    /// Initialise <c>InitializeComfyStatusPanelV36</c>, prépare l’état et les contrôles nécessaires puis branche les comportements associés.
+    /// </summary>
     private void InitializeComfyStatusPanelV36()
     {
 
@@ -8625,25 +10765,18 @@ public partial class MainForm : Form
             await SafeUiAsync("ComfyUI", OpenComfyEmbeddedAsync);
 
 
-        _comfyStatusCard.Controls.AddRange(
-        [
-            _comfyStatusTitle,
-            _comfyStatusMessage,
-            _comfyStatusRetryButton,
-            _comfyStatusPortLabel
-        ]);
-
-        _comfyStatusPanel.Controls.Add(_comfyStatusCard);
         _comfyStatusPanel.Resize += (_, _) =>
         {
             _comfyStatusCard.Left = Math.Max(0, (_comfyStatusPanel.ClientSize.Width - _comfyStatusCard.Width) / 2);
             _comfyStatusCard.Top = Math.Max(0, (_comfyStatusPanel.ClientSize.Height - _comfyStatusCard.Height) / 2);
         };
 
-        tabComfy.Controls.Add(_comfyStatusPanel);
         _comfyStatusPanel.BringToFront();
     }
 
+    /// <summary>
+    /// Définit l’état géré par <c>SetComfyStatusPanelV36</c> et applique immédiatement ses effets sur l’interface concernée.
+    /// </summary>
     private void SetComfyStatusPanelV36(
         string title,
         string message,
@@ -8660,6 +10793,9 @@ public partial class MainForm : Form
         _comfyStatusPanel.BringToFront();
     }
 
+    /// <summary>
+    /// Affiche le contenu géré par <c>ShowComfyWebV36</c> et synchronise son état visuel.
+    /// </summary>
     private void ShowComfyWebV36()
     {
         if (_comfyStatusPanel is not null)
@@ -8669,6 +10805,9 @@ public partial class MainForm : Form
         _comfyWeb.BringToFront();
     }
 
+    /// <summary>
+    /// Initialise <c>InitializeComfyDirectTabV36</c>, prépare l’état et les contrôles nécessaires puis branche les comportements associés.
+    /// </summary>
     private void InitializeComfyDirectTabV36()
     {
         _tabs.SelectedIndexChanged += async (_, _) =>
@@ -8725,8 +10864,14 @@ public partial class MainForm : Form
         };
     }
 
+    /// <summary>
+    /// Conserve comfy web handlers installed, état interne nécessaire pour synchroniser la logique métier et l’interface sans ambiguïté.
+    /// </summary>
     private bool _comfyWebHandlersInstalled;
 
+    /// <summary>
+    /// Vérifie puis garantit la condition requise par <c>EnsureComfyWebViewReadyV36</c> avant de poursuivre le traitement.
+    /// </summary>
     private async Task EnsureComfyWebViewReadyV36()
     {
         var fixedRuntime = PortablePaths.GetFixedWebView2RuntimePath();
@@ -8813,6 +10958,9 @@ public partial class MainForm : Form
         _comfyWebHandlersInstalled = true;
     }
 
+    /// <summary>
+    /// Affiche le contenu géré par <c>ShowComfyStatusPageV36</c> et synchronise son état visuel.
+    /// </summary>
     private void ShowComfyStatusPageV36(
         string title,
         string message,
@@ -8827,18 +10975,50 @@ public partial class MainForm : Form
             retry);
     }
 
-    // =====================================================================
-    // MainForm.V37
-    // =====================================================================
+    #endregion
+
+    #region Catalogues de modèles, LoRA et téléchargements
+
+    /// <summary>
+    /// Conserve la source d’annulation « _catalogDownloadCts » afin d’interrompre proprement l’opération associée.
+    /// </summary>
     private CancellationTokenSource? _catalogDownloadCts;
+    /// <summary>
+    /// Indique l’état interne « _catalogDownloadBusy » utilisé pour empêcher les mises à jour réentrantes ou incohérentes.
+    /// </summary>
     private bool _catalogDownloadBusy;
+    /// <summary>
+    /// Conserve catalog download video side, source structurée utilisée pour alimenter les listes, licences, téléchargements et états d’installation.
+    /// </summary>
     private bool? _catalogDownloadVideoSide;
+    /// <summary>
+    /// Verrou logique indiquant qu’une mise à jour programmatique de applying main tab strip layout v37 est en cours, afin d’éviter les gestionnaires réentrants.
+    /// </summary>
     private bool _applyingMainTabStripLayoutV37;
+    /// <summary>
+    /// Verrou logique indiquant qu’une mise à jour programmatique de applying v37 shared layout est en cours, afin d’éviter les gestionnaires réentrants.
+    /// </summary>
     private bool _applyingV37SharedLayout;
 
+    /// <summary>
+    /// Indique qu'un rafraîchissement programmatique des dépendances Image/Vidéo
+    /// est en cours afin de ne pas interpréter les changements de sélection comme
+    /// des actions utilisateur.
+    /// </summary>
+    private bool _refreshingPipelineDependencyChoicesV39;
+
+    /// <summary>
+    /// Indique l’état interne « _refreshingRuntimeCatalogChoicesV37 » utilisé pour empêcher les mises à jour réentrantes ou incohérentes.
+    /// </summary>
     private bool _refreshingRuntimeCatalogChoicesV37;
+    /// <summary>
+    /// Indique l’état interne « _refreshingLoraCatalogChoicesV37 » utilisé pour empêcher les mises à jour réentrantes ou incohérentes.
+    /// </summary>
     private bool _refreshingLoraCatalogChoicesV37;
 
+/// <summary>
+/// D?crit une entr?e du catalogue de mod?les : fichier cible, source, empreinte, r?le Image/Vid?o, licence, taille et ?ventuelles contraintes d?authentification.
+/// </summary>
     private sealed record RuntimeModelCatalogEntry(
         string Label,
         string FileName,
@@ -8855,15 +11035,24 @@ public partial class MainForm : Form
         string LicenseNote = "",
         long FileSizeBytes = 0);
 
+/// <summary>
+/// Repr?sente un LoRA pr?sent? dans une liste utilisateur et relie son nom de fichier ? son ?tat install? ainsi qu?? son entr?e de catalogue ?ventuelle.
+/// </summary>
     private sealed record LoraChoice(
         string FileName,
         string Display,
         bool Installed,
         LoraCatalogEntry? Catalog)
     {
+        /// <summary>
+        /// Retourne le libellé utilisateur de cet objet afin qu’il soit affiché directement dans les listes WinForms.
+        /// </summary>
         public override string ToString() => Display;
     }
 
+    /// <summary>
+    /// Conserve runtime model catalog v37, source structurée utilisée pour alimenter les listes, licences, téléchargements et états d’installation.
+    /// </summary>
     private static readonly RuntimeModelCatalogEntry[] RuntimeModelCatalogV37 =
     [
         new(
@@ -8953,6 +11142,9 @@ public partial class MainForm : Form
             3129424040L)
     ];
 
+/// <summary>
+/// D?crit une entr?e du catalogue LoRA avec son fichier, sa source de t?l?chargement, son r?le Image/Vid?o et les m?tadonn?es n?cessaires ? l?interface.
+/// </summary>
     private sealed record LoraCatalogEntry(
         string Label,
         string FileName,
@@ -8965,6 +11157,9 @@ public partial class MainForm : Form
         string LicenseNote = "",
         long FileSizeBytes = 0);
 
+    /// <summary>
+    /// Conserve lora catalog v37, source structurée utilisée pour alimenter les listes, licences, téléchargements et états d’installation.
+    /// </summary>
     private static readonly LoraCatalogEntry[] LoraCatalogV37 =
     [
         new(
@@ -9045,13 +11240,16 @@ public partial class MainForm : Form
             43849920L)
     ];
 
+    /// <summary>
+    /// Initialise les comportements d’exécution v37/v38. La géométrie statique vient du Designer ;
+    /// la disposition responsive n’est recalculée que lorsque la surface concernée est redimensionnée.
+    /// </summary>
     private void InitializeV37Ui()
     {
         InitializeLoraUiV37();
         InitializeCatalogDownloadUiV37();
         InitializeVideoPromptEnhancementV37();
         ApplyPersistedVideoQualityV37();
-        ApplyV37SharedLayout();
 
         tabGenerate.Resize += (_, _) => ApplyV37SharedLayout();
         _tabVideo.Resize += (_, _) => ApplyV37SharedLayout();
@@ -9067,30 +11265,11 @@ public partial class MainForm : Form
     }
 
 
+    /// <summary>
+    /// Initialise <c>InitializeCatalogDownloadUiV37</c>, prépare l’état et les contrôles nécessaires puis branche les comportements associés.
+    /// </summary>
     private void InitializeCatalogDownloadUiV37()
     {
-
-
-        tabGenerate.Controls.AddRange(
-        [
-            _imageModelDownloadButton,
-            _imageLoraDownloadButton,
-            _imageCatalogDownloadProgress,
-            _imageCatalogDownloadStatus,
-            _imageCatalogDownloadSize,
-            _imageCatalogDownloadCancelButton
-        ]);
-
-        _tabVideo.Controls.AddRange(
-        [
-            _videoModelDownloadButton,
-            _videoLoraDownloadButton,
-            _videoCatalogDownloadProgress,
-            _videoCatalogDownloadStatus,
-            _videoCatalogDownloadSize,
-            _videoCatalogDownloadCancelButton
-        ]);
-
         _imageModelDownloadButton.Click += async (_, _) =>
             await SafeUiAsync(
                 L10n.Pick(
@@ -9128,9 +11307,19 @@ public partial class MainForm : Form
                     video: true));
 
         _imageCatalogDownloadCancelButton.Click += (_, _) =>
-            _catalogDownloadCts?.Cancel();
+            SafeUiAction(
+                L10n.Pick(
+                    _s.Language,
+                    "Annuler le téléchargement Image",
+                    "Cancel Image download"),
+                () => _catalogDownloadCts?.Cancel());
         _videoCatalogDownloadCancelButton.Click += (_, _) =>
-            _catalogDownloadCts?.Cancel();
+            SafeUiAction(
+                L10n.Pick(
+                    _s.Language,
+                    "Annuler le téléchargement Vidéo",
+                    "Cancel Video download"),
+                () => _catalogDownloadCts?.Cancel());
 
         RefreshCatalogDownloadUiV37();
     }
@@ -9139,6 +11328,9 @@ public partial class MainForm : Form
 
 
 
+    /// <summary>
+    /// Actualise les données gérées par <c>RefreshCatalogDownloadUiV37</c> à partir de l’état courant et synchronise les contrôles dépendants.
+    /// </summary>
     private void RefreshCatalogDownloadUiV37()
     {
         if (_imageModelDownloadButton is null)
@@ -9176,6 +11368,9 @@ public partial class MainForm : Form
             _catalogDownloadVideoSide == true;
     }
 
+    /// <summary>
+    /// Configure le bouton de téléchargement d’un modèle de catalogue selon son état local, sa licence et ses exigences d’authentification.
+    /// </summary>
     private void ConfigureRuntimeDownloadButtonV37(
         Button button,
         ComboBox combo)
@@ -9217,6 +11412,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Configure le bouton de téléchargement LoRA selon la sélection courante et son état d’installation.
+    /// </summary>
     private void ConfigureLoraDownloadButtonV37(
         Button button,
         ComboBox combo)
@@ -9259,6 +11457,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Actualise les données gérées par <c>RefreshCatalogSizeLabelV37</c> à partir de l’état courant et synchronise les contrôles dépendants.
+    /// </summary>
     private void RefreshCatalogSizeLabelV37(
         bool videoSide,
         Label label,
@@ -9322,6 +11523,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Formate une taille de fichier en unité lisible pour l’utilisateur, de l’octet au gigaoctet.
+    /// </summary>
     private static string FormatFileSizeV37(long bytes)
     {
         if (bytes <= 0)
@@ -9342,6 +11546,9 @@ public partial class MainForm : Form
             : $"{value:0.##} {units[unit]}";
     }
 
+    /// <summary>
+    /// Démarre l’opération gérée par <c>StartSelectedRuntimeCatalogDownloadV37Async</c> et prépare les ressources dont elle dépend.
+    /// </summary>
     private async Task StartSelectedRuntimeCatalogDownloadV37Async(
         bool imageModel)
     {
@@ -9396,6 +11603,9 @@ public partial class MainForm : Form
                 ct));
     }
 
+    /// <summary>
+    /// Démarre l’opération gérée par <c>StartSelectedLoraCatalogDownloadV37Async</c> et prépare les ressources dont elle dépend.
+    /// </summary>
     private async Task StartSelectedLoraCatalogDownloadV37Async(
         bool video)
     {
@@ -9431,6 +11641,9 @@ public partial class MainForm : Form
                 ct));
     }
 
+    /// <summary>
+    /// Exécute le traitement géré par <c>RunCatalogDownloadV37Async</c> en assurant la préparation et la restauration de l’état associé.
+    /// </summary>
     private async Task RunCatalogDownloadV37Async(
         bool videoSide,
         bool loraDownload,
@@ -9586,6 +11799,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Transforme une exception de téléchargement catalogue en message utilisateur court et exploitable.
+    /// </summary>
     private string FormatCatalogDownloadErrorV37(
         string label,
         Exception ex)
@@ -9622,17 +11838,25 @@ public partial class MainForm : Form
             $"Unable to download “{label}”.\n\n{reason}\n\nTechnical detail: {message}");
     }
 
+    /// <summary>
+    /// Ajoute les éléments gérés par <c>AddRuntimeModelCatalogChoicesV37</c> tout en évitant les incohérences de collection.
+    /// </summary>
     private void AddRuntimeModelCatalogChoicesV37(
         List<RuntimeModelChoice> choices,
         bool imageModel)
     {
         foreach (var entry in RuntimeModelCatalogV37.Where(
-                     x => imageModel ? !x.Video : x.Video))
+                     x => imageModel
+                         ? !x.Video && !x.ActivatesTextEncoder
+                         : x.Video))
         {
             choices.Add(CreateRuntimeModelChoiceV37(entry));
         }
     }
 
+    /// <summary>
+    /// Crée l’objet géré par <c>CreateRuntimeModelChoiceV37</c> et initialise les propriétés nécessaires à son utilisation.
+    /// </summary>
     private RuntimeModelChoice CreateRuntimeModelChoiceV37(
         RuntimeModelCatalogEntry entry)
     {
@@ -9670,6 +11894,9 @@ public partial class MainForm : Form
             entry.FileSizeBytes);
     }
 
+    /// <summary>
+    /// Construit le libellé de licence à afficher pour une entrée de catalogue.
+    /// </summary>
     private string CatalogLicenseDisplayV37(string licenseId)
     {
         if (string.IsNullOrWhiteSpace(licenseId))
@@ -9691,6 +11918,9 @@ public partial class MainForm : Form
             : licenseId;
     }
 
+    /// <summary>
+    /// Construit le texte de métadonnées d’un modèle de catalogue : source, licence, taille et contraintes d’accès.
+    /// </summary>
     private string CatalogMetadataTextV37(
         string directUrl,
         string sourceUrl,
@@ -9732,19 +11962,32 @@ public partial class MainForm : Form
         return string.Join(Environment.NewLine, lines);
     }
 
+    /// <summary>
+    /// Ouvre la ressource gérée par <c>OpenCatalogUrlV37</c> en appliquant les vérifications nécessaires.
+    /// </summary>
     private static void OpenCatalogUrlV37(string url)
     {
         if (string.IsNullOrWhiteSpace(url))
             return;
 
-        System.Diagnostics.Process.Start(
-            new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = url,
-                UseShellExecute = true
-            });
+        try
+        {
+            System.Diagnostics.Process.Start(
+                new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = url,
+                    UseShellExecute = true
+                });
+        }
+        catch (Exception ex)
+        {
+            CrashLog.Write("Open catalog URL", ex);
+        }
     }
 
+    /// <summary>
+    /// Ajoute les éléments gérés par <c>AddCatalogReferenceMenuItemsV37</c> tout en évitant les incohérences de collection.
+    /// </summary>
     private void AddCatalogReferenceMenuItemsV37(
         ToolStripMenuItem parent,
         string directUrl,
@@ -9772,10 +12015,16 @@ public partial class MainForm : Form
             Enabled = !string.IsNullOrWhiteSpace(directUrl)
         };
         copyDirect.Click += (_, _) =>
-        {
-            if (!string.IsNullOrWhiteSpace(directUrl))
-                Clipboard.SetText(directUrl);
-        };
+            SafeUiAction(
+                L10n.Pick(
+                    _s.Language,
+                    "Copier le lien direct",
+                    "Copy direct link"),
+                () =>
+                {
+                    if (!string.IsNullOrWhiteSpace(directUrl))
+                        Clipboard.SetText(directUrl);
+                });
 
         var openSource = new ToolStripMenuItem(
             L10n.Pick(
@@ -9794,6 +12043,9 @@ public partial class MainForm : Form
         parent.DropDownItems.Add(openSource);
     }
 
+    /// <summary>
+    /// Ajoute les données gérées par <c>AppendRuntimeCatalogMenuV37</c> à la collection ou au journal cible.
+    /// </summary>
     private void AppendRuntimeCatalogMenuV37(
         ContextMenuStrip menu,
         bool imageModel)
@@ -9864,6 +12116,9 @@ public partial class MainForm : Form
         menu.Items.Add(root);
     }
 
+    /// <summary>
+    /// Actualise l’infobulle catalogue/licence du modèle d’exécution actuellement sélectionné.
+    /// </summary>
     private void UpdateRuntimeCatalogTooltipV37(ComboBox combo)
     {
         if (combo.SelectedItem is not RuntimeModelChoice choice ||
@@ -9884,6 +12139,9 @@ public partial class MainForm : Form
                 choice.LicenseNote));
     }
 
+    /// <summary>
+    /// Met à jour l’état géré par <c>UpdateLoraCatalogTooltipV37</c> et propage la nouvelle valeur aux éléments concernés.
+    /// </summary>
     private void UpdateLoraCatalogTooltipV37(ComboBox combo)
     {
         if (combo.SelectedItem is not LoraChoice choice ||
@@ -9902,6 +12160,9 @@ public partial class MainForm : Form
                 choice.Catalog.LicenseNote));
     }
 
+    /// <summary>
+    /// Traite l’action gérée par <c>HandleRuntimeModelChoiceV37Async</c> et synchronise l’état applicatif qui en dépend.
+    /// </summary>
     private async Task HandleRuntimeModelChoiceV37Async(
         RuntimeModelChoice choice,
         bool imageModel)
@@ -9999,7 +12260,10 @@ public partial class MainForm : Form
 
             _s.TextEncoderModel = choice.FileName;
             txtTextEncoder.Text = choice.FileName;
-            SettingsStore.Save(_s);
+            SynchronizePipelinePresetSelection(
+                video: false,
+                persist: false);
+            PersistSettingsIfAllowed();
             RefreshRuntimeModelChoicesV36();
             RefreshFeatureAvailability();
             _status.Text =
@@ -10035,12 +12299,18 @@ public partial class MainForm : Form
                 _cfgVideoModel.Text = choice.FileName;
         }
 
-        SettingsStore.Save(_s);
+        SynchronizePipelinePresetSelection(
+            video: !imageModel,
+            persist: false);
+        PersistSettingsIfAllowed();
         RefreshRuntimeModelChoicesV36();
         RefreshFeatureAvailability();
         RefreshVideoModelStatus();
     }
 
+    /// <summary>
+    /// Télécharge runtime catalog choice v37 async en gérant progression, annulation, destination et validation avant activation.
+    /// </summary>
     private async Task DownloadRuntimeCatalogChoiceV37Async(
         RuntimeModelChoice choice,
         bool imageModel,
@@ -10128,7 +12398,7 @@ public partial class MainForm : Form
                     _cfgVideoModel.Text = choice.FileName;
             }
 
-            SettingsStore.Save(_s);
+            PersistSettingsIfAllowed();
             RefreshRuntimeModelChoicesV36();
             RefreshFeatureAvailability();
             RefreshVideoModelStatus();
@@ -10151,6 +12421,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Supprime les fichiers temporaires laissés par un téléchargement catalogue annulé ou échoué sans toucher au modèle final valide.
+    /// </summary>
     private static void TryDeleteCatalogDownloadArtifactsV37(
         string destination,
         bool deleteDestination)
@@ -10174,6 +12447,9 @@ public partial class MainForm : Form
         catch { }
     }
 
+    /// <summary>
+    /// Demande une confirmation explicite avant l’installation d’une entrée de catalogue marquée comme réservée aux adultes.
+    /// </summary>
     private bool ConfirmAdultCatalogV37(string label)
     {
         var confirmation = MessageBox.Show(
@@ -10192,6 +12468,9 @@ public partial class MainForm : Form
         return confirmation == DialogResult.Yes;
     }
 
+    /// <summary>
+    /// Initialise <c>InitializeLoraUiV37</c>, prépare l’état et les contrôles nécessaires puis branche les comportements associés.
+    /// </summary>
     private void InitializeLoraUiV37()
     {
         _imageLoraStrength.Value = Math.Clamp(
@@ -10203,97 +12482,94 @@ public partial class MainForm : Form
             _videoLoraStrength.Minimum,
             _videoLoraStrength.Maximum);
 
-
-        _imageModelRuntimeCombo.Location = new Point(430, 49);
-        _imageModelRuntimeCombo.Size = new Size(214, 25);
-        _imageImportModelButton.Location = new Point(650, 48);
-        _imageImportModelButton.Size = new Size(84, 27);
-
-
-        tabGenerate.Controls.AddRange(
-        [
-            _imageLoraLabel,
-            _imageLoraCombo,
-            _imageLoraStrength,
-            _imageLoraAddButton
-        ]);
-
-
-
-        _tabVideo.Controls.AddRange(
-        [
-            _videoLoraLabel,
-            _videoLoraCombo,
-            _videoLoraStrength,
-            _videoLoraAddButton
-        ]);
-
         RefreshLoraChoicesV37();
 
         _imageLoraCombo.SelectedIndexChanged += async (_, _) =>
-        {
-            UpdateLoraCatalogTooltipV37(_imageLoraCombo);
-            RefreshCatalogDownloadUiV37();
-
-            if (_refreshingLoraCatalogChoicesV37 ||
-                _imageLoraCombo.SelectedItem is not LoraChoice choice)
-            {
-                return;
-            }
-
-            if (!choice.Installed && choice.Catalog is not null)
-                return;
-
             await SafeUiAsync(
-                L10n.Pick(_s.Language, "Sélection LoRA Image", "Image LoRA selection"),
-                () => HandleLoraChoiceV37Async(choice, video: false));
-        };
+                L10n.Pick(
+                    _s.Language,
+                    "Sélection LoRA Image",
+                    "Image LoRA selection"),
+                async () =>
+                {
+                    UpdateLoraCatalogTooltipV37(_imageLoraCombo);
+                    RefreshCatalogDownloadUiV37();
+
+                    if (_refreshingLoraCatalogChoicesV37 ||
+                        _imageLoraCombo.SelectedItem is not LoraChoice choice)
+                    {
+                        return;
+                    }
+
+                    if (!choice.Installed && choice.Catalog is not null)
+                        return;
+
+                    await HandleLoraChoiceV37Async(
+                        choice,
+                        video: false);
+                });
         _imageLoraStrength.ValueChanged += (_, _) =>
         {
-            _s.ImageLoraStrength = Decimal.ToDouble(_imageLoraStrength.Value);
-            SettingsStore.Save(_s);
+            _s.ImageLoraStrength =
+                Decimal.ToDouble(_imageLoraStrength.Value);
+            SynchronizePipelinePresetSelection(
+                video: false,
+                persist: false);
+            SaveSettingsFromUiEvent("Image LoRA strength");
         };
         _imageLoraAddButton.Click += (_, _) =>
-            ShowLoraAddMenuV37(_imageLoraAddButton, video: false);
+            SafeUiAction(
+                L10n.Pick(_s.Language, "Menu LoRA Image", "Image LoRA menu"),
+                () => ShowLoraAddMenuV37(_imageLoraAddButton, video: false));
 
         _videoLoraCombo.SelectedIndexChanged += async (_, _) =>
-        {
-            UpdateLoraCatalogTooltipV37(_videoLoraCombo);
-            RefreshCatalogDownloadUiV37();
-
-            if (_refreshingLoraCatalogChoicesV37 ||
-                _videoLoraCombo.SelectedItem is not LoraChoice choice)
-            {
-                return;
-            }
-
-            if (!choice.Installed && choice.Catalog is not null)
-                return;
-
             await SafeUiAsync(
-                L10n.Pick(_s.Language, "Sélection LoRA Vidéo", "Video LoRA selection"),
-                () => HandleLoraChoiceV37Async(choice, video: true));
-        };
+                L10n.Pick(
+                    _s.Language,
+                    "Sélection LoRA Vidéo",
+                    "Video LoRA selection"),
+                async () =>
+                {
+                    UpdateLoraCatalogTooltipV37(_videoLoraCombo);
+                    RefreshCatalogDownloadUiV37();
+
+                    if (_refreshingLoraCatalogChoicesV37 ||
+                        _videoLoraCombo.SelectedItem is not LoraChoice choice)
+                    {
+                        return;
+                    }
+
+                    if (!choice.Installed && choice.Catalog is not null)
+                        return;
+
+                    await HandleLoraChoiceV37Async(
+                        choice,
+                        video: true);
+                });
         _videoLoraStrength.ValueChanged += (_, _) =>
         {
-            _s.VideoLoraStrength = Decimal.ToDouble(_videoLoraStrength.Value);
-            SettingsStore.Save(_s);
+            _s.VideoLoraStrength =
+                Decimal.ToDouble(_videoLoraStrength.Value);
+            SynchronizePipelinePresetSelection(
+                video: true,
+                persist: false);
+            SaveSettingsFromUiEvent("Video LoRA strength");
         };
         _videoLoraAddButton.Click += (_, _) =>
-            ShowLoraAddMenuV37(_videoLoraAddButton, video: true);
+            SafeUiAction(
+                L10n.Pick(_s.Language, "Menu LoRA Vidéo", "Video LoRA menu"),
+                () => ShowLoraAddMenuV37(_videoLoraAddButton, video: true));
 
         UpdateLoraCatalogTooltipV37(_imageLoraCombo);
         UpdateLoraCatalogTooltipV37(_videoLoraCombo);
-
-        // La ligne supplémentaire rend la partie droite Vidéo symétrique :
-        // modèle/qualité, style/négatif, LoRA, puis aperçu.
-        _videoPreviewWeb.Location = new Point(448, 113);
-        _videoPreviewWeb.Size = new Size(570, 343);
-    }
+}
 
 
 
 
+    /// <summary>
+    /// Actualise les données gérées par <c>RefreshLoraChoicesV37</c> à partir de l’état courant et synchronise les contrôles dépendants.
+    /// </summary>
     private void RefreshLoraChoicesV37()
     {
         var root = PortablePreflight.GetComfyRoot(_s);
@@ -10320,6 +12596,9 @@ public partial class MainForm : Form
             video: true);
     }
 
+    /// <summary>
+    /// Remplit le contrôle ou la collection géré par <c>FillLoraComboV37</c> à partir des données disponibles.
+    /// </summary>
     private void FillLoraComboV37(
         ComboBox combo,
         IEnumerable<string> files,
@@ -10373,6 +12652,19 @@ public partial class MainForm : Form
                     Catalog: null));
         }
 
+        // Conserver visible un LoRA configuré mais absent, sans le désactiver.
+        if (!string.IsNullOrWhiteSpace(selected) &&
+            !choices.Any(item => string.Equals(
+                item.FileName, selected, StringComparison.OrdinalIgnoreCase)))
+        {
+            choices.Add(new LoraChoice(
+                selected,
+                "[↓] " + selected +
+                L10n.Pick(_s.Language, " · non installé", " · not installed"),
+                Installed: false,
+                Catalog: null));
+        }
+
         _refreshingLoraCatalogChoicesV37 = true;
         combo.BeginUpdate();
         try
@@ -10394,12 +12686,9 @@ public partial class MainForm : Form
             _refreshingLoraCatalogChoicesV37 = false;
         }
     }
-
-    private static string SelectedLoraFileV37(ComboBox combo) =>
-        combo.SelectedItem is LoraChoice choice
-            ? choice.FileName
-            : string.Empty;
-
+    /// <summary>
+    /// Traite l’action gérée par <c>HandleLoraChoiceV37Async</c> et synchronise l’état applicatif qui en dépend.
+    /// </summary>
     private async Task HandleLoraChoiceV37Async(
         LoraChoice choice,
         bool video)
@@ -10411,7 +12700,10 @@ public partial class MainForm : Form
             else
                 _s.ImageLora = string.Empty;
 
-            SettingsStore.Save(_s);
+            SynchronizePipelinePresetSelection(
+                video,
+                persist: false);
+            PersistSettingsIfAllowed();
             return;
         }
 
@@ -10467,23 +12759,35 @@ public partial class MainForm : Form
             }
         }
 
-        SettingsStore.Save(_s);
+        SynchronizePipelinePresetSelection(
+            video,
+            persist: false);
+        PersistSettingsIfAllowed();
         Log(
             "UI",
             $"LoRA {(video ? "Vidéo" : "Image")} sélectionné · {choice.FileName}.");
     }
 
-    private void ShowLoraAddMenuV37(Control owner, bool video)
+    /// <summary>
+    /// Construit le menu d’import/catalogue LoRA sans l’afficher.
+    /// </summary>
+    private ContextMenuStrip BuildLoraAddMenuV37(bool video)
     {
         var menu = new ContextMenuStrip();
 
         var import = menu.Items.Add(
             L10n.Pick(_s.Language, "Importer un LoRA local…", "Import local LoRA…"));
-        import.Click += async (_, _) => await ImportLoraV37Async(video);
+        import.Click += async (_, _) =>
+            await SafeUiAsync(
+                L10n.Pick(_s.Language, "Importer un LoRA", "Import LoRA"),
+                () => ImportLoraV37Async(video));
 
         var url = menu.Items.Add(
             L10n.Pick(_s.Language, "Télécharger depuis une URL…", "Download from URL…"));
-        url.Click += async (_, _) => await DownloadLoraFromDialogV37Async(video);
+        url.Click += async (_, _) =>
+            await SafeUiAsync(
+                L10n.Pick(_s.Language, "Télécharger un LoRA", "Download LoRA"),
+                () => DownloadLoraFromDialogV37Async(video));
 
         menu.Items.Add(new ToolStripSeparator());
         foreach (var entry in LoraCatalogV37.Where(x => x.Video == video))
@@ -10506,7 +12810,12 @@ public partial class MainForm : Form
                     "Téléchargement optionnel depuis Hugging Face.",
                     "Optional download from Hugging Face.");
                 normalItem.Click += async (_, _) =>
-                    await DownloadCatalogLoraV37Async(entry);
+                    await SafeUiAsync(
+                        L10n.Pick(
+                            _s.Language,
+                            "Catalogue LoRA",
+                            "LoRA catalog"),
+                        () => DownloadCatalogLoraV37Async(entry));
                 continue;
             }
 
@@ -10571,10 +12880,22 @@ public partial class MainForm : Form
             menu.Items.Add(adultItem);
         }
 
-        menu.Closed += (_, _) => menu.Dispose();
+        return menu;
+        }
+
+    /// <summary>
+    /// Affiche le menu d’import/catalogue LoRA sous son contrôle propriétaire.
+    /// </summary>
+    private void ShowLoraAddMenuV37(Control owner, bool video)
+    {
+        var menu = BuildLoraAddMenuV37(video);
+        WireDeferredContextMenuDisposalV37(menu);
         menu.Show(owner, new Point(0, owner.Height));
     }
 
+    /// <summary>
+    /// Importe un fichier LoRA dans le dossier ComfyUI attendu, évite les collisions de nom puis actualise les sélecteurs Image/Vidéo.
+    /// </summary>
     private async Task ImportLoraV37Async(bool video)
     {
         using var dialog = new OpenFileDialog
@@ -10605,6 +12926,9 @@ public partial class MainForm : Form
         Log("UI", "LoRA importé : " + Path.GetFileName(destination));
     }
 
+    /// <summary>
+    /// Télécharge lora from dialog v37 async en gérant progression, annulation, destination et validation avant activation.
+    /// </summary>
     private async Task DownloadLoraFromDialogV37Async(bool video)
     {
         using var dialog = new ModelDownloadForm(
@@ -10628,6 +12952,9 @@ public partial class MainForm : Form
             1.0);
     }
 
+    /// <summary>
+    /// Télécharge catalog lora v37 async en gérant progression, annulation, destination et validation avant activation.
+    /// </summary>
     private async Task DownloadCatalogLoraV37Async(
         LoraCatalogEntry entry,
         CancellationToken ct = default)
@@ -10648,6 +12975,9 @@ public partial class MainForm : Form
             ct);
     }
 
+    /// <summary>
+    /// Télécharge lora v37 async en gérant progression, annulation, destination et validation avant activation.
+    /// </summary>
     private async Task DownloadLoraV37Async(
         bool video,
         string fileName,
@@ -10689,6 +13019,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Sélectionne la valeur gérée par <c>SelectDownloadedLoraV37</c> et synchronise les contrôles associés.
+    /// </summary>
     private void SelectDownloadedLoraV37(
         bool video,
         string fileName,
@@ -10726,23 +13059,18 @@ public partial class MainForm : Form
             _s.ImageLoraStrength = strength;
         }
 
-        SettingsStore.Save(_s);
+        SynchronizePipelinePresetSelection(
+            video,
+            persist: false);
+        PersistSettingsIfAllowed();
     }
 
+    /// <summary>
+    /// Initialise <c>InitializeVideoPromptEnhancementV37</c>, prépare l’état et les contrôles nécessaires puis branche les comportements associés.
+    /// </summary>
     private void InitializeVideoPromptEnhancementV37()
     {
         _videoAutoImprovePrompt.Checked = _s.VideoAutoImprovePrompt;
-        _videoImprovePromptButton.Text =
-            L10n.Pick(_s.Language, "✨ Améliorer", "✨ Enhance");
-
-        _videoImprovePromptButton.FlatAppearance.BorderSize = 0;
-
-
-        _tabVideo.Controls.AddRange(
-        [
-            _videoImprovePromptButton,
-            _videoAutoImprovePrompt
-        ]);
 
         _videoImprovePromptButton.Click += async (_, _) =>
             await SafeUiAsync(
@@ -10754,13 +13082,16 @@ public partial class MainForm : Form
         _videoAutoImprovePrompt.CheckedChanged += (_, _) =>
         {
             _s.VideoAutoImprovePrompt = _videoAutoImprovePrompt.Checked;
-            SettingsStore.Save(_s);
+            SaveSettingsFromUiEvent("Video auto-improve preference");
         };
 
         _videoPrompt.TextChanged += (_, _) => UpdateVideoPromptEnhancementStateV37();
         UpdateVideoPromptEnhancementStateV37();
     }
 
+    /// <summary>
+    /// Améliore le prompt Vidéo courant via Ollama, remplace le texte affiché et actualise l’empreinte anti-répétition.
+    /// </summary>
     private async Task ImproveVideoPromptFromUiV37Async()
     {
         var source = _videoPrompt.Text.Trim();
@@ -10778,7 +13109,7 @@ public partial class MainForm : Form
 
             _videoPrompt.Text = improved;
             _s.LastImprovedVideoPromptHash = PromptFingerprint(improved);
-            SettingsStore.Save(_s);
+            PersistSettingsIfAllowed();
             Log("Video", "Prompt vidéo amélioré localement via Ollama.");
         }
         finally
@@ -10787,6 +13118,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Détermine la condition représentée par <c>IsVideoPromptAlreadyImprovedV37</c> à partir de l’état courant.
+    /// </summary>
     private bool IsVideoPromptAlreadyImprovedV37(string text) =>
         !string.IsNullOrWhiteSpace(_s.LastImprovedVideoPromptHash) &&
         string.Equals(
@@ -10794,6 +13128,9 @@ public partial class MainForm : Form
             _s.LastImprovedVideoPromptHash,
             StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Met à jour l’état géré par <c>UpdateVideoPromptEnhancementStateV37</c> et propage la nouvelle valeur aux éléments concernés.
+    /// </summary>
     private void UpdateVideoPromptEnhancementStateV37()
     {
         if (_videoImprovePromptButton is null || _videoPrompt is null)
@@ -10813,6 +13150,9 @@ public partial class MainForm : Form
             : L10n.Pick(_s.Language, "✨ Améliorer", "✨ Enhance");
     }
 
+    /// <summary>
+    /// Applique les règles de <c>ApplyPersistedVideoQualityV37</c> à l’état courant puis synchronise les contrôles affectés.
+    /// </summary>
     private void ApplyPersistedVideoQualityV37()
     {
         if (_videoQualityCombo is null)
@@ -10834,6 +13174,9 @@ public partial class MainForm : Form
     }
 
 
+    /// <summary>
+    /// Applique les règles de <c>ApplyMainTabStripLayoutV37</c> à l’état courant puis synchronise les contrôles affectés.
+    /// </summary>
     private void ApplyMainTabStripLayoutV37()
     {
         if (_applyingMainTabStripLayoutV37 ||
@@ -10909,6 +13252,9 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Applique les règles de <c>ApplyEmbeddedWebZoomV37</c> à l’état courant puis synchronise les contrôles affectés.
+    /// </summary>
     private void ApplyEmbeddedWebZoomV37()
     {
         if (_comfyWeb is not null && tabComfy is not null)
@@ -10932,6 +13278,10 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Applique la géométrie responsive après le redimensionnement d’une fenêtre ou d’un onglet.
+    /// La construction initiale des contrôles, leur parentage et leurs limites par défaut restent dans MainForm.Designer.cs.
+    /// </summary>
     private void ApplyV37SharedLayout()
     {
         if (_applyingV37SharedLayout ||
@@ -10952,6 +13302,12 @@ public partial class MainForm : Form
             LayoutConfigurationV37();
             LayoutInstallationV37();
             LayoutAboutV37();
+
+            // v38 polish owns the final responsive positions. Running it from
+            // the shared resize path keeps Image, Video and Configuration in
+            // sync when the user resizes the real window.
+            if (_uiPolishInitialized)
+                ApplyUiPolishLayout();
         }
         finally
         {
@@ -10959,6 +13315,10 @@ public partial class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Adapte les contrôles Configuration à la taille courante de l’espace de travail.
+    /// Cette méthode ne crée aucun contrôle.
+    /// </summary>
     private void LayoutConfigurationV37()
     {
         if (_visionModelCombo is null ||
@@ -10974,7 +13334,9 @@ public partial class MainForm : Form
         var rootWidth = Math.Max(300, width - 168);
         var rightFieldWidth = Math.Max(220, width - 488);
 
-        tabConfiguration.AutoScroll = false;
+        tabConfiguration.AutoScroll = true;
+        tabConfiguration.AutoScrollMinSize =
+            new Size(0, 636);
 
         lblConfigTitle.SetBounds(18, 14, 390, 36);
         var saveX = Math.Max(420, width - 390);
@@ -11039,6 +13401,9 @@ public partial class MainForm : Form
             hintHeight);
     }
 
+    /// <summary>
+    /// Calcule puis applique la géométrie gérée par <c>LayoutInstallationV37</c> en respectant la taille actuelle de la fenêtre.
+    /// </summary>
     private void LayoutInstallationV37()
     {
         if (_installImageModelsButton is null ||
@@ -11088,6 +13453,9 @@ public partial class MainForm : Form
             logHeight);
     }
 
+    /// <summary>
+    /// Calcule puis applique la géométrie gérée par <c>LayoutAboutV37</c> en respectant la taille actuelle de la fenêtre.
+    /// </summary>
     private void LayoutAboutV37()
     {
         var workspace = GetSharedWorkspaceSizeV37();
@@ -11114,6 +13482,9 @@ public partial class MainForm : Form
         btnOpenGitHub.SetBounds(270, 414, 180, 36);
     }
 
+    /// <summary>
+    /// Calcule et retourne la valeur produite par <c>GetSharedWorkspaceSizeV37</c> à partir de l’état courant.
+    /// </summary>
     private Size GetSharedWorkspaceSizeV37()
     {
         var display = _tabs.DisplayRectangle;
@@ -11127,6 +13498,9 @@ public partial class MainForm : Form
         return new Size(width, height);
     }
 
+    /// <summary>
+    /// Calcule puis applique la géométrie gérée par <c>LayoutCatalogDownloadStatusV37</c> en respectant la taille actuelle de la fenêtre.
+    /// </summary>
     private static void LayoutCatalogDownloadStatusV37(
         int rightX,
         int rightWidth,
@@ -11135,9 +13509,9 @@ public partial class MainForm : Form
         Label size,
         Button cancel)
     {
-        const int rowY = 112;
+        const int rowY = 176;
         const int statusWidth = 145;
-        const int sizeWidth = 155;
+        const int sizeWidth = 160;
         const int cancelWidth = 76;
         const int gap = 5;
 
@@ -11185,10 +13559,21 @@ public partial class MainForm : Form
             AnchorStyles.Top | AnchorStyles.Right;
     }
 
+    /// <summary>
+    /// Retourne l’ancre verticale partagée par les actions Image et Vidéo.
+    /// Les éditeurs de gauche grandissent avec la fenêtre jusqu’à une hauteur de travail confortable
+    /// au lieu de disperser les contrôles dans les espaces de travail très hauts.
+    /// </summary>
+    private static int GetFeatureActionYV38(Size workspace)
+        => Math.Clamp(workspace.Height - 100, 448, 590);
+
+    /// <summary>
+    /// Adapte l’espace de travail Image à la hauteur et à la largeur courantes de la fenêtre.
+    /// </summary>
     private void LayoutImageV37()
     {
         const int rightX = 370;
-        const int previewY = 142;
+        const int previewY = 208;
 
         var workspace = GetSharedWorkspaceSizeV37();
         var rightWidth = Math.Max(
@@ -11200,29 +13585,86 @@ public partial class MainForm : Form
         var historyLabelY = historyY - 22;
         var reservedOutputY = historyLabelY - 56;
         var previewHeight = Math.Max(
-            180,
+            140,
             reservedOutputY - previewY - 6);
 
-        _imageModelRuntimeLabel.SetBounds(rightX, 17, 52, 26);
-        _imageModelRuntimeCombo.SetBounds(rightX + 52, 18, 150, 25);
+        LayoutImageRuntimeControlsV39(
+            rightX,
+            rightWidth);
+        LayoutImagePreviewAndHistoryV39(
+            rightX,
+            rightWidth,
+            previewY,
+            previewHeight,
+            historyLabelY,
+            historyY);
+        LayoutImageEditorV39(workspace);
+
+        UpdateImagePreviewLayout();
+    }
+
+    /// <summary>
+    /// Positionne les sélecteurs de modèle, dépendances, templates, LoRA et profil de l’espace Image.
+    /// </summary>
+    private void LayoutImageRuntimeControlsV39(
+        int rightX,
+        int rightWidth)
+    {
+        _imageModelRuntimeLabel.SetBounds(rightX, 17, 64, 26);
+        _imageModelRuntimeCombo.SetBounds(rightX + 64, 18, 138, 25);
         _imageModelDownloadButton.SetBounds(rightX + 208, 17, 112, 27);
         _imageImportModelButton.SetBounds(rightX + 326, 17, 32, 27);
         _imageImportModelButton.Text = "+";
 
-        _imageStyleTemplateLabel.SetBounds(rightX, 49, 45, 26);
-        _imageStyleTemplateCombo.SetBounds(rightX + 45, 50, 265, 25);
-        _imageNegativeTemplateLabel.SetBounds(rightX + 330, 49, 62, 26);
+        _imageTextEncoderRuntimeLabel.SetBounds(rightX, 49, 62, 26);
+        _imageTextEncoderRuntimeCombo.SetBounds(rightX + 62, 50, 205, 25);
+        _imageVaeRuntimeLabel.SetBounds(rightX + 278, 49, 34, 26);
+        _imageVaeRuntimeCombo.SetBounds(
+            rightX + 312,
+            50,
+            Math.Max(120, rightWidth - 312),
+            25);
+
+        _imageStyleTemplateLabel.SetBounds(rightX, 80, 45, 26);
+        _imageStyleTemplateCombo.SetBounds(rightX + 45, 81, 265, 25);
+        _imageNegativeTemplateLabel.SetBounds(rightX + 330, 80, 62, 26);
         _imageNegativeTemplateCombo.SetBounds(
             rightX + 392,
-            50,
+            81,
             Math.Max(96, rightWidth - 392),
             25);
 
-        _imageLoraLabel.SetBounds(rightX, 80, 52, 26);
-        _imageLoraCombo.SetBounds(rightX + 52, 81, 180, 25);
-        _imageLoraStrength.SetBounds(rightX + 238, 81, 62, 25);
-        _imageLoraDownloadButton.SetBounds(rightX + 306, 80, 116, 27);
-        _imageLoraAddButton.SetBounds(rightX + 428, 80, 36, 27);
+        _imageLoraLabel.SetBounds(rightX, 112, 52, 26);
+        _imageLoraCombo.SetBounds(rightX + 52, 113, 180, 25);
+        _imageLoraStrength.SetBounds(rightX + 238, 113, 62, 25);
+        _imageLoraDownloadButton.SetBounds(rightX + 306, 112, 116, 27);
+        _imageLoraAddButton.SetBounds(rightX + 428, 112, 36, 27);
+
+        _imagePipelinePresetLabel.SetBounds(
+            rightX,
+            145,
+            42,
+            25);
+        _imagePipelinePresetCombo.SetBounds(
+            rightX + 42,
+            145,
+            158,
+            25);
+        _imageMaxQualitySharpnessLabel.SetBounds(
+            rightX + 210,
+            145,
+            70,
+            25);
+        _imageMaxQualitySharpness.SetBounds(
+            rightX + 286,
+            145,
+            54,
+            25);
+        _imageSharpnessPreviewButton.SetBounds(
+            rightX + 346,
+            144,
+            Math.Max(100, rightWidth - 346),
+            27);
 
         LayoutCatalogDownloadStatusV37(
             rightX,
@@ -11231,7 +13673,19 @@ public partial class MainForm : Form
             _imageCatalogDownloadProgress,
             _imageCatalogDownloadSize,
             _imageCatalogDownloadCancelButton);
+    }
 
+    /// <summary>
+    /// Positionne l’aperçu Image et l’historique en fonction de l’espace vertical disponible.
+    /// </summary>
+    private void LayoutImagePreviewAndHistoryV39(
+        int rightX,
+        int rightWidth,
+        int previewY,
+        int previewHeight,
+        int historyLabelY,
+        int historyY)
+    {
         _imagePreviewViewport.SetBounds(
             rightX,
             previewY,
@@ -11259,67 +13713,168 @@ public partial class MainForm : Form
             AnchorStyles.Bottom |
             AnchorStyles.Left |
             AnchorStyles.Right;
+    }
 
+    /// <summary>
+    /// Positionne l’éditeur Image de gauche : prompts, mode, source, seed, dimensions et actions.
+    /// </summary>
+    private void LayoutImageEditorV39(Size workspace)
+    {
+        // L’éditeur Image utilise le même rythme responsive que Vidéo.
+        // À hauteur compacte, la disposition dense d’origine est conservée.
+        // Lorsque la fenêtre grandit, les éditeurs prompt/négatif absorbent
+        // l’espace supplémentaire et les rangées suivantes se déplacent ensemble.
+        var imageActionY = GetFeatureActionYV38(workspace);
+        var verticalShift = imageActionY - 448;
+        var promptGrowth =
+            (int)Math.Round(verticalShift * 0.55D);
+        var negativeGrowth =
+            verticalShift - promptGrowth;
 
-        var compact = workspace.Height < 600;
-        if (compact)
-        {
-            lblPrompt.SetBounds(18, 18, 106, 23);
-            _improvePromptButton.SetBounds(130, 12, 140, 28);
-            _autoImprovePrompt.SetBounds(276, 15, 72, 24);
+        lblPrompt.SetBounds(18, 18, 106, 23);
+        _improvePromptButton.SetBounds(130, 12, 140, 28);
+        _autoImprovePrompt.SetBounds(276, 15, 72, 24);
 
-            _promptModelLabel.SetBounds(18, 48, 88, 23);
-            _promptModelCombo.SetBounds(108, 47, 240, 23);
-            _prompt.SetBounds(18, 76, 330, 72);
+        _promptModelLabel.SetBounds(18, 48, 88, 23);
+        _promptModelCombo.SetBounds(108, 47, 240, 23);
+        _prompt.SetBounds(
+            18,
+            76,
+            330,
+            72 + promptGrowth);
 
-            _negativePromptLabel.SetBounds(18, 153, 180, 20);
-            _negativePrompt.SetBounds(18, 175, 330, 42);
+        _negativePromptLabel.SetBounds(
+            18,
+            153 + promptGrowth,
+            180,
+            20);
+        _negativePrompt.SetBounds(
+            18,
+            175 + promptGrowth,
+            330,
+            42 + negativeGrowth);
 
-            lblGenerationMode.SetBounds(18, 223, 58, 23);
-            cmbGenerationMode.SetBounds(82, 222, 266, 23);
+        lblGenerationMode.SetBounds(
+            18,
+            223 + verticalShift,
+            58,
+            23);
+        cmbGenerationMode.SetBounds(
+            82,
+            222 + verticalShift,
+            266,
+            23);
 
-            lblInputImage.SetBounds(18, 253, 120, 20);
-            txtInputImage.SetBounds(18, 275, 178, 23);
-            btnBrowseInputImage.SetBounds(202, 274, 80, 25);
-            btnClearInputImage.SetBounds(288, 274, 60, 25);
+        lblInputImage.SetBounds(
+            18,
+            253 + verticalShift,
+            120,
+            20);
+        txtInputImage.SetBounds(
+            18,
+            275 + verticalShift,
+            178,
+            23);
+        btnBrowseInputImage.SetBounds(
+            202,
+            274 + verticalShift,
+            80,
+            25);
+        btnClearInputImage.SetBounds(
+            288,
+            274 + verticalShift,
+            60,
+            25);
 
-            lblImg2ImgStrength.SetBounds(18, 306, 108, 20);
-            numImg2ImgStrength.SetBounds(18, 327, 100, 23);
+        lblImg2ImgStrength.SetBounds(
+            18,
+            306 + verticalShift,
+            108,
+            20);
+        numImg2ImgStrength.SetBounds(
+            18,
+            327 + verticalShift,
+            100,
+            23);
 
-            _seedLabel.SetBounds(132, 306, 90, 20);
-            _seedInput.SetBounds(132, 327, 110, 23);
-            _randomSeedCheck.SetBounds(248, 327, 50, 23);
+        _seedLabel.SetBounds(
+            132,
+            306 + verticalShift,
+            90,
+            20);
+        _seedInput.SetBounds(
+            132,
+            327 + verticalShift,
+            110,
+            23);
+        _randomSeedCheck.SetBounds(
+            248,
+            327 + verticalShift,
+            50,
+            23);
 
-            _imageExtractPromptButton.SetBounds(172, 357, 176, 30);
+        _imageExtractPromptButton.SetBounds(
+            172,
+            357 + verticalShift,
+            176,
+            30);
 
-            lblCfgWidth.SetBounds(18, 393, 90, 23);
-            numDefaultWidth.SetBounds(108, 393, 74, 23);
-            lblCfgHeight.SetBounds(190, 393, 86, 23);
-            numDefaultHeight.SetBounds(278, 393, 70, 23);
+        lblCfgWidth.SetBounds(
+            18,
+            396 + verticalShift,
+            82,
+            23);
+        numDefaultWidth.SetBounds(
+            104,
+            393 + verticalShift,
+            60,
+            23);
+        lblCfgHeight.SetBounds(
+            174,
+            396 + verticalShift,
+            86,
+            23);
+        numDefaultHeight.SetBounds(
+            264,
+            393 + verticalShift,
+            84,
+            23);
 
-            lblCfgSteps.SetBounds(18, 420, 90, 23);
-            numDefaultSteps.SetBounds(108, 420, 74, 23);
-            _imageCfgLabel.SetBounds(190, 420, 70, 23);
-            _imageCfg.SetBounds(278, 420, 70, 23);
-        }
+        lblCfgSteps.SetBounds(
+            18,
+            423 + verticalShift,
+            82,
+            23);
+        numDefaultSteps.SetBounds(
+            104,
+            420 + verticalShift,
+            60,
+            23);
+        _imageCfgLabel.SetBounds(
+            174,
+            423 + verticalShift,
+            86,
+            23);
+        _imageCfg.SetBounds(
+            264,
+            420 + verticalShift,
+            84,
+            23);
 
-        // Les actions Image suivent le bas de la zone commune, y compris
-        // à la taille minimale. Le benchmark restait auparavant à Y=545
-        // et disparaissait en mode compact.
-        var imageActionY = Math.Max(445, workspace.Height - 100);
         btnGenerate.SetBounds(18, imageActionY, 125, 34);
         _benchmarkButton.SetBounds(151, imageActionY, 197, 34);
         _genText.SetBounds(18, imageActionY + 38, 330, 30);
         _genProgress.SetBounds(18, imageActionY + 72, 330, 18);
         _benchmarkButton.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-
-        UpdateImagePreviewLayout();
     }
 
+    /// <summary>
+    /// Adapte l’espace de travail Vidéo à la hauteur et à la largeur courantes de la fenêtre.
+    /// </summary>
     private void LayoutVideoV37()
     {
         const int rightX = 370;
-        const int previewY = 142;
+        const int previewY = 208;
 
         var workspace = GetSharedWorkspaceSizeV37();
         var rightWidth = Math.Max(
@@ -11331,35 +13886,70 @@ public partial class MainForm : Form
         var historyLabelY = historyY - 22;
         var outputLabelY = historyLabelY - 56;
         var previewHeight = Math.Max(
-            180,
+            140,
             outputLabelY - previewY - 6);
 
-        // Colonne gauche : même largeur utile que l'onglet Image.
-        // Sous 600 px de hauteur utile, on compacte verticalement sans
-        // supprimer de fonction : tout reste visible à la taille minimale.
-        var compact = workspace.Height < 600;
+        LayoutVideoEditorV39(workspace);
+        LayoutVideoRuntimeControlsV39(
+            rightX,
+            rightWidth);
+        LayoutVideoPreviewOutputAndHistoryV39(
+            rightX,
+            rightWidth,
+            previewY,
+            previewHeight,
+            outputLabelY,
+            historyLabelY,
+            historyY);
+    }
+
+    /// <summary>
+    /// Positionne l’éditeur Vidéo de gauche : prompts, référence, dimensions, sampling et actions.
+    /// </summary>
+    private void LayoutVideoEditorV39(Size workspace)
+    {
+        // Vidéo suit la même règle d’expansion verticale qu’Image.
+        // Les fenêtres compactes gardent la base dense, tandis que les fenêtres
+        // normales ou hautes répartissent l’espace supplémentaire entre les
+        // éditeurs de texte et le bloc de référence.
+        var videoActionY = GetFeatureActionYV38(workspace);
+        var verticalShift = videoActionY - 448;
+        var promptGrowth =
+            (int)Math.Round(verticalShift * 0.25D);
+        var negativeGrowth =
+            (int)Math.Round(verticalShift * 0.15D);
+        var sectionShift =
+            (int)Math.Round(verticalShift * 0.60D);
+        var rowStep =
+            28 +
+            (int)Math.Round(verticalShift * 0.04D);
 
         _videoPromptLabel.SetBounds(18, 18, 106, 23);
         _videoPrompt.SetBounds(
             18,
             45,
             330,
-            compact ? 72 : 88);
+            72 + promptGrowth);
         _videoImprovePromptButton.SetBounds(130, 12, 140, 28);
         _videoAutoImprovePrompt.SetBounds(276, 15, 72, 24);
 
-        var negativeLabelY = compact ? 122 : 138;
-        var negativeY = compact ? 145 : 163;
+        var negativeLabelY =
+            122 + promptGrowth;
+        var negativeY =
+            145 + promptGrowth;
         _videoNegativeLabel.SetBounds(18, negativeLabelY, 330, 23);
         _videoNegative.SetBounds(
             18,
             negativeY,
             330,
-            compact ? 42 : 48);
+            42 + negativeGrowth);
 
-        var referenceLabelY = compact ? 194 : 218;
-        var referenceY = compact ? 217 : 241;
-        var extractY = compact ? 246 : 270;
+        var referenceLabelY =
+            194 + sectionShift;
+        var referenceY =
+            217 + sectionShift;
+        var extractY =
+            246 + sectionShift;
         _videoReferenceLabel.SetBounds(18, referenceLabelY, 180, 23);
         _videoReferenceImage.SetBounds(18, referenceY, 190, 23);
         _videoReferenceBrowseButton.SetBounds(
@@ -11383,14 +13973,59 @@ public partial class MainForm : Form
             174,
             30);
 
-        var rowStart = compact ? 276 : 303;
-        var rowStep = compact ? 28 : 35;
+        var rowStart =
+            276 + sectionShift;
         var row0 = rowStart;
         var row1 = rowStart + rowStep;
         var row2 = rowStart + (rowStep * 2);
         var row3 = rowStart + (rowStep * 3);
         var row4 = rowStart + (rowStep * 4);
 
+        LayoutVideoNumericLabelsV39(
+            row0,
+            row1,
+            row2,
+            row3,
+            row4);
+
+        _videoWidth.SetBounds(104, row0, 60, 23);
+        _videoHeight.SetBounds(264, row0, 84, 23);
+
+        _videoDurationLabel.SetBounds(18, row1 + 4, 64, 23);
+        _videoDurationSeconds.SetBounds(84, row1, 54, 23);
+        _videoFrames.SetBounds(192, row1, 52, 23);
+        _videoFps.SetBounds(280, row1, 68, 23);
+
+        _videoSteps.SetBounds(104, row2, 60, 23);
+        _videoCfg.SetBounds(264, row2, 84, 23);
+        _videoSamplingShift.SetBounds(104, row3, 60, 23);
+        _videoSampler.SetBounds(264, row3, 84, 23);
+        _videoScheduler.SetBounds(104, row4, 60, 23);
+        _videoSeed.SetBounds(264, row4, 40, 23);
+        _videoRandomSeed.SetBounds(308, row4, 40, 23);
+
+        _videoQualityHint.SetBounds(
+            18,
+            videoActionY - 36,
+            330,
+            36);
+        _videoGenerateButton.SetBounds(18, videoActionY, 125, 34);
+        _videoCancelButton.SetBounds(151, videoActionY, 90, 34);
+        _videoRefreshButton.SetBounds(249, videoActionY, 99, 34);
+        _videoStatus.SetBounds(18, videoActionY + 38, 330, 30);
+        _videoProgress.SetBounds(18, videoActionY + 72, 330, 18);
+    }
+
+    /// <summary>
+    /// Positionne les libellés des réglages numériques Vidéo selon les rangées calculées.
+    /// </summary>
+    private void LayoutVideoNumericLabelsV39(
+        int row0,
+        int row1,
+        int row2,
+        int row3,
+        int row4)
+    {
         foreach (var label in _tabVideo.Controls.OfType<Label>())
         {
             switch (label.Text)
@@ -11399,13 +14034,13 @@ public partial class MainForm : Form
                 case "Largeur vidéo":
                 case "Video width":
                 case "Width":
-                    label.SetBounds(18, row0 + 4, 64, 23);
+                    label.SetBounds(18, row0 + 4, 82, 23);
                     break;
                 case "Hauteur":
                 case "Hauteur vidéo":
                 case "Video height":
                 case "Height":
-                    label.SetBounds(174, row0 + 4, 70, 23);
+                    label.SetBounds(174, row0 + 4, 86, 23);
                     break;
                 case "Frames":
                 case "Frames vidéo":
@@ -11420,84 +14055,98 @@ public partial class MainForm : Form
                 case "Steps":
                 case "Steps vidéo":
                 case "Video steps":
-                    label.SetBounds(18, row2 + 4, 64, 23);
+                    label.SetBounds(18, row2 + 4, 82, 23);
                     break;
                 case "CFG vidéo":
                 case "Video CFG":
-                    label.SetBounds(174, row2 + 4, 70, 23);
+                    label.SetBounds(174, row2 + 4, 86, 23);
                     break;
                 case "Shift":
-                    label.SetBounds(18, row3 + 4, 64, 23);
+                    label.SetBounds(18, row3 + 4, 82, 23);
                     break;
                 case "Sampler":
-                    label.SetBounds(174, row3 + 4, 70, 23);
+                    label.SetBounds(174, row3 + 4, 86, 23);
                     break;
                 case "Scheduler":
-                    label.SetBounds(18, row4 + 4, 64, 23);
+                    label.SetBounds(18, row4 + 4, 82, 23);
                     break;
                 case "Seed vidéo":
                 case "Video seed":
-                    label.SetBounds(174, row4 + 4, 70, 23);
+                    label.SetBounds(174, row4 + 4, 86, 23);
                     break;
             }
         }
+    }
 
-        _videoWidth.SetBounds(86, row0, 78, 23);
-        _videoHeight.SetBounds(246, row0, 102, 23);
-
-        _videoDurationLabel.SetBounds(18, row1 + 4, 64, 23);
-        _videoDurationSeconds.SetBounds(84, row1, 54, 23);
-        _videoFrames.SetBounds(192, row1, 52, 23);
-        _videoFps.SetBounds(280, row1, 68, 23);
-
-        _videoSteps.SetBounds(86, row2, 78, 23);
-        _videoCfg.SetBounds(246, row2, 102, 23);
-        _videoSamplingShift.SetBounds(86, row3, 78, 23);
-        _videoSampler.SetBounds(246, row3, 102, 23);
-        _videoScheduler.SetBounds(86, row4, 78, 23);
-        _videoSeed.SetBounds(246, row4, 68, 23);
-        _videoRandomSeed.SetBounds(318, row4, 30, 23);
-
-        // Même ancrage vertical que les actions Image :
-        // boutons, texte d'état puis barre de progression.
-        var videoActionY = Math.Max(445, workspace.Height - 100);
-        _videoQualityHint.SetBounds(
-            18,
-            compact ? videoActionY - 30 : videoActionY - 38,
-            330,
-            compact ? 24 : 34);
-        _videoGenerateButton.SetBounds(18, videoActionY, 125, 34);
-        _videoCancelButton.SetBounds(151, videoActionY, 90, 34);
-        _videoRefreshButton.SetBounds(249, videoActionY, 99, 34);
-        _videoStatus.SetBounds(18, videoActionY + 38, 330, 30);
-        _videoProgress.SetBounds(18, videoActionY + 72, 330, 18);
-
-        // Partie droite : trois rangées identiques à l'onglet Image.
-        _videoModelRuntimeLabel.SetBounds(rightX, 17, 52, 26);
-        _videoModelRuntimeCombo.SetBounds(rightX + 52, 18, 150, 25);
+    /// <summary>
+    /// Positionne les sélecteurs du pipeline Vidéo : modèle, encodeur, VAE, CLIP Vision, templates, LoRA et profil.
+    /// </summary>
+    private void LayoutVideoRuntimeControlsV39(
+        int rightX,
+        int rightWidth)
+    {
+        _videoModelRuntimeLabel.SetBounds(rightX, 17, 64, 26);
+        _videoModelRuntimeCombo.SetBounds(rightX + 64, 18, 138, 25);
         _videoModelDownloadButton.SetBounds(rightX + 208, 17, 112, 27);
         _videoImportModelButton.SetBounds(rightX + 326, 17, 32, 27);
-        _videoQualityLabel.SetBounds(rightX + 360, 17, 46, 26);
+        _videoQualityLabel.SetBounds(rightX + 360, 17, 58, 26);
         _videoQualityCombo.SetBounds(
-            rightX + 406,
+            rightX + 418,
             18,
-            Math.Max(94, rightWidth - 406),
+            Math.Max(82, rightWidth - 418),
             25);
 
-        _videoStyleTemplateLabel.SetBounds(rightX, 49, 45, 26);
-        _videoStyleTemplateCombo.SetBounds(rightX + 45, 50, 265, 25);
-        _videoNegativeTemplateLabel.SetBounds(rightX + 330, 49, 62, 26);
+        _videoTextEncoderRuntimeLabel.SetBounds(rightX, 49, 58, 26);
+        _videoTextEncoderRuntimeCombo.SetBounds(rightX + 58, 50, 145, 25);
+        _videoVaeRuntimeLabel.SetBounds(rightX + 211, 49, 34, 26);
+        _videoVaeRuntimeCombo.SetBounds(rightX + 245, 50, 110, 25);
+        _videoClipVisionRuntimeLabel.SetBounds(rightX + 363, 49, 74, 26);
+        _videoClipVisionRuntimeCombo.SetBounds(
+            rightX + 437,
+            50,
+            Math.Max(63, rightWidth - 437),
+            25);
+
+        _videoStyleTemplateLabel.SetBounds(rightX, 80, 45, 26);
+        _videoStyleTemplateCombo.SetBounds(rightX + 45, 81, 265, 25);
+        _videoNegativeTemplateLabel.SetBounds(rightX + 330, 80, 62, 26);
         _videoNegativeTemplateCombo.SetBounds(
             rightX + 392,
-            50,
+            81,
             Math.Max(96, rightWidth - 392),
             25);
 
-        _videoLoraLabel.SetBounds(rightX, 80, 52, 26);
-        _videoLoraCombo.SetBounds(rightX + 52, 81, 180, 25);
-        _videoLoraStrength.SetBounds(rightX + 238, 81, 62, 25);
-        _videoLoraDownloadButton.SetBounds(rightX + 306, 80, 116, 27);
-        _videoLoraAddButton.SetBounds(rightX + 428, 80, 36, 27);
+        _videoLoraLabel.SetBounds(rightX, 112, 52, 26);
+        _videoLoraCombo.SetBounds(rightX + 52, 113, 180, 25);
+        _videoLoraStrength.SetBounds(rightX + 238, 113, 62, 25);
+        _videoLoraDownloadButton.SetBounds(rightX + 306, 112, 116, 27);
+        _videoLoraAddButton.SetBounds(rightX + 428, 112, 36, 27);
+
+        _videoPipelinePresetLabel.SetBounds(
+            rightX,
+            145,
+            42,
+            25);
+        _videoPipelinePresetCombo.SetBounds(
+            rightX + 42,
+            145,
+            158,
+            25);
+        _videoMaxQualitySharpnessLabel.SetBounds(
+            rightX + 210,
+            145,
+            70,
+            25);
+        _videoMaxQualitySharpness.SetBounds(
+            rightX + 286,
+            145,
+            54,
+            25);
+        _videoSharpnessPreviewButton.SetBounds(
+            rightX + 346,
+            144,
+            Math.Max(100, rightWidth - 346),
+            27);
 
         LayoutCatalogDownloadStatusV37(
             rightX,
@@ -11506,7 +14155,20 @@ public partial class MainForm : Form
             _videoCatalogDownloadProgress,
             _videoCatalogDownloadSize,
             _videoCatalogDownloadCancelButton);
+    }
 
+    /// <summary>
+    /// Positionne l’aperçu, la sortie et l’historique Vidéo dans la colonne droite.
+    /// </summary>
+    private void LayoutVideoPreviewOutputAndHistoryV39(
+        int rightX,
+        int rightWidth,
+        int previewY,
+        int previewHeight,
+        int outputLabelY,
+        int historyLabelY,
+        int historyY)
+    {
         _videoPreviewWeb.SetBounds(
             rightX,
             previewY,
@@ -11560,6 +14222,9 @@ public partial class MainForm : Form
             AnchorStyles.Right;
     }
 
+    /// <summary>
+    /// Construit le prompt négatif Vidéo final en combinant le preset utilisateur et les exclusions supplémentaires requises par le niveau de qualité.
+    /// </summary>
     private static string VideoNegativeForQualityV37(string id) =>
         id switch
         {
@@ -11574,4 +14239,2130 @@ public partial class MainForm : Form
             _ =>
                 "low quality, blurry, flicker, jitter, warped anatomy, text, watermark"
         };
+
+    #endregion
+
+    #region Interface responsive et finition visuelle
+
+    /// <summary>
+    /// Regroupe les comportements responsive, les cartes visuelles, les onglets
+    /// techniques optionnels et les ajustements de présentation de MainForm.
+    /// Cette région remplace l'ancien fichier MainForm.UiPolish.cs afin de
+    /// limiter volontairement MainForm à deux fichiers : logique + Designer.
+    /// </summary>
+    private bool _uiPolishInitialized;
+    /// <summary>
+    /// Indique l’état interne « _syncingAdvancedConfiguration » utilisé pour empêcher les mises à jour réentrantes ou incohérentes.
+    /// </summary>
+    private bool _syncingAdvancedConfiguration;
+    /// <summary>
+    /// Indique l’état interne « _updatingTechnicalTabsPolish » utilisé pour empêcher les mises à jour réentrantes ou incohérentes.
+    /// </summary>
+    private bool _updatingTechnicalTabsPolish;
+    /// <summary>
+    /// Indique si transient open code tab doit rester visible temporairement sans modifier la préférence persistante de l’utilisateur.
+    /// </summary>
+    private bool _transientOpenCodeTabPolish;
+    /// <summary>
+    /// Indique si transient comfy tab doit rester visible temporairement sans modifier la préférence persistante de l’utilisateur.
+    /// </summary>
+    private bool _transientComfyTabPolish;
+
+
+
+
+
+    /// <summary>
+    /// Finalise l’initialisation de la fenêtre une fois son handle créé, puis applique la disposition responsive et les états visuels d’exécution.
+    /// </summary>
+    protected override void OnLoad(EventArgs e)
+    {
+        base.OnLoad(e);
+
+        if (IsWinFormsDesigner())
+            return;
+
+        InitializeUiPolishV37();
+    }
+
+    // Ancien nom de méthode conservé pour la compatibilité des tests de régression ; initialise l’UI v38.
+    /// <summary>
+    /// Initialise <c>InitializeUiPolishV37</c>, prépare l’état et les contrôles nécessaires puis branche les comportements associés.
+    /// </summary>
+    private void InitializeUiPolishV37()
+    {
+        if (_uiPolishInitialized)
+            return;
+
+        _uiPolishInitialized = true;
+        _configurationAdvancedPanelPolish.Visible = true;
+
+        RestoreFeatureEditorEnabledStatesPolish();
+        WireCompleteGenerationPersistencePolish();
+        ApplyTechnicalTabVisibilityPolish();
+        ConfigureComfyDarkModePolish();
+
+        RefreshUiPolishTranslations();
+        RefreshAdvancedConfigurationPolish();
+        RefreshDashboardInfoPolish();
+
+        _tabs.SelectedIndexChanged += (_, _) =>
+        {
+            RefreshUiPolishTranslations();
+
+            if (_tabs.SelectedTab == tabDashboard)
+                RefreshDashboardInfoPolish();
+
+            if (_tabs.SelectedTab == tabConfiguration)
+                RefreshAdvancedConfigurationPolish();
+
+            if (!_updatingTechnicalTabsPolish &&
+                _tabs.SelectedTab != tabOpenCode &&
+                _tabs.SelectedTab != tabComfy)
+            {
+                if (IsHandleCreated)
+                {
+                    BeginInvoke(
+                        new Action(RemoveTransientTechnicalTabsPolish));
+                }
+                else
+                {
+                    // Les tests unitaires peuvent changer d’onglet avant que le handle natif
+                    // de la fenêtre existe. Dans ce cas, nous sommes déjà sur le thread UI
+                    // thread, so no marshaling is required.
+                    RemoveTransientTechnicalTabsPolish();
+                }
+            }
+
+            tabGenerate.Invalidate();
+            _tabVideo.Invalidate();
+            tabConfiguration.Invalidate();
+            BeginInvokePolishLayout();
+        };
+
+        Shown += (_, _) =>
+        {
+            BeginInvokePolishLayout();
+            tabGenerate.Invalidate();
+            _tabVideo.Invalidate();
+            tabConfiguration.Invalidate();
+        };
+
+        btnSettingsSave.Click += (_, _) =>
+        {
+            RefreshDashboardInfoPolish();
+            RefreshAdvancedConfigurationPolish();
+        };
+    }
+
+    /// <summary>
+    /// Planifie un recalcul de disposition sur le thread UI après que WinForms a terminé la transition ou le redimensionnement courant.
+    /// </summary>
+    private void BeginInvokePolishLayout()
+    {
+        if (IsDisposed || !IsHandleCreated)
+            return;
+
+        BeginInvoke(new Action(() =>
+        {
+            if (!IsDisposed)
+                ApplyUiPolishLayout();
+        }));
+    }
+
+    /// <summary>
+    /// Réactive récursivement une arborescence de contrôles lorsque la fonctionnalité parente devient disponible.
+    /// </summary>
+    private static void EnableControlTreePolish(Control root)
+    {
+        foreach (Control child in root.Controls)
+        {
+            child.Enabled = true;
+
+            // NumericUpDown, TextBox, ComboBox, buttons, etc. may own internal
+            // WinForms children. Never mutate those implementation details.
+            if (IsGpuWorkspaceInteractiveControl(child))
+                continue;
+
+            EnableControlTreePolish(child);
+        }
+    }
+
+    /// <summary>
+    /// Restaure l’état Enabled réel des éditeurs Image/Vidéo après les valeurs statiques du Designer.
+    /// </summary>
+    private void RestoreFeatureEditorEnabledStatesPolish()
+    {
+        // L’instantané Designer v37 contient de nombreuses valeurs Enabled=false explicites.
+        // Lorsque l’onglet parent redevient disponible, ces valeurs enfants restent
+        // fausses et WinForms affiche leur texte avec la couleur sombre des contrôles
+        // désactivés. On restaure l’état réel d’exécution puis on réapplique les quelques
+        // controls that are intentionally conditional.
+        EnableControlTreePolish(tabGenerate);
+        EnableControlTreePolish(_tabVideo);
+
+        if (_comfyStatusPanel is not null)
+            EnableControlTreePolish(_comfyStatusPanel);
+
+        _videoCancelButton.Enabled = false;
+        _imageCatalogDownloadCancelButton.Enabled = false;
+        _videoCatalogDownloadCancelButton.Enabled = false;
+
+        _videoOpenButton.Enabled =
+            !string.IsNullOrWhiteSpace(_videoOutput.Text) &&
+            File.Exists(_videoOutput.Text);
+
+        UpdateGenerationModeUi();
+        UpdateMaximumQualitySharpnessUi();
+
+        _seedInput.Enabled = !_randomSeedCheck.Checked;
+        _videoSeed.Enabled = !_videoRandomSeed.Checked;
+
+        UpdatePromptEnhancementState();
+        UpdateVideoPromptEnhancementStateV37();
+    }
+
+    /// <summary>
+    /// Applique la visibilité persistante des onglets techniques en reconstruisant
+    /// atomiquement la collection TabPages. Cela évite la corruption de SelectedIndex lorsque
+    /// plusieurs pages sont ajoutées ou retirées pendant le déclenchement des événements de sélection.
+    /// </summary>
+    private void ApplyTechnicalTabVisibilityPolish()
+    {
+        if (_updatingTechnicalTabsPolish)
+            return;
+
+        _updatingTechnicalTabsPolish = true;
+        try
+        {
+            // A persistent preference supersedes any temporary direct-open state.
+            _transientOpenCodeTabPolish = false;
+            _transientComfyTabPolish = false;
+            RebuildMainTabsPolish();
+        }
+        finally
+        {
+            _updatingTechnicalTabsPolish = false;
+        }
+    }
+
+    /// <summary>
+    /// Reconstruit l’ordre des onglets principaux en conservant la page sélectionnée
+    /// lorsqu’elle reste visible. L’appelant doit maintenir _updatingTechnicalTabsPolish.
+    /// </summary>
+    private void RebuildMainTabsPolish()
+    {
+        var selected = _tabs.SelectedTab;
+
+        var includeOpenCode =
+            _s.ShowOpenCodeTab ||
+            _transientOpenCodeTabPolish;
+        var includeComfy =
+            _s.ShowComfyUiTab ||
+            _transientComfyTabPolish;
+
+        var order = new[]
+        {
+            tabDashboard,
+            tabGenerate,
+            _tabVideo,
+            tabConfiguration,
+            tabInstallation,
+            tabOpenCode,
+            tabComfy,
+            tabOllama,
+            tabLogs,
+            tabAbout
+        };
+
+        var desired = order
+            .Where(page =>
+                page != tabOpenCode || includeOpenCode)
+            .Where(page =>
+                page != tabComfy || includeComfy)
+            .ToArray();
+
+        if (selected is null ||
+            !desired.Contains(selected))
+        {
+            selected = tabDashboard;
+        }
+
+        _tabs.SuspendLayout();
+        try
+        {
+            _tabs.TabPages.Clear();
+            _tabs.TabPages.AddRange(desired);
+
+            if (selected is not null &&
+                _tabs.TabPages.Contains(selected))
+            {
+                _tabs.SelectedTab = selected;
+            }
+        }
+        finally
+        {
+            _tabs.ResumeLayout();
+        }
+    }
+
+    /// <summary>
+    /// Makes a technical tab visible for a direct-open action without persisting
+    /// the preference. The tab collection is rebuilt atomically.
+    /// </summary>
+    private void EnsureTechnicalTabVisibleForDirectOpenPolish(
+        TabPage page)
+    {
+        if (page == tabOpenCode && !_s.ShowOpenCodeTab)
+            _transientOpenCodeTabPolish = true;
+
+        if (page == tabComfy && !_s.ShowComfyUiTab)
+            _transientComfyTabPolish = true;
+
+        if (_tabs.TabPages.Contains(page))
+            return;
+
+        if (_updatingTechnicalTabsPolish)
+            return;
+
+        _updatingTechnicalTabsPolish = true;
+        try
+        {
+            RebuildMainTabsPolish();
+        }
+        finally
+        {
+            _updatingTechnicalTabsPolish = false;
+        }
+    }
+
+    /// <summary>
+    /// Supprime les éléments ciblés par <c>RemoveTransientTechnicalTabsPolish</c> en conservant un état d’interface valide.
+    /// </summary>
+    private void RemoveTransientTechnicalTabsPolish()
+    {
+        if (_updatingTechnicalTabsPolish ||
+            _tabs.SelectedTab == tabOpenCode ||
+            _tabs.SelectedTab == tabComfy)
+        {
+            return;
+        }
+
+        if (!_transientOpenCodeTabPolish &&
+            !_transientComfyTabPolish)
+        {
+            return;
+        }
+
+        _updatingTechnicalTabsPolish = true;
+        try
+        {
+            _transientOpenCodeTabPolish = false;
+            _transientComfyTabPolish = false;
+            RebuildMainTabsPolish();
+        }
+        finally
+        {
+            _updatingTechnicalTabsPolish = false;
+        }
+    }
+
+    /// <summary>
+    /// Injecte les préférences nécessaires pour que l’interface ComfyUI embarquée utilise un rendu sombre cohérent avec DreamRaster.
+    /// </summary>
+    private void ConfigureComfyDarkModePolish()
+    {
+        _comfyWeb.DefaultBackgroundColor = AppTheme.Background;
+
+        void Apply()
+        {
+            var core = _comfyWeb.CoreWebView2;
+            if (core is null)
+                return;
+
+            try
+            {
+                core.Profile.PreferredColorScheme =
+                    CoreWebView2PreferredColorScheme.Dark;
+
+                _ = core.AddScriptToExecuteOnDocumentCreatedAsync(
+                    "try{document.documentElement.style.colorScheme='dark';}catch(e){}");
+            }
+            catch (Exception ex)
+            {
+                Log(
+                    "WebView ⚠",
+                    "Thème sombre ComfyUI : " + ex.Message);
+            }
+        }
+
+        _comfyWeb.CoreWebView2InitializationCompleted += (_, args) =>
+        {
+            if (args.IsSuccess)
+                Apply();
+        };
+
+        Apply();
+    }
+
+    /// <summary>
+    /// Formate une quantité d’octets en valeur lisible pour les cartes d’état du tableau de bord.
+    /// </summary>
+    private static string FormatBytesPolish(long bytes)
+    {
+        if (bytes <= 0)
+            return "0 B";
+
+        var value = (double)bytes;
+        var units = new[] { "B", "KB", "MB", "GB", "TB" };
+        var index = 0;
+
+        while (value >= 1024D && index < units.Length - 1)
+        {
+            value /= 1024D;
+            index++;
+        }
+
+        return $"{value:0.#} {units[index]}";
+    }
+
+
+    /// <summary>
+    /// Actualise les données gérées par <c>RefreshDashboardInfoPolish</c> à partir de l’état courant et synchronise les contrôles dépendants.
+    /// </summary>
+    private void RefreshDashboardInfoPolish()
+    {
+        if (_dashboardRuntimeInfoPolish is null ||
+            _dashboardModelsInfoPolish is null)
+        {
+            return;
+        }
+
+        var os = RuntimeInformation.OSDescription.Trim();
+        var architecture = RuntimeInformation.OSArchitecture;
+        var cpu =
+            Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER")
+            ?? L10n.Pick(_s.Language, "CPU non identifié", "Unknown CPU");
+
+        var totalRam = 0UL;
+        var availableRam = 0UL;
+        var memory = new MemoryStatusEx();
+
+        if (GlobalMemoryStatusEx(memory))
+        {
+            totalRam = memory.TotalPhys;
+            availableRam = memory.AvailPhys;
+        }
+
+        var ramText = totalRam > 0
+            ? L10n.Pick(
+                _s.Language,
+                $"RAM {FormatBytesPolish((long)availableRam)} libre / {FormatBytesPolish((long)totalRam)}",
+                $"RAM {FormatBytesPolish((long)availableRam)} free / {FormatBytesPolish((long)totalRam)}")
+            : L10n.Pick(
+                _s.Language,
+                "RAM : information indisponible",
+                "RAM: information unavailable");
+
+        _dashboardRuntimeInfoPolish.Text =
+            L10n.Pick(
+                _s.Language,
+                $"Machine · {Environment.MachineName} · {os} · {architecture} · {Environment.ProcessorCount} processeurs logiques · {ramText}",
+                $"Machine · {Environment.MachineName} · {os} · {architecture} · {Environment.ProcessorCount} logical processors · {ramText}");
+
+        var storageText =
+            L10n.Pick(
+                _s.Language,
+                "Stockage · information indisponible",
+                "Storage · information unavailable");
+
+        try
+        {
+            var root =
+                Path.GetPathRoot(PortablePaths.Root)
+                ?? Path.GetPathRoot(AppContext.BaseDirectory);
+
+            if (!string.IsNullOrWhiteSpace(root))
+            {
+                var drive = new DriveInfo(root);
+                if (drive.IsReady)
+                {
+                    storageText =
+                        L10n.Pick(
+                            _s.Language,
+                            $"Stockage · {drive.Name} · {FormatBytesPolish(drive.AvailableFreeSpace)} libres / {FormatBytesPolish(drive.TotalSize)} · DreamRaster : {PortablePaths.Root}",
+                            $"Storage · {drive.Name} · {FormatBytesPolish(drive.AvailableFreeSpace)} free / {FormatBytesPolish(drive.TotalSize)} · DreamRaster: {PortablePaths.Root}");
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        _dashboardModelsInfoPolish.Text = storageText;
+
+        _generationTemplateTips.SetToolTip(
+            _dashboardRuntimeInfoPolish,
+            _dashboardRuntimeInfoPolish.Text + Environment.NewLine + cpu);
+        _generationTemplateTips.SetToolTip(
+            _dashboardModelsInfoPolish,
+            _dashboardModelsInfoPolish.Text);
+    }
+
+
+    /// <summary>
+    /// Dessine la bordure du panneau des interfaces techniques appartenant au Designer.
+    /// </summary>
+    private void ConfigurationAdvancedPanelPolish_Paint(object? sender, PaintEventArgs e)
+    {
+        var rect = _configurationAdvancedPanelPolish.ClientRectangle;
+        if (rect.Width <= 2 || rect.Height <= 2)
+            return;
+
+        using var pen = new Pen(AppTheme.Border);
+        e.Graphics.DrawRectangle(pen, 0, 0, rect.Width - 1, rect.Height - 1);
+    }
+
+    /// <summary>
+    /// Persiste la préférence de visibilité de l’onglet OpenCode.
+    /// </summary>
+    private void CfgShowOpenCodeTabPolish_CheckedChanged(object? sender, EventArgs e)
+    {
+        if (_syncingAdvancedConfiguration)
+            return;
+
+        _s.ShowOpenCodeTab = _cfgShowOpenCodeTabPolish.Checked;
+        SaveSettingsFromUiEvent("OpenCode tab visibility");
+        ApplyTechnicalTabVisibilityPolish();
+    }
+
+    /// <summary>
+    /// Persiste la préférence de visibilité de l’onglet ComfyUI.
+    /// </summary>
+    private void CfgShowComfyTabPolish_CheckedChanged(object? sender, EventArgs e)
+    {
+        if (_syncingAdvancedConfiguration)
+            return;
+
+        _s.ShowComfyUiTab = _cfgShowComfyTabPolish.Checked;
+        SaveSettingsFromUiEvent("ComfyUI tab visibility");
+        ApplyTechnicalTabVisibilityPolish();
+    }
+
+    /// <summary>
+    /// Dessine les cadres de regroupement Image à partir des limites d’exécution courantes.
+    /// </summary>
+    private void TabGenerate_PaintV38(object? sender, PaintEventArgs e)
+        => DrawImageFramesV38(e.Graphics);
+
+    /// <summary>
+    /// Dessine les cadres de regroupement Vidéo à partir des limites d’exécution courantes.
+    /// </summary>
+    private void TabVideo_PaintV38(object? sender, PaintEventArgs e)
+        => DrawVideoFramesV38(e.Graphics);
+
+    /// <summary>
+    /// Dessine les cadres de catégories Configuration à partir des limites d’exécution courantes.
+    /// </summary>
+    private void TabConfiguration_PaintV38(object? sender, PaintEventArgs e)
+        => DrawConfigurationFramesV38(e.Graphics);
+
+    /// <summary>
+    /// Raccorde les derniers contrôles de génération ajoutés par la finition UI au mécanisme de persistance.
+    /// </summary>
+    private void WireCompleteGenerationPersistencePolish()
+    {
+        void SaveImageExtras()
+        {
+            if (_loadingSettingsExperience)
+                return;
+
+            _s.NegativePrompt =
+                _negativePrompt.Text.Trim();
+            _s.AutoImprovePrompt =
+                _autoImprovePrompt.Checked;
+
+            var promptModel =
+                _promptModelCombo.Text.Trim();
+            if (!string.IsNullOrWhiteSpace(promptModel))
+                _s.PromptModel = promptModel;
+
+            _s.GenerationSeed =
+                Decimal.ToInt64(_seedInput.Value);
+            _s.UseRandomSeed =
+                _randomSeedCheck.Checked;
+
+            SaveSettingsFromUiEvent("Image prompt settings");
+        }
+
+        _negativePrompt.TextChanged += (_, _) =>
+            SaveImageExtras();
+        _autoImprovePrompt.CheckedChanged += (_, _) =>
+            SaveImageExtras();
+        _promptModelCombo.TextChanged += (_, _) =>
+            SaveImageExtras();
+        _seedInput.ValueChanged += (_, _) =>
+            SaveImageExtras();
+        _randomSeedCheck.CheckedChanged += (_, _) =>
+        {
+            _seedInput.Enabled =
+                !_randomSeedCheck.Checked;
+            SaveImageExtras();
+        };
+    }
+    /// <summary>
+    /// Actualise les données gérées par <c>RefreshAdvancedConfigurationPolish</c> à partir de l’état courant et synchronise les contrôles dépendants.
+    /// </summary>
+    private void RefreshAdvancedConfigurationPolish()
+    {
+        if (_configurationAdvancedPanelPolish is null ||
+            _syncingAdvancedConfiguration)
+        {
+            return;
+        }
+
+        _syncingAdvancedConfiguration = true;
+        try
+        {
+            _cfgShowOpenCodeTabPolish.Checked =
+                _s.ShowOpenCodeTab;
+            _cfgShowComfyTabPolish.Checked =
+                _s.ShowComfyUiTab;
+        }
+        finally
+        {
+            _syncingAdvancedConfiguration = false;
+        }
+    }
+    /// <summary>
+    /// Actualise les données gérées par <c>RefreshUiPolishTranslations</c> à partir de l’état courant et synchronise les contrôles dépendants.
+    /// </summary>
+    private void RefreshUiPolishTranslations()
+    {
+        if (!_uiPolishInitialized)
+            return;
+
+        var english = L10n.IsEnglish(_s.Language);
+
+        // Les libellés courts sont alignés de façon identique dans Image et Vidéo.
+        lblCfgWidth.Text = english ? "Width" : "Largeur";
+        lblCfgHeight.Text = english ? "Height" : "Hauteur";
+        lblCfgSteps.Text = "Steps";
+        _imageCfgLabel.Text = "CFG";
+
+        if (_configurationAdvancedPanelPolish is null)
+            return;
+
+        _cfgAdvancedInterfaceTitlePolish.Text =
+            english
+                ? "Advanced interfaces"
+                : "Interfaces techniques";
+
+        _cfgShowOpenCodeTabPolish.Text =
+            english
+                ? "Show OpenCode tab"
+                : "Afficher l'onglet OpenCode";
+        _cfgShowComfyTabPolish.Text =
+            english
+                ? "Show ComfyUI tab"
+                : "Afficher l'onglet ComfyUI";
+
+        chkHardStopComfy.Text =
+            english
+                ? "Stop ComfyUI after generation"
+                : "Arrêter ComfyUI après génération";
+        chkAutoUpdates.Text =
+            english
+                ? "Automatic GitHub updates"
+                : "Mises à jour GitHub automatiques";
+        chkInstallVisionModel.Text =
+            english
+                ? "Install Qwen3-VL (optional)"
+                : "Installer Qwen3-VL (optionnel)";
+        _autoSaveConfigurationCheck.Text =
+            english
+                ? "Automatic save"
+                : "Sauvegarde automatique";
+
+        _cfgAdvancedInterfaceNotePolish.Text =
+            english
+                ? "Image/Video settings stay in their own tabs. OpenCode and ComfyUI are optional technical interfaces."
+                : "Les réglages Image/Vidéo restent dans leurs onglets. OpenCode et ComfyUI sont des interfaces techniques optionnelles.";
+
+        tabGenerate.Invalidate();
+        _tabVideo.Invalidate();
+        tabConfiguration.Invalidate();
+    }
+
+
+    /// <summary>
+    /// Calcule l’union des limites de plusieurs contrôles visibles afin de dimensionner correctement un cadre ou une carte visuelle.
+    /// </summary>
+    private static Rectangle BoundsOfV38(
+        params Control[] controls)
+    {
+        var visible = controls
+            .Where(control =>
+                control is not null &&
+                control.Visible &&
+                control.Width > 0 &&
+                control.Height > 0)
+            .ToArray();
+
+        if (visible.Length == 0)
+            return Rectangle.Empty;
+
+        var rect = visible[0].Bounds;
+        foreach (var control in visible.Skip(1))
+            rect = Rectangle.Union(rect, control.Bounds);
+
+        return rect;
+    }
+
+    /// <summary>
+    /// Agrandit un rectangle de regroupement avec les marges visuelles requises par les cadres de l’interface.
+    /// </summary>
+    private static Rectangle InflateFrameV38(
+        Rectangle bounds,
+        int horizontal = 8,
+        int vertical = 7)
+    {
+        if (bounds.IsEmpty)
+            return bounds;
+
+        bounds.Inflate(horizontal, vertical);
+        return bounds;
+    }
+
+    /// <summary>
+    /// Dessine les éléments visuels gérés par <c>DrawFrameV38</c> à partir des limites et du thème courants.
+    /// </summary>
+    private static void DrawFrameV38(
+        Graphics graphics,
+        Rectangle bounds)
+    {
+        if (bounds.IsEmpty ||
+            bounds.Width <= 2 ||
+            bounds.Height <= 2)
+        {
+            return;
+        }
+
+        using var pen = new Pen(AppTheme.Border);
+        graphics.DrawRectangle(
+            pen,
+            bounds.X,
+            bounds.Y,
+            bounds.Width - 1,
+            bounds.Height - 1);
+    }
+
+    /// <summary>
+    /// Dessine les éléments visuels gérés par <c>DrawTitledFrameV38</c> à partir des limites et du thème courants.
+    /// </summary>
+    private static void DrawTitledFrameV38(
+        Graphics graphics,
+        Rectangle bounds,
+        string title)
+    {
+        DrawFrameV38(graphics, bounds);
+
+        if (string.IsNullOrWhiteSpace(title))
+            return;
+
+        using var font = new Font(
+            "Segoe UI Semibold",
+            9F,
+            FontStyle.Bold);
+        using var brush = new SolidBrush(AppTheme.TextMuted);
+
+        graphics.DrawString(
+            title,
+            font,
+            brush,
+            bounds.X + 10,
+            bounds.Y + 6);
+    }
+
+    /// <summary>
+    /// Dessine les éléments visuels gérés par <c>DrawImageFramesV38</c> à partir des limites et du thème courants.
+    /// </summary>
+    private void DrawImageFramesV38(Graphics graphics)
+    {
+        var leftFrame = InflateFrameV38(
+            BoundsOfV38(
+                lblPrompt,
+                _improvePromptButton,
+                _autoImprovePrompt,
+                _promptModelLabel,
+                _promptModelCombo,
+                _prompt,
+                _negativePromptLabel,
+                _negativePrompt,
+                lblGenerationMode,
+                cmbGenerationMode,
+                lblInputImage,
+                txtInputImage,
+                btnBrowseInputImage,
+                btnClearInputImage,
+                lblImg2ImgStrength,
+                numImg2ImgStrength,
+                _seedLabel,
+                _seedInput,
+                _randomSeedCheck,
+                _imageExtractPromptButton,
+                lblCfgWidth,
+                numDefaultWidth,
+                lblCfgHeight,
+                numDefaultHeight,
+                lblCfgSteps,
+                numDefaultSteps,
+                _imageCfgLabel,
+                _imageCfg,
+                btnGenerate,
+                _benchmarkButton,
+                _genText,
+                _genProgress));
+
+        var catalogFrame = InflateFrameV38(
+            BoundsOfV38(
+                _imageModelRuntimeLabel,
+                _imageModelRuntimeCombo,
+                _imageTextEncoderRuntimeLabel,
+                _imageTextEncoderRuntimeCombo,
+                _imageVaeRuntimeLabel,
+                _imageVaeRuntimeCombo,
+                _imageModelDownloadButton,
+                _imageImportModelButton,
+                _imageStyleTemplateLabel,
+                _imageStyleTemplateCombo,
+                _imageNegativeTemplateLabel,
+                _imageNegativeTemplateCombo,
+                _imageLoraLabel,
+                _imageLoraCombo,
+                _imageLoraStrength,
+                _imageLoraDownloadButton,
+                _imageLoraAddButton,
+                _imagePipelinePresetLabel,
+                _imagePipelinePresetCombo,
+                _imageMaxQualitySharpnessLabel,
+                _imageMaxQualitySharpness,
+                _imageSharpnessPreviewButton,
+                _imageCatalogDownloadStatus,
+                _imageCatalogDownloadProgress,
+                _imageCatalogDownloadSize,
+                _imageCatalogDownloadCancelButton));
+
+        DrawFrameV38(graphics, leftFrame);
+        DrawFrameV38(graphics, catalogFrame);
+        DrawFrameV38(
+            graphics,
+            InflateFrameV38(
+                _imagePreviewViewport.Bounds,
+                3,
+                3));
+        DrawFrameV38(
+            graphics,
+            InflateFrameV38(
+                BoundsOfV38(
+                    _imageHistoryLabel,
+                    _imageHistoryPanel),
+                6,
+                5));
+    }
+
+    /// <summary>
+    /// Dessine les éléments visuels gérés par <c>DrawVideoFramesV38</c> à partir des limites et du thème courants.
+    /// </summary>
+    private void DrawVideoFramesV38(Graphics graphics)
+    {
+        var leftFrame = InflateFrameV38(
+            BoundsOfV38(
+                _videoPromptLabel,
+                _videoImprovePromptButton,
+                _videoAutoImprovePrompt,
+                _videoPrompt,
+                _videoNegativeLabel,
+                _videoNegative,
+                _videoReferenceLabel,
+                _videoReferenceImage,
+                _videoReferenceBrowseButton,
+                _videoReferenceCropButton,
+                _videoExtractPromptButton,
+                _videoReferenceHint,
+                _videoWidthLabel,
+                _videoWidth,
+                _videoHeightLabel,
+                _videoHeight,
+                _videoDurationLabel,
+                _videoDurationSeconds,
+                _videoFramesLabel,
+                _videoFrames,
+                _videoFpsLabel,
+                _videoFps,
+                _videoStepsLabel,
+                _videoSteps,
+                _videoCfgLabel,
+                _videoCfg,
+                _videoShiftLabel,
+                _videoSamplingShift,
+                _videoSamplerLabel,
+                _videoSampler,
+                _videoSchedulerLabel,
+                _videoScheduler,
+                _videoSeedLabel,
+                _videoSeed,
+                _videoRandomSeed,
+                _videoQualityHint,
+                _videoGenerateButton,
+                _videoCancelButton,
+                _videoRefreshButton,
+                _videoStatus,
+                _videoProgress));
+
+        var catalogFrame = InflateFrameV38(
+            BoundsOfV38(
+                _videoModelRuntimeLabel,
+                _videoModelRuntimeCombo,
+                _videoTextEncoderRuntimeLabel,
+                _videoTextEncoderRuntimeCombo,
+                _videoVaeRuntimeLabel,
+                _videoVaeRuntimeCombo,
+                _videoClipVisionRuntimeLabel,
+                _videoClipVisionRuntimeCombo,
+                _videoModelDownloadButton,
+                _videoImportModelButton,
+                _videoQualityLabel,
+                _videoQualityCombo,
+                _videoStyleTemplateLabel,
+                _videoStyleTemplateCombo,
+                _videoNegativeTemplateLabel,
+                _videoNegativeTemplateCombo,
+                _videoLoraLabel,
+                _videoLoraCombo,
+                _videoLoraStrength,
+                _videoLoraDownloadButton,
+                _videoLoraAddButton,
+                _videoPipelinePresetLabel,
+                _videoPipelinePresetCombo,
+                _videoMaxQualitySharpnessLabel,
+                _videoMaxQualitySharpness,
+                _videoSharpnessPreviewButton,
+                _videoCatalogDownloadStatus,
+                _videoCatalogDownloadProgress,
+                _videoCatalogDownloadSize,
+                _videoCatalogDownloadCancelButton));
+
+        DrawFrameV38(graphics, leftFrame);
+        DrawFrameV38(graphics, catalogFrame);
+        DrawFrameV38(
+            graphics,
+            InflateFrameV38(
+                _videoPreviewWeb.Bounds,
+                3,
+                3));
+        DrawFrameV38(
+            graphics,
+            InflateFrameV38(
+                BoundsOfV38(
+                    _videoOutputLabel,
+                    _videoOutput,
+                    _videoOpenButton),
+                6,
+                5));
+        DrawFrameV38(
+            graphics,
+            InflateFrameV38(
+                BoundsOfV38(
+                    _videoHistoryLabel,
+                    _videoHistoryPanel),
+                6,
+                5));
+    }
+
+    private (
+        Rectangle Root,
+        Rectangle Services,
+        Rectangle ImageModels,
+        Rectangle Resources,
+        Rectangle VideoModels,
+        Rectangle Preferences,
+        Rectangle Technical)
+        GetConfigurationCardsV38()
+    {
+        var workspace = GetSharedWorkspaceSizeV37();
+        var width = Math.Max(876, workspace.Width);
+        var contentWidth = Math.Max(500, width - 36);
+        const int gap = 12;
+        var columnWidth =
+            Math.Max(260, (contentWidth - gap) / 2);
+
+        const int left = 18;
+        var right = left + columnWidth + gap;
+        const int bottomY = 400;
+        const int bottomHeight = 128;
+
+        return (
+            new Rectangle(
+                left,
+                72,
+                contentWidth,
+                54),
+            new Rectangle(
+                left,
+                132,
+                columnWidth,
+                132),
+            new Rectangle(
+                right,
+                132,
+                columnWidth,
+                132),
+            new Rectangle(
+                left,
+                270,
+                columnWidth,
+                124),
+            new Rectangle(
+                right,
+                270,
+                columnWidth,
+                124),
+            new Rectangle(
+                left,
+                bottomY,
+                columnWidth,
+                bottomHeight),
+            new Rectangle(
+                right,
+                bottomY,
+                columnWidth,
+                bottomHeight));
+    }
+
+    /// <summary>
+    /// Dessine les éléments visuels gérés par <c>DrawConfigurationFramesV38</c> à partir des limites et du thème courants.
+    /// </summary>
+    private void DrawConfigurationFramesV38(
+        Graphics graphics)
+    {
+        var cards = GetConfigurationCardsV38();
+        var state = graphics.Save();
+        var scroll = tabConfiguration.AutoScrollPosition;
+        graphics.TranslateTransform(
+            scroll.X,
+            scroll.Y);
+
+        DrawTitledFrameV38(
+            graphics,
+            cards.Root,
+            L10n.Pick(
+                _s.Language,
+                "Emplacement portable",
+                "Portable location"));
+        DrawTitledFrameV38(
+            graphics,
+            cards.Services,
+            L10n.Pick(
+                _s.Language,
+                "Services locaux",
+                "Local services"));
+        DrawTitledFrameV38(
+            graphics,
+            cards.ImageModels,
+            L10n.Pick(
+                _s.Language,
+                "Modèles Image",
+                "Image models"));
+        DrawTitledFrameV38(
+            graphics,
+            cards.Resources,
+            L10n.Pick(
+                _s.Language,
+                "Ressources et téléchargements",
+                "Resources and downloads"));
+        DrawTitledFrameV38(
+            graphics,
+            cards.VideoModels,
+            L10n.Pick(
+                _s.Language,
+                "Modèles Vidéo",
+                "Video models"));
+        DrawTitledFrameV38(
+            graphics,
+            cards.Preferences,
+            L10n.Pick(
+                _s.Language,
+                "Préférences et mises à jour",
+                "Preferences and updates"));
+
+        graphics.Restore(state);
+    }
+
+    /// <summary>
+    /// Applique les règles de <c>ApplyUiPolishLayout</c> à l’état courant puis synchronise les contrôles affectés.
+    /// </summary>
+    private void ApplyUiPolishLayout()
+    {
+        if (!_uiPolishInitialized ||
+            IsDisposed ||
+            tabGenerate is null ||
+            _tabVideo is null)
+        {
+            return;
+        }
+
+        LayoutDashboardPolish();
+        LayoutCatalogHeaderRowsV38();
+
+        // LayoutImageV37/LayoutVideoV37 possèdent toute la géométrie de l’éditeur de gauche.
+        // Do not reposition Width/Height/Steps/CFG/etc. here: doing so a second
+        // time breaks the shared responsive rhythm and makes controls appear
+        // detached from their logical sections.
+        LayoutAdvancedConfigurationPolish();
+
+        tabGenerate.Invalidate();
+        _tabVideo.Invalidate();
+        tabConfiguration.Invalidate();
+    }
+
+    /// <summary>
+    /// Calcule puis applique la géométrie gérée par <c>LayoutDashboardPolish</c> en respectant la taille actuelle de la fenêtre.
+    /// </summary>
+    private void LayoutDashboardPolish()
+    {
+        if (_dashboardRuntimeInfoPolish is null ||
+            _dashboardModelsInfoPolish is null)
+        {
+            return;
+        }
+
+        var workspace = GetSharedWorkspaceSizeV37();
+        var width = Math.Max(876, workspace.Width);
+        var rightX = 260;
+        var rightWidth = Math.Max(360, width - rightX - 20);
+
+        _status.SetBounds(
+            rightX,
+            72,
+            rightWidth,
+            54);
+        _gpu.SetBounds(
+            rightX,
+            136,
+            rightWidth,
+            54);
+
+        _dashboardRuntimeInfoPolish.SetBounds(
+            rightX,
+            200,
+            rightWidth,
+            36);
+        _dashboardModelsInfoPolish.SetBounds(
+            rightX,
+            242,
+            rightWidth,
+            36);
+
+        lblLiveLog.SetBounds(
+            18,
+            287,
+            Math.Max(300, width - 36),
+            20);
+        _liveLog.SetBounds(
+            18,
+            314,
+            Math.Max(400, width - 36),
+            Math.Max(120, workspace.Height - 335));
+
+        _liveLog.Anchor =
+            AnchorStyles.Top |
+            AnchorStyles.Bottom |
+            AnchorStyles.Left |
+            AnchorStyles.Right;
+    }
+
+    /// <summary>
+    /// Calcule puis applique la géométrie gérée par <c>LayoutCatalogHeaderRowsV38</c> en respectant la taille actuelle de la fenêtre.
+    /// </summary>
+    private void LayoutCatalogHeaderRowsV38()
+    {
+        const int rightX = 370;
+
+        var workspace = GetSharedWorkspaceSizeV37();
+        var rightWidth = Math.Max(
+            500,
+            workspace.Width - rightX - 20);
+        var compact = rightWidth < 600;
+
+        LayoutCatalogModelAndQualityRowV38(
+            rightX,
+            rightWidth,
+            compact);
+        LayoutCatalogDependenciesRowV39(
+            rightX,
+            rightWidth,
+            compact);
+        LayoutCatalogTemplateRowV38(
+            rightX,
+            rightWidth);
+        LayoutCatalogLoraRowV38(
+            rightX,
+            compact);
+        LayoutCatalogPresetAndSharpnessRowV39(
+            rightX,
+            rightWidth,
+            compact);
+    }
+
+    /// <summary>
+    /// Positionne la rangée Modèle/Qualité partagée par les espaces Image et Vidéo.
+    /// Les largeurs restent adaptatives afin de préserver les boutons de téléchargement et d’import.
+    /// </summary>
+    private void LayoutCatalogModelAndQualityRowV38(
+        int rightX,
+        int rightWidth,
+        bool compact)
+    {
+        const int modelLabelWidth = 64;
+        var modelComboWidth = compact ? 122 : 166;
+        var downloadWidth = compact ? 88 : 96;
+        const int addWidth = 32;
+        const int gap = 6;
+
+        var modelComboX =
+            rightX + modelLabelWidth;
+        var downloadX =
+            modelComboX + modelComboWidth + gap;
+        var addX =
+            downloadX + downloadWidth + gap;
+
+        _imageModelRuntimeLabel.SetBounds(
+            rightX,
+            17,
+            modelLabelWidth,
+            26);
+        _imageModelRuntimeCombo.SetBounds(
+            modelComboX,
+            18,
+            modelComboWidth,
+            25);
+        _imageModelDownloadButton.SetBounds(
+            downloadX,
+            17,
+            downloadWidth,
+            27);
+        _imageImportModelButton.SetBounds(
+            addX,
+            17,
+            addWidth,
+            27);
+
+        _videoModelRuntimeLabel.SetBounds(
+            rightX,
+            17,
+            modelLabelWidth,
+            26);
+        _videoModelRuntimeCombo.SetBounds(
+            modelComboX,
+            18,
+            modelComboWidth,
+            25);
+        _videoModelDownloadButton.SetBounds(
+            downloadX,
+            17,
+            downloadWidth,
+            27);
+        _videoImportModelButton.SetBounds(
+            addX,
+            17,
+            addWidth,
+            27);
+
+        var qualityLabelX =
+            addX + addWidth + 10;
+        const int qualityLabelWidth = 58;
+        var qualityComboX =
+            qualityLabelX + qualityLabelWidth;
+
+        _videoQualityLabel.SetBounds(
+            qualityLabelX,
+            17,
+            qualityLabelWidth,
+            26);
+        _videoQualityCombo.SetBounds(
+            qualityComboX,
+            18,
+            Math.Max(
+                86,
+                rightX + rightWidth - qualityComboX),
+            25);
+    }
+
+    /// <summary>
+    /// Positionne les dépendances du pipeline : encodeur texte, VAE et CLIP Vision.
+    /// Cette rangée garde les composants réellement utilisés visibles sans ouvrir Configuration.
+    /// </summary>
+    private void LayoutCatalogDependenciesRowV39(
+        int rightX,
+        int rightWidth,
+        bool compact)
+    {
+        const int dependencyY = 49;
+        const int encoderLabelWidth = 58;
+        var dependencyGap = compact ? 6 : 8;
+
+        var imageEncoderWidth =
+            Math.Clamp(
+                rightWidth / 2 - encoderLabelWidth - 28,
+                150,
+                240);
+        var imageVaeLabelX =
+            rightX +
+            encoderLabelWidth +
+            imageEncoderWidth +
+            dependencyGap;
+
+        _imageTextEncoderRuntimeLabel.SetBounds(
+            rightX,
+            dependencyY,
+            encoderLabelWidth,
+            26);
+        _imageTextEncoderRuntimeCombo.SetBounds(
+            rightX + encoderLabelWidth,
+            dependencyY + 1,
+            imageEncoderWidth,
+            25);
+        _imageVaeRuntimeLabel.SetBounds(
+            imageVaeLabelX,
+            dependencyY,
+            34,
+            26);
+        _imageVaeRuntimeCombo.SetBounds(
+            imageVaeLabelX + 34,
+            dependencyY + 1,
+            Math.Max(
+                100,
+                rightX + rightWidth - (imageVaeLabelX + 34)),
+            25);
+
+        var videoEncoderWidth = compact ? 125 : 155;
+        var videoVaeWidth = compact ? 92 : 120;
+        var videoEncoderX = rightX + encoderLabelWidth;
+        var videoVaeLabelX =
+            videoEncoderX + videoEncoderWidth + dependencyGap;
+        var videoVaeX = videoVaeLabelX + 34;
+        var clipLabelX =
+            videoVaeX + videoVaeWidth + dependencyGap;
+
+        _videoTextEncoderRuntimeLabel.SetBounds(
+            rightX,
+            dependencyY,
+            encoderLabelWidth,
+            26);
+        _videoTextEncoderRuntimeCombo.SetBounds(
+            videoEncoderX,
+            dependencyY + 1,
+            videoEncoderWidth,
+            25);
+        _videoVaeRuntimeLabel.SetBounds(
+            videoVaeLabelX,
+            dependencyY,
+            34,
+            26);
+        _videoVaeRuntimeCombo.SetBounds(
+            videoVaeX,
+            dependencyY + 1,
+            videoVaeWidth,
+            25);
+        _videoClipVisionRuntimeLabel.SetBounds(
+            clipLabelX,
+            dependencyY,
+            72,
+            26);
+        _videoClipVisionRuntimeCombo.SetBounds(
+            clipLabelX + 72,
+            dependencyY + 1,
+            Math.Max(
+                70,
+                rightX + rightWidth - (clipLabelX + 72)),
+            25);
+    }
+
+    /// <summary>
+    /// Positionne les presets de style et de prompt négatif des espaces Image et Vidéo.
+    /// </summary>
+    private void LayoutCatalogTemplateRowV38(
+        int rightX,
+        int rightWidth)
+    {
+        const int styleLabelWidth = 42;
+        var styleComboWidth =
+            Math.Clamp(
+                rightWidth / 2 - 60,
+                190,
+                260);
+        var negativeLabelX =
+            rightX +
+            styleLabelWidth +
+            styleComboWidth +
+            14;
+
+        _imageStyleTemplateLabel.SetBounds(
+            rightX,
+            80,
+            styleLabelWidth,
+            26);
+        _imageStyleTemplateCombo.SetBounds(
+            rightX + styleLabelWidth,
+            81,
+            styleComboWidth,
+            25);
+        _imageNegativeTemplateLabel.SetBounds(
+            negativeLabelX,
+            80,
+            62,
+            26);
+        _imageNegativeTemplateCombo.SetBounds(
+            negativeLabelX + 62,
+            81,
+            Math.Max(
+                92,
+                rightX + rightWidth -
+                (negativeLabelX + 62)),
+            25);
+
+        _videoStyleTemplateLabel.SetBounds(
+            rightX,
+            80,
+            styleLabelWidth,
+            26);
+        _videoStyleTemplateCombo.SetBounds(
+            rightX + styleLabelWidth,
+            81,
+            styleComboWidth,
+            25);
+        _videoNegativeTemplateLabel.SetBounds(
+            negativeLabelX,
+            80,
+            62,
+            26);
+        _videoNegativeTemplateCombo.SetBounds(
+            negativeLabelX + 62,
+            81,
+            Math.Max(
+                92,
+                rightX + rightWidth -
+                (negativeLabelX + 62)),
+            25);
+    }
+
+    /// <summary>
+    /// Positionne les sélecteurs LoRA, leur force et les actions d’ajout/téléchargement.
+    /// </summary>
+    private void LayoutCatalogLoraRowV38(
+        int rightX,
+        bool compact)
+    {
+        const int loraLabelWidth = 42;
+        var loraComboWidth =
+            compact ? 165 : 190;
+        const int strengthWidth = 64;
+        const int addWidth = 32;
+        const int gap = 6;
+        var loraComboX =
+            rightX + loraLabelWidth;
+        var strengthX =
+            loraComboX + loraComboWidth + gap;
+        var loraDownloadX =
+            strengthX + strengthWidth + gap;
+        var loraDownloadWidth =
+            compact ? 96 : 108;
+        var loraAddX =
+            loraDownloadX +
+            loraDownloadWidth +
+            gap;
+
+        _imageLoraLabel.SetBounds(
+            rightX,
+            112,
+            loraLabelWidth,
+            26);
+        _imageLoraCombo.SetBounds(
+            loraComboX,
+            113,
+            loraComboWidth,
+            25);
+        _imageLoraStrength.SetBounds(
+            strengthX,
+            113,
+            strengthWidth,
+            25);
+        _imageLoraDownloadButton.SetBounds(
+            loraDownloadX,
+            112,
+            loraDownloadWidth,
+            27);
+        _imageLoraAddButton.SetBounds(
+            loraAddX,
+            112,
+            addWidth,
+            27);
+
+        _videoLoraLabel.SetBounds(
+            rightX,
+            112,
+            loraLabelWidth,
+            26);
+        _videoLoraCombo.SetBounds(
+            loraComboX,
+            113,
+            loraComboWidth,
+            25);
+        _videoLoraStrength.SetBounds(
+            strengthX,
+            113,
+            strengthWidth,
+            25);
+        _videoLoraDownloadButton.SetBounds(
+            loraDownloadX,
+            112,
+            loraDownloadWidth,
+            27);
+        _videoLoraAddButton.SetBounds(
+            loraAddX,
+            112,
+            addWidth,
+            27);
+    }
+
+    /// <summary>
+    /// Positionne le profil complet et le réglage de netteté de la passe qualité.
+    /// </summary>
+    private void LayoutCatalogPresetAndSharpnessRowV39(
+        int rightX,
+        int rightWidth,
+        bool compact)
+    {
+        const int sharpnessY = 144;
+        const int profileLabelWidth = 42;
+        var profileComboWidth = compact ? 150 : 190;
+        const int sharpnessLabelWidth = 70;
+        const int sharpnessValueWidth = 54;
+        const int gap = 6;
+        var profileComboX = rightX + profileLabelWidth;
+        var sharpnessLabelX =
+            profileComboX + profileComboWidth + gap;
+        var sharpnessValueX =
+            sharpnessLabelX + sharpnessLabelWidth + gap;
+        var sharpnessPreviewX =
+            sharpnessValueX + sharpnessValueWidth + gap;
+
+        _imagePipelinePresetLabel.SetBounds(
+            rightX,
+            sharpnessY + 1,
+            profileLabelWidth,
+            25);
+        _imagePipelinePresetCombo.SetBounds(
+            profileComboX,
+            sharpnessY + 1,
+            profileComboWidth,
+            25);
+        _imageMaxQualitySharpnessLabel.SetBounds(
+            sharpnessLabelX,
+            sharpnessY + 1,
+            sharpnessLabelWidth,
+            25);
+        _imageMaxQualitySharpness.SetBounds(
+            sharpnessValueX,
+            sharpnessY + 1,
+            sharpnessValueWidth,
+            25);
+        _imageSharpnessPreviewButton.SetBounds(
+            sharpnessPreviewX,
+            sharpnessY,
+            Math.Max(
+                88,
+                rightX + rightWidth - sharpnessPreviewX),
+            27);
+
+        _videoPipelinePresetLabel.SetBounds(
+            rightX,
+            sharpnessY + 1,
+            profileLabelWidth,
+            25);
+        _videoPipelinePresetCombo.SetBounds(
+            profileComboX,
+            sharpnessY + 1,
+            profileComboWidth,
+            25);
+        _videoMaxQualitySharpnessLabel.SetBounds(
+            sharpnessLabelX,
+            sharpnessY + 1,
+            sharpnessLabelWidth,
+            25);
+        _videoMaxQualitySharpness.SetBounds(
+            sharpnessValueX,
+            sharpnessY + 1,
+            sharpnessValueWidth,
+            25);
+        _videoSharpnessPreviewButton.SetBounds(
+            sharpnessPreviewX,
+            sharpnessY,
+            Math.Max(
+                88,
+                rightX + rightWidth - sharpnessPreviewX),
+            27);
+
+        _imageMaxQualitySharpnessLabel.Text =
+            L10n.Pick(_s.Language, "Netteté", "Sharpness");
+        _videoMaxQualitySharpnessLabel.Text =
+            L10n.Pick(_s.Language, "Netteté", "Sharpness");
+        _imageMaxQualitySharpnessLabel.AutoEllipsis = true;
+        _videoMaxQualitySharpnessLabel.AutoEllipsis = true;
+        _imagePipelinePresetCombo.DropDownWidth = 250;
+        _videoPipelinePresetCombo.DropDownWidth = 250;
+    }
+
+    /// <summary>
+    /// Calcule puis applique la géométrie gérée par <c>LayoutAdvancedConfigurationPolish</c> en respectant la taille actuelle de la fenêtre.
+    /// </summary>
+    private void LayoutAdvancedConfigurationPolish()
+    {
+        if (_configurationAdvancedPanelPolish is null)
+            return;
+
+        var workspace = GetSharedWorkspaceSizeV37();
+        var width = Math.Max(876, workspace.Width);
+        var cards = GetConfigurationCardsV38();
+
+        // La page Configuration contient davantage de contenu qu’une fenêtre
+        // compacte 900x620 ne peut en afficher simultanément. Le défilement
+        // garantit donc l’accès à toutes les catégories sans les tronquer.
+        tabConfiguration.AutoScroll = true;
+
+        LayoutConfigurationHeaderAndRootV39(
+            width,
+            cards.Root);
+        LayoutConfigurationServicesV39(
+            cards.Services);
+        LayoutConfigurationImageModelsV39(
+            cards.ImageModels);
+        LayoutConfigurationResourcesV39(
+            cards.Resources);
+        LayoutConfigurationVideoModelsV39(
+            cards.VideoModels);
+        LayoutConfigurationPreferencesV39(
+            cards.Preferences);
+        LayoutConfigurationTechnicalV39(
+            cards.Technical);
+
+        var contentBottom = LayoutConfigurationHintV39(
+            workspace,
+            width,
+            cards.Preferences,
+            cards.Technical);
+
+        tabConfiguration.AutoScrollMinSize =
+            new Size(
+                0,
+                contentBottom);
+
+        _configurationAdvancedPanelPolish.Invalidate();
+        tabConfiguration.Invalidate();
+    }
+
+    /// <summary>
+    /// Positionne le titre, les actions de sauvegarde et la carte Racine de Configuration.
+    /// </summary>
+    private void LayoutConfigurationHeaderAndRootV39(
+        int width,
+        Rectangle rootCard)
+    {
+        lblConfigTitle.SetBounds(
+            18,
+            14,
+            390,
+            34);
+
+        var saveX =
+            Math.Max(
+                500,
+                width - 350);
+        btnSettingsSave.SetBounds(
+            saveX,
+            14,
+            170,
+            34);
+        btnOpenConfigFolder.SetBounds(
+            saveX + 178,
+            14,
+            154,
+            34);
+
+        _configurationSaveStatus.SetBounds(
+            18,
+            50,
+            Math.Max(
+                300,
+                saveX - 36),
+            18);
+
+        lblConfigRootCaption.SetBounds(
+            rootCard.X + 12,
+            rootCard.Y + 28,
+            112,
+            23);
+        txtConfigRoot.SetBounds(
+            rootCard.X + 126,
+            rootCard.Y + 28,
+            Math.Max(
+                180,
+                rootCard.Width - 138),
+            23);
+    }
+
+    /// <summary>
+    /// Positionne les ports et l’option d’arrêt forcé dans la carte Services.
+    /// </summary>
+    private void LayoutConfigurationServicesV39(
+        Rectangle servicesCard)
+    {
+        var serviceLeftLabelX =
+            servicesCard.X + 12;
+        var serviceLeftInputX =
+            servicesCard.X + 108;
+        var serviceRightLabelX =
+            servicesCard.X +
+            Math.Max(
+                205,
+                servicesCard.Width / 2);
+        var serviceRightInputX =
+            serviceRightLabelX + 92;
+        var serviceInputWidth =
+            Math.Max(
+                72,
+                servicesCard.Right -
+                serviceRightInputX -
+                12);
+        serviceInputWidth =
+            Math.Min(
+                90,
+                serviceInputWidth);
+
+        var serviceY =
+            servicesCard.Y + 29;
+        const int serviceStep = 26;
+
+        lblCfgOpenCodePort.SetBounds(
+            serviceLeftLabelX,
+            serviceY + 2,
+            92,
+            23);
+        numOpenCodePort.SetBounds(
+            serviceLeftInputX,
+            serviceY,
+            82,
+            23);
+        lblCfgOllamaPort.SetBounds(
+            serviceRightLabelX,
+            serviceY + 2,
+            88,
+            23);
+        numOllamaPort.SetBounds(
+            serviceRightInputX,
+            serviceY,
+            serviceInputWidth,
+            23);
+
+        lblCfgComfyPort.SetBounds(
+            serviceLeftLabelX,
+            serviceY + serviceStep + 2,
+            92,
+            23);
+        numComfyPort.SetBounds(
+            serviceLeftInputX,
+            serviceY + serviceStep,
+            82,
+            23);
+        lblCfgProxyPort.SetBounds(
+            serviceRightLabelX,
+            serviceY + serviceStep + 2,
+            88,
+            23);
+        numProxyPort.SetBounds(
+            serviceRightInputX,
+            serviceY + serviceStep,
+            serviceInputWidth,
+            23);
+
+        lblCfgApiPort.SetBounds(
+            serviceLeftLabelX,
+            serviceY + (serviceStep * 2) + 2,
+            92,
+            23);
+        numApiPort.SetBounds(
+            serviceLeftInputX,
+            serviceY + (serviceStep * 2),
+            82,
+            23);
+
+        chkHardStopComfy.SetBounds(
+            servicesCard.X + 12,
+            serviceY + (serviceStep * 3) - 2,
+            Math.Max(
+                180,
+                servicesCard.Width - 24),
+            24);
+    }
+
+    /// <summary>
+    /// Positionne les sélecteurs Vision, FLUX.2, encodeur texte et VAE de la carte Image.
+    /// </summary>
+    private void LayoutConfigurationImageModelsV39(
+        Rectangle imageModelsCard)
+    {
+        var imageLabelX =
+            imageModelsCard.X + 12;
+        var imageInputX =
+            imageModelsCard.X + 126;
+        var imageInputWidth =
+            Math.Max(
+                120,
+                imageModelsCard.Right -
+                imageInputX -
+                12);
+        var imageY =
+            imageModelsCard.Y + 29;
+        const int modelStep = 25;
+
+        lblCfgVisionModel.SetBounds(
+            imageLabelX,
+            imageY + 2,
+            108,
+            23);
+        _visionModelCombo.SetBounds(
+            imageInputX,
+            imageY,
+            imageInputWidth,
+            23);
+        lblCfgFluxModel.SetBounds(
+            imageLabelX,
+            imageY + modelStep + 2,
+            108,
+            23);
+        _fluxModelCombo.SetBounds(
+            imageInputX,
+            imageY + modelStep,
+            imageInputWidth,
+            23);
+        lblCfgTextEncoder.SetBounds(
+            imageLabelX,
+            imageY + (modelStep * 2) + 2,
+            108,
+            23);
+        _textEncoderCombo.SetBounds(
+            imageInputX,
+            imageY + (modelStep * 2),
+            imageInputWidth,
+            23);
+        lblCfgVae.SetBounds(
+            imageLabelX,
+            imageY + (modelStep * 3) + 2,
+            108,
+            23);
+        _vaeCombo.SetBounds(
+            imageInputX,
+            imageY + (modelStep * 3),
+            imageInputWidth,
+            23);
+    }
+
+    /// <summary>
+    /// Positionne les seuils mémoire et les paramètres de téléchargement de la carte Ressources.
+    /// </summary>
+    private void LayoutConfigurationResourcesV39(
+        Rectangle resourcesCard)
+    {
+        var resourceLeftLabelX =
+            resourcesCard.X + 12;
+        var resourceLeftInputX =
+            resourcesCard.X + 108;
+        var resourceRightLabelX =
+            resourcesCard.X +
+            Math.Max(
+                205,
+                resourcesCard.Width / 2);
+        var resourceRightInputX =
+            resourceRightLabelX + 110;
+        var resourceRightWidth =
+            Math.Max(
+                64,
+                resourcesCard.Right -
+                resourceRightInputX -
+                12);
+        var resourceY =
+            resourcesCard.Y + 31;
+
+        lblCfgVram.SetBounds(
+            resourceLeftLabelX,
+            resourceY + 2,
+            92,
+            23);
+        numSafeVram.SetBounds(
+            resourceLeftInputX,
+            resourceY,
+            82,
+            23);
+        lblCfgRam.SetBounds(
+            resourceRightLabelX,
+            resourceY + 2,
+            106,
+            23);
+        numSafeRam.SetBounds(
+            resourceRightInputX,
+            resourceY,
+            Math.Min(
+                86,
+                resourceRightWidth),
+            23);
+
+        lblCfgConnections.SetBounds(
+            resourceLeftLabelX,
+            resourceY + 34,
+            122,
+            23);
+        numDownloadConnections.SetBounds(
+            resourcesCard.X + 136,
+            resourceY + 32,
+            64,
+            23);
+        lblCfgBuffer.SetBounds(
+            resourceRightLabelX,
+            resourceY + 34,
+            104,
+            23);
+        numDownloadBuffer.SetBounds(
+            resourceRightInputX,
+            resourceY + 32,
+            Math.Min(
+                86,
+                resourceRightWidth),
+            23);
+    }
+
+    /// <summary>
+    /// Positionne les sélecteurs Wan, UMT5, VAE et CLIP Vision de la carte Vidéo.
+    /// </summary>
+    private void LayoutConfigurationVideoModelsV39(
+        Rectangle videoModelsCard)
+    {
+        var videoLabelX =
+            videoModelsCard.X + 12;
+        var videoInputX =
+            videoModelsCard.X + 126;
+        var videoInputWidth =
+            Math.Max(
+                120,
+                videoModelsCard.Right -
+                videoInputX -
+                12);
+        var videoY =
+            videoModelsCard.Y + 31;
+        const int modelStep = 25;
+
+        _cfgVideoModelLabel.SetBounds(
+            videoLabelX,
+            videoY + 2,
+            108,
+            23);
+        _cfgVideoModel.SetBounds(
+            videoInputX,
+            videoY,
+            videoInputWidth,
+            23);
+        _cfgVideoTextEncoderLabel.SetBounds(
+            videoLabelX,
+            videoY + modelStep + 2,
+            108,
+            23);
+        _cfgVideoTextEncoder.SetBounds(
+            videoInputX,
+            videoY + modelStep,
+            videoInputWidth,
+            23);
+        _cfgVideoVaeLabel.SetBounds(
+            videoLabelX,
+            videoY + (modelStep * 2) + 2,
+            108,
+            23);
+        _cfgVideoVae.SetBounds(
+            videoInputX,
+            videoY + (modelStep * 2),
+            videoInputWidth,
+            23);
+        _cfgVideoClipVisionLabel.SetBounds(
+            videoLabelX,
+            videoY + (modelStep * 3) + 2,
+            108,
+            23);
+        _cfgVideoClipVision.SetBounds(
+            videoInputX,
+            videoY + (modelStep * 3),
+            videoInputWidth,
+            23);
+    }
+
+    /// <summary>
+    /// Positionne les préférences générales : langue, dépôt GitHub, autosauvegarde, Vision et mises à jour.
+    /// </summary>
+    private void LayoutConfigurationPreferencesV39(
+        Rectangle preferencesCard)
+    {
+        var prefY =
+            preferencesCard.Y + 30;
+        var prefMid =
+            preferencesCard.X +
+            preferencesCard.Width / 2;
+
+        lblCfgLanguage.SetBounds(
+            preferencesCard.X + 12,
+            prefY + 2,
+            78,
+            23);
+        cmbLanguage.SetBounds(
+            preferencesCard.X + 92,
+            prefY,
+            110,
+            23);
+        _autoSaveConfigurationCheck.SetBounds(
+            prefMid,
+            prefY,
+            Math.Max(
+                150,
+                preferencesCard.Right -
+                prefMid -
+                12),
+            24);
+
+        lblCfgGitHubRepo.SetBounds(
+            preferencesCard.X + 12,
+            prefY + 32,
+            88,
+            23);
+        txtGitHubRepo.SetBounds(
+            preferencesCard.X + 102,
+            prefY + 32,
+            Math.Max(
+                150,
+                preferencesCard.Width - 114),
+            23);
+
+        chkInstallVisionModel.SetBounds(
+            preferencesCard.X + 12,
+            prefY + 64,
+            Math.Max(
+                170,
+                preferencesCard.Width / 2 - 18),
+            24);
+        chkAutoUpdates.SetBounds(
+            prefMid,
+            prefY + 64,
+            Math.Max(
+                150,
+                preferencesCard.Right -
+                prefMid -
+                12),
+            24);
+    }
+
+    /// <summary>
+    /// Positionne le panneau Technique et ses options de visibilité d’onglets.
+    /// </summary>
+    private void LayoutConfigurationTechnicalV39(
+        Rectangle technicalCard)
+    {
+        _configurationAdvancedPanelPolish.SetBounds(
+            technicalCard.X,
+            technicalCard.Y,
+            technicalCard.Width,
+            technicalCard.Height);
+
+        var technicalWidth =
+            technicalCard.Width;
+        _cfgAdvancedInterfaceTitlePolish.SetBounds(
+                12,
+                6,
+                Math.Max(
+                    150,
+                    technicalWidth - 24),
+                22);
+
+        var techCheckWidth =
+            Math.Max(
+                150,
+                (technicalWidth - 36) / 2);
+
+        _cfgShowOpenCodeTabPolish.SetBounds(
+            12,
+            32,
+            techCheckWidth,
+            24);
+        _cfgShowComfyTabPolish.SetBounds(
+            18 + techCheckWidth,
+            32,
+            techCheckWidth,
+            24);
+
+        _cfgAdvancedInterfaceNotePolish.SetBounds(
+                12,
+                60,
+                Math.Max(
+                    160,
+                    technicalWidth - 24),
+                Math.Max(28, technicalCard.Height - 68));
+    }
+
+    /// <summary>
+    /// Positionne le texte d’aide Configuration et retourne la hauteur minimale nécessaire au défilement.
+    /// </summary>
+    private int LayoutConfigurationHintV39(
+        Size workspace,
+        int width,
+        Rectangle preferencesCard,
+        Rectangle technicalCard)
+    {
+        // L’ancien texte d’aide commençait à Y=473 sur toute la page et recouvrait
+        // les cartes Préférences/Technique introduites en v38.
+        var hintY =
+            Math.Max(
+                preferencesCard.Bottom,
+                technicalCard.Bottom) +
+            10;
+        var showHint =
+            workspace.Height >= 600;
+        lblConfigHint.Visible = showHint;
+
+        if (showHint)
+        {
+            var hintHeight =
+                width >= 1000
+                    ? 54
+                    : 72;
+            lblConfigHint.SetBounds(
+                18,
+                hintY,
+                Math.Max(500, width - 36),
+                hintHeight);
+            lblConfigHint.AutoEllipsis = true;
+        }
+
+        return showHint
+            ? lblConfigHint.Bottom + 16
+            : Math.Max(
+                  preferencesCard.Bottom,
+                  technicalCard.Bottom) + 8;
+    }
+
+    #endregion
 }

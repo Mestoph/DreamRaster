@@ -1,15 +1,11 @@
-﻿/*
+/*
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
 
-FR : Export des diagnostics TXT/JSON sans casser l'application.
-EN: TXT/JSON diagnostic export without crashing the application.
-
-FR : Les commentaires structurants sont bilingues. Les noms d'API, classes et protocoles
+Export des diagnostics TXT/JSON sans casser l'application.
+Les commentaires structurants sont r?dig?s en fran?ais. Les noms d'API, classes et protocoles
      restent dans leur forme technique afin de garder le code lisible et compatible.
-EN: Structural comments are bilingual. API, class and protocol names remain in their
-    technical form to keep the code readable and compatible.
 */
 
 using System.Diagnostics;
@@ -17,8 +13,16 @@ using System.Text.Json;
 
 namespace OpenCodeLocalAI;
 
+/// <summary>
+
+/// Définit class « DiagnosticExporter », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 public static class DiagnosticExporter
 {
+    /// <summary>
+    /// Exporte le diagnostic courant dans un rapport texte et un rapport JSON, puis retourne les deux chemins créés.
+    /// </summary>
     public static async Task<(string TextPath, string JsonPath)> ExportAsync(AppSettings s)
     {
         PortablePaths.EnsureLayout();
@@ -137,6 +141,11 @@ public static class DiagnosticExporter
         return (textPath, jsonPath);
     }
 
+    /// <summary>
+
+    /// Exécute le traitement <c>SafePath</c> et conserve un état cohérent en cas de succès comme d’erreur.
+
+    /// </summary>
     private static object SafePath(string configured)
     {
         try
@@ -150,6 +159,9 @@ public static class DiagnosticExporter
         }
     }
 
+    /// <summary>
+    /// Exécute un outil de diagnostic externe, capture sa sortie standard et indique si la commande a réussi.
+    /// </summary>
     private static async Task<(bool Ok,string Text)> CaptureAsync(string exe, string args)
     {
         try

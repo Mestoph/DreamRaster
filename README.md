@@ -27,6 +27,14 @@ DreamRaster est un studio Windows portable de génération d’images et de vid�
 - téléchargement multi-curl Windows pour les gros fichiers ;
 - modèles, configuration, logs et caches confinés au dossier portable.
 
+## Vidéo Wan 2.1 I2V 14B — validation locale
+
+Sur une **RTX 4060 Ti 16 Go** avec **32 Go de RAM**, le pipeline Wan I2V 14B a été validé à **832 × 480, 33 images, 16 FPS et 50 étapes** : calcul latent achevé, redémarrage ComfyUI pour le VAE, MP4 H.264 exporté et **33 images entièrement décodées avec FFmpeg**. Le calcul latent du test a duré environ **24 min 31 s**.
+
+DreamRaster démarre automatiquement ComfyUI avec `--lowvram` pour ce modèle. L'onglet Vidéo permet de renseigner le chemin de l'image de référence ; le profil 14B demande au moins 12 étapes. La conformité du conteneur MP4 est contrôlée avant l'export ; une vérification complète avec FFmpeg reste manuelle.
+
+Les qualités existantes sont **Rapide 20**, **Standard 30**, **Qualité 40** et **Meilleure 50** étapes. Les essais 20/30/40 étapes sont des recommandations, pas des validations comparatives de qualité. Voir [Guide de validation vidéo Wan](docs/VIDEO_VALIDATION.fr.md).
+
 ## Structure du dépôt
 
 ```text

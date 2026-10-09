@@ -2,8 +2,7 @@
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
-FR : Déclaration Designer WinForms générée.
-EN: Generated WinForms Designer declaration.
+Déclaration Designer WinForms générée.
 */
 
 #nullable enable
@@ -12,20 +11,63 @@ namespace OpenCodeLocalAI;
 
 partial class ModelDownloadForm
 {
+    /// <summary>
+    /// Stocke « components », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private System.ComponentModel.IContainer? components = null;
 
+    /// <summary>
+
+    /// Référence le contrôle WinForms « _intro » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+
+    /// </summary>
     private Label _intro = null!;
+    /// <summary>
+    /// Référence le contrôle WinForms « _urlLabel » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+    /// </summary>
     private Label _urlLabel = null!;
+    /// <summary>
+    /// Référence le contrôle WinForms « _fileLabel » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+    /// </summary>
     private Label _fileLabel = null!;
+    /// <summary>
+    /// Référence le contrôle WinForms « _shaLabel » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+    /// </summary>
     private Label _shaLabel = null!;
+    /// <summary>
+    /// Référence le contrôle WinForms « _hint » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+    /// </summary>
     private Label _hint = null!;
+    /// <summary>
+    /// Référence le contrôle WinForms « _thirdPartyNotice » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+    /// </summary>
     private Label _thirdPartyNotice = null!;
+    /// <summary>
+    /// Référence le contrôle WinForms « _url » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+    /// </summary>
     private TextBox _url = null!;
+    /// <summary>
+    /// Référence le contrôle WinForms « _fileName » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+    /// </summary>
     private TextBox _fileName = null!;
+    /// <summary>
+    /// Référence le contrôle WinForms « _sha256 » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+    /// </summary>
     private TextBox _sha256 = null!;
+    /// <summary>
+    /// Référence le contrôle WinForms « _okButton » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+    /// </summary>
     private Button _okButton = null!;
+    /// <summary>
+    /// Référence le contrôle WinForms « _cancelButton » et conserve son état d’interface pendant toute la durée de vie de la fenêtre.
+    /// </summary>
     private Button _cancelButton = null!;
 
+    /// <summary>
+
+    /// Libère les ressources détenues par cette instance et termine proprement les objets associés.
+
+    /// </summary>
     protected override void Dispose(bool disposing)
     {
         if (disposing)
@@ -34,6 +76,11 @@ partial class ModelDownloadForm
         base.Dispose(disposing);
     }
 
+    /// <summary>
+    /// Construit la boîte de dialogue d’import de modèle, initialise ses champs
+    /// URL, nom de fichier et SHA-256, puis configure les actions de validation
+    /// et d’annulation.
+    /// </summary>
     private void InitializeComponent()
     {
         _intro = new Label();

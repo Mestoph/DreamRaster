@@ -2,8 +2,7 @@
 Copyright (C) 2026 Mestoph
 SPDX-License-Identifier: AGPL-3.0-or-later
 
-FR : Seconde passe locale pour le preset Qualité maximale.
-EN: Local second pass for the Maximum quality preset.
+Seconde passe locale pour le preset Qualité maximale.
 */
 
 using System.Diagnostics;
@@ -11,17 +10,41 @@ using System.Text;
 
 namespace OpenCodeLocalAI;
 
+/// <summary>
+
+/// Définit record « QualitySharpnessPreview », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 internal sealed record QualitySharpnessPreview(
     string BeforePath,
     string AfterPath);
 
+/// <summary>
+
+/// Définit class « QualityPostProcessor », utilisé par DreamRaster pour encapsuler cette responsabilité fonctionnelle.
+
+/// </summary>
 internal sealed class QualityPostProcessor
 {
+    /// <summary>
+    /// Définit la constante « MaximumQualityScale » utilisée comme valeur de référence stable par ce composant.
+    /// </summary>
     private const double MaximumQualityScale = 2.0;
 
+    /// <summary>
+
+    /// Stocke « _settings », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+
+    /// </summary>
     private readonly AppSettings _settings;
+    /// <summary>
+    /// Stocke « _log », donnée interne utilisée par ce composant pour conserver son état ou ses dépendances.
+    /// </summary>
     private readonly Action<string, string> _log;
 
+/// <summary>
+/// Initialise le post-traitement qualit? avec la configuration et le journal afin d?ex?cuter la seconde passe de nettet? de fa?on coh?rente avec les presets actifs.
+/// </summary>
     public QualityPostProcessor(
         AppSettings settings,
         Action<string, string> log)
@@ -30,6 +53,11 @@ internal sealed class QualityPostProcessor
         _log = log;
     }
 
+    /// <summary>
+
+    /// Applique le post-traitement de qualité géré par <c>EnhanceImageAsync</c> et produit un fichier amélioré.
+
+    /// </summary>
     public Task<string> EnhanceImageAsync(
         string sourcePath,
         CancellationToken cancellationToken) =>
@@ -41,6 +69,11 @@ internal sealed class QualityPostProcessor
             _settings.MaximumQualityImageSharpnessPercent,
             cancellationToken);
 
+    /// <summary>
+
+    /// Applique le post-traitement de qualité géré par <c>EnhanceVideoAsync</c> et produit un fichier amélioré.
+
+    /// </summary>
     public Task<string> EnhanceVideoAsync(
         string sourcePath,
         CancellationToken cancellationToken) =>
@@ -52,6 +85,11 @@ internal sealed class QualityPostProcessor
             _settings.MaximumQualityVideoSharpnessPercent,
             cancellationToken);
 
+    /// <summary>
+
+    /// Crée CreateImageSharpnessPreviewAsync avec les valeurs nécessaires au scénario courant.
+
+    /// </summary>
     public Task<QualitySharpnessPreview> CreateImageSharpnessPreviewAsync(
         string sourcePath,
         int sharpnessPercent,
@@ -62,6 +100,11 @@ internal sealed class QualityPostProcessor
             sharpnessPercent,
             cancellationToken);
 
+    /// <summary>
+
+    /// Crée CreateVideoSharpnessPreviewAsync avec les valeurs nécessaires au scénario courant.
+
+    /// </summary>
     public Task<QualitySharpnessPreview> CreateVideoSharpnessPreviewAsync(
         string sourcePath,
         int sharpnessPercent,
@@ -72,6 +115,11 @@ internal sealed class QualityPostProcessor
             sharpnessPercent,
             cancellationToken);
 
+    /// <summary>
+
+    /// Crée CreateSharpnessPreviewAsync avec les valeurs nécessaires au scénario courant.
+
+    /// </summary>
     private async Task<QualitySharpnessPreview> CreateSharpnessPreviewAsync(
         string mode,
         string sourcePath,
@@ -182,6 +230,11 @@ internal sealed class QualityPostProcessor
         }
     }
 
+    /// <summary>
+
+    /// Exécute le traitement <c>TryDelete</c> et conserve un état cohérent en cas de succès comme d’erreur.
+
+    /// </summary>
     private static void TryDelete(string path)
     {
         try
@@ -194,6 +247,11 @@ internal sealed class QualityPostProcessor
         }
     }
 
+    /// <summary>
+
+    /// Exécute RunAsync en coordonnant les ressources et les mécanismes d’annulation nécessaires.
+
+    /// </summary>
     private async Task<string> RunAsync(
         string mode,
         string sourcePath,
@@ -344,6 +402,11 @@ internal sealed class QualityPostProcessor
         }
     }
 
+    /// <summary>
+
+    /// Définit la constante « PreviewPythonScript » utilisée comme valeur de référence stable par ce composant.
+
+    /// </summary>
     private const string PreviewPythonScript = """
 import sys
 from pathlib import Path
@@ -397,6 +460,11 @@ print(
     f"{image.width}x{image.height} -> {width}x{height}.")
 """;
 
+    /// <summary>
+
+    /// Définit la constante « PythonScript » utilisée comme valeur de référence stable par ce composant.
+
+    /// </summary>
     private const string PythonScript = """
 import sys
 from pathlib import Path
