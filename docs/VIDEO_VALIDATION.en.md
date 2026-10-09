@@ -17,8 +17,8 @@ I2V generation requires **at least 12 sampling steps**. Twelve-step runs validat
 
 | Purpose | Dimensions | Frames | FPS | Steps | Status |
 | --- | --- | ---: | ---: | ---: | --- |
-| Quick trial | 832 × 480 | 17 | 16 | 20 | Suggested, not directly tested |
-| Balanced | 832 × 480 | 33 | 16 | 30 | Suggested, not directly tested |
+| Quick trial | 832 × 480 | 17 | 16 | 20 | **Validated October 10, 2026** |
+| Balanced | 832 × 480 | 33 | 16 | 30 | **Validated October 10, 2026** |
 | Quality | 832 × 480 | 33 | 16 | 40 | Suggested, not directly tested |
 | Final | 832 × 480 | 33 | 16 | 50 | **End-to-end tested** |
 
@@ -40,6 +40,19 @@ All runs used **Wan I2V 14B**, a reference image and 16 FPS. All but the first u
 The full-profile latent job took approximately **24 min 31 sec**. Its H.264 MP4 contains **33 frame hashes with distinct values**, at 16 FPS for **2.0625 sec**. FFmpeg decoded all frames without error. Verified output example: `videos\DreamRaster_WAN_2026-10-09T14-54-06-435Z_00001_.mp4`.
 
 Distinct decoded frame hashes do **not** establish perceptual quality, convincing motion or temporal consistency. Compare prompts and reference images at different sampling steps before deciding which preset gives the best results.
+
+## Post-release checks — DreamRaster v38.1.0 (October 10, 2026)
+
+The official GitHub release was installed in `DreamRaster_FreshTest` by replacing **only** the executable. The ZIP and published SHA-256 were checked. The personal configuration was restored byte-for-byte and the inventory of **5,186 model files** was preserved.
+
+- **I2V smoke test:** 832 × 480, 5 frames, 12 steps, 16 FPS; H.264 MP4 exported, fully decoded with FFmpeg, all five decoded frame hashes distinct.
+- **Real cancellation:** 832 × 480, 33-frame, 12-step Wan sampling interrupted mid-generation. ComfyUI confirmed `interrupt=OK` and queued-prompt removal; the queue was empty, no incomplete MP4 appeared, and the Generate button was re-enabled.
+- **Fast preset tested:** 832 × 480, 17 frames, 20 steps, 16 FPS, fixed seed 1. Latent run: **311.28 seconds**; H.264 MP4 duration **1.0625 seconds**, **17/17 distinct decoded frames**, full FFmpeg decode succeeded. Output: `DreamRaster_WAN_2026-10-09T22-16-24-259Z_00001_.mp4`.
+- **Balanced preset tested:** 832 × 480, 33 frames, 30 steps, 16 FPS, **same prompt, reference image and fixed seed 1**. Latent job: **15 min 12 sec**; H.264 MP4 duration **2.0625 seconds**, **33/33 distinct decoded frame hashes**, full FFmpeg decode succeeded. Output: `DreamRaster_WAN_2026-10-09T22-23-24-864Z_00001_.mp4`. Sampled frames show a recognizable red mug and temporally stable composition.
+
+- **FLUX.2 image generation also tested:** official v38.1.0 executable, Klein 4B FP8, **512 × 512, 4 steps, seed 1001, no LoRA**; PNG of **290,292 bytes**, signature and dimensions verified, clear recognizable red mug. Output: `DreamRaster_FLUX2_2026-10-09T22-41-47-975Z_00001_.png`.
+
+Visually sampled frames from Fast and Balanced retain a recognizable red mug and temporally stable framing. Despite matching prompt, reference image and seed, these tests have **different durations** (17 versus 33 frames), so visual differences cannot be attributed solely to sampling steps. The earlier 50-step video uses a **different subject** and cannot be ranked directly against the mug. For this machine, **Standard / 30 steps and 33 frames** is a suggested daily trade-off, while **Best / 50 steps** remains a proven, more expensive final-render profile. The 40-step profile has not been tested.
 
 ## Diagnostics
 

@@ -11,6 +11,7 @@
 - Added focused WinForms/pipeline regression tests; **82/82** automated tests passed with a warning-free Release build.
 - Verified local Wan I2V 14B end to end at 832 × 480, 16 FPS, 5/9/17/33 frames at 12 steps and **33 frames at 50 steps**. The full 50-step latent job took about **24 min 31 sec**; the H.264 MP4 decoded successfully in FFmpeg with 33/33 distinct decoded frame hashes.
 - Documented tested settings and manual FFprobe/FFmpeg checks in [French](docs/VIDEO_VALIDATION.fr.md) and [English](docs/VIDEO_VALIDATION.en.md).
+- **Post-release acceptance (2026-10-10):** independently verified the published v38.1.0 executable with Wan I2V 14B at 17 frames / 20 steps and 33 frames / 30 steps (all decoded frames valid and distinct), successful in-progress Wan cancellation without incomplete output, and a FLUX.2 Klein 4B FP8 512 × 512 / 4-step PNG generation. The original portable configuration and model files were preserved.
 
 ## 38.0.0 - UI polish, categorized configuration and optional technical tabs
 

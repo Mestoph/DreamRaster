@@ -152,3 +152,18 @@ La dernière validation complète a donné :
 - avertissements : 0
 - tests : 82/82 (validation Release du 9 octobre 2026)
 - git diff --check : propre
+
+## Recette de l'installation officielle v38.1.0 — 10 octobre 2026
+
+La release GitHub `v38.1.0` a été téléchargée dans un dossier de staging, son ZIP a été comparé au SHA-256 publié, puis **seul `DreamRaster.exe` a été remplacé** dans l'installation portable. L'ancien EXE v38.0.0 est conservé comme secours dans `D:\AI\DreamRaster_Backups\`.
+
+Les essais réels depuis l'application v38.1.0 ont validé :
+
+- **Wan I2V 14B, 832 × 480, 5 images, 12 étapes :** export MP4 H.264, décodage FFmpeg complet, 5/5 images distinctes ;
+- **Wan I2V 14B, 832 × 480, 17 images, 20 étapes :** calcul latent 311,28 s, export MP4, 17/17 images distinctes ;
+- **Wan I2V 14B, 832 × 480, 33 images, 30 étapes :** calcul latent 15 min 12 s, export MP4, 33/33 images distinctes ;
+- **Annulation en cours d'échantillonnage Wan :** interrupt et retrait de file confirmés, aucun MP4 incomplet, boutons rétablis ;
+- **FLUX.2 Klein 4B FP8, 512 × 512, 4 étapes sans LoRA :** PNG vérifié et rendu visuellement cohérent ;
+- **Profil complet 33 images / 50 étapes :** validé précédemment, 33/33 images décodées et environ 24 min 31 s de calcul latent.
+
+Après la recette : application v38.1.0 réactive et minimisée ; configuration d'origine restaurée avec une empreinte SHA-256 identique ; **5 186 fichiers de modèles conservés**, vidéos et images préservées, ComfyUI arrêté. Ces contrôles couvrent la version installée mais **ne remplacent pas un essai exhaustif de toutes les combinaisons de modèles ni du parcours de mise à jour automatique**. Voir [Validation vidéo Wan](VIDEO_VALIDATION.fr.md).

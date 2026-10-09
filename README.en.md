@@ -33,7 +33,7 @@ On a **16 GB RTX 4060 Ti** with **32 GB RAM**, the Wan I2V 14B pipeline has been
 
 DreamRaster automatically launches ComfyUI with `--lowvram` for this model. The Video tab accepts a reference-image path; I2V generation requires at least 12 steps. The MP4 container header is checked before export; a full FFmpeg decode is a separate manual validation.
 
-Built-in quality levels: **Fast 20**, **Standard 30**, **Quality 40**, and **Best 50** steps. Settings at 20/30/40 steps are recommendations, not comparative quality tests. See the [Wan video validation guide](docs/VIDEO_VALIDATION.en.md).
+Built-in quality levels: **Fast 20**, **Standard 30**, **Quality 40**, and **Best 50** steps. The **17-frame / 20-step**, **33-frame / 30-step**, and **33-frame / 50-step** I2V profiles passed end-to-end MP4 decoding tests on an RTX 4060 Ti 16 GB. The 40-step profile remains untested; not all videos used the same scene, so these runs do not provide an objective visual-quality ranking. See the [Wan video validation guide](docs/VIDEO_VALIDATION.en.md).
 
 ## Repository layout
 
