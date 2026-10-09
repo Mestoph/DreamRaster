@@ -1425,7 +1425,7 @@ public sealed class GpuUiLockTests
         });
 
     [TestMethod]
-    public void ProductVersion_IsV38()
+    public void ProductVersion_IsV381()
     {
         var assembly = typeof(MainForm).Assembly;
         var assemblyVersion = assembly.GetName().Version?.ToString();
@@ -1434,7 +1434,7 @@ public sealed class GpuUiLockTests
             ?.InformationalVersion;
 
         Assert.AreEqual(
-            "38.0.0.0",
+            "38.1.0.0",
             assemblyVersion,
             "L'AssemblyVersion doit correspondre à la branche fonctionnelle v38.");
         Assert.IsNotNull(
@@ -1442,8 +1442,8 @@ public sealed class GpuUiLockTests
             "La version produit/informationnelle doit être générée.");
         StringAssert.StartsWith(
             productVersion,
-            "38.0.0",
-            "Application.ProductVersion doit annoncer v38.");
+            "38.1.0",
+            "Application.ProductVersion doit annoncer v38.1.");
     }
 
     [TestMethod]

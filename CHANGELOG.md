@@ -1,5 +1,5 @@
 ﻿# Changelog — DreamRaster
-## Unreleased — stabilization and validated Wan I2V 14B workflow (2026-10-09)
+## 38.1.0 — stabilization and validated Wan I2V 14B workflow (2026-10-09)
 
 - Consolidated Designer-owned WinForms layout: the former `MainForm.UiPolish.cs` responsibilities are integrated into `MainForm.cs`, and the obsolete file is removed.
 - Strengthened Image/Video interactions, configuration persistence, integrated preview/history, runtime model handling, installer safety and diagnostics.

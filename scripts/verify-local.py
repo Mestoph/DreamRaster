@@ -137,6 +137,10 @@ def iter_source_files(root: Path) -> Iterable[Path]:
         current_path = Path(current)
         if current_path == root:
             dirs[:] = [name for name in dirs if name != ".git"]
+        elif current_path == root / ".nuget":
+            # Le cache NuGet local est explicitement autorisé et ignoré ;
+            # il n'appartient jamais aux sources à publier.
+            dirs[:] = [name for name in dirs if name != "packages"]
         for name in files:
             path = current_path / name
             if path.is_file():
