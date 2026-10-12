@@ -50,7 +50,7 @@
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
 
     <!-- WebView2 : chemins calculés à partir du cache NuGet LOCAL -->
-    <WebView2Version>1.0.3537.50</WebView2Version>
+    <WebView2Version>1.0.4258.31</WebView2Version>
     <WebView2PackageDir>$(RestorePackagesPath)/microsoft.web.webview2/$(WebView2Version)</WebView2PackageDir>
 
     <!-- Publication Windows x64 autonome -->
