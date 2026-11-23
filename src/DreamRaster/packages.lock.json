@@ -4,17 +4,17 @@
     "net9.0-windows7.0": {
       "Microsoft.Web.WebView2": {
         "type": "Direct",
-        "requested": "[1.0.3537.50, )",
-        "resolved": "1.0.3537.50",
-        "contentHash": "6RQRMIcc/xnhDCdBmyc+YoPxPlYHjmg/mfVpQb4iYWr+K/cs28dTxCyOYFZjUFtiwupXN9nCqxOSMumn2ZKAIg=="
+        "requested": "[1.0.4370.26, )",
+        "resolved": "1.0.4370.26",
+        "contentHash": "fCmdjhw8Gg+cbvEkyF+ygObcByFk35WVxTUmLkjSwjhDuLg4V9P7EVPn3rj3g9M2I3WHes/efHS2tIpGX/NCEA=="
       }
     },
     "net9.0-windows7.0/win-x64": {
       "Microsoft.Web.WebView2": {
         "type": "Direct",
-        "requested": "[1.0.3537.50, )",
-        "resolved": "1.0.3537.50",
-        "contentHash": "6RQRMIcc/xnhDCdBmyc+YoPxPlYHjmg/mfVpQb4iYWr+K/cs28dTxCyOYFZjUFtiwupXN9nCqxOSMumn2ZKAIg=="
+        "requested": "[1.0.4370.26, )",
+        "resolved": "1.0.4370.26",
+        "contentHash": "fCmdjhw8Gg+cbvEkyF+ygObcByFk35WVxTUmLkjSwjhDuLg4V9P7EVPn3rj3g9M2I3WHes/efHS2tIpGX/NCEA=="
       }
     }
   }
